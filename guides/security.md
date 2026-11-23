@@ -10,11 +10,13 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
     without `Hash` is rejected only with `require_3d_hash: true`; otherwise (and for declined callbacks, which are
     mapped without a provision request) the defence is the strict 3D rule, the order-binding guard and the bank's
     own CAVV / MpiTransactionId checks at provision time.
-- **Order binding.** Asseco 3D Pay / 3D Host callbacks must carry your order id and amount; PayFlex callbacks must carry
-  your amount, currency and merchant id (`OrderMismatchError` otherwise).
+- **Order binding.** Asseco 3D callbacks must carry your order id, amount and the storetype of the payment model they
+  are completed with; PayFlex callbacks must carry your amount, currency and merchant id (`OrderMismatchError`
+  otherwise).
 - **Strict 3D.** PayFlex accepts only a fully authenticated result (Status `Y`, ECI `02`/`05`, CAVV, `MdStatus` 1).
 - **Manual-review flag.** When a bank authorized money although 3D failed, the response is `declined` with
-  `requires_manual_review: true`.
+  `requires_manual_review: true`. When a signed Asseco callback reports a completed payment but does not belong to
+  the order, `OrderMismatchError.paymentMayHaveCompleted` is `true`.
 - **Masking.** Everything handed to your logger, error snippets and `OrderMismatchError.response.all` goes through
   `maskSensitiveData()` (PAN, CVV, expiry, passwords, store keys).
 - **No network on import**, two runtime dependencies, global `fetch`.
@@ -27,8 +29,9 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
    nothing else.
 2. **Persist before redirecting.** Store the order (`id`, `amount`, `currency`) before the customer leaves, and mark
    it paid only from the gateway response, in an idempotent update (callbacks can be replayed or arrive twice).
-3. **Manual review.** Handle `requires_manual_review` and `OrderMismatchError.response` (see the gateway guides): alert,
-   reconcile with the bank panel / `pos.status()`, void or refund.
+3. **Manual review.** Handle `requires_manual_review`, and `OrderMismatchError.paymentMayHaveCompleted` with
+   `OrderMismatchError.response` (see the gateway guides): alert, reconcile with the bank panel / `pos.status()`,
+   void or refund.
 4. **PayFlex: enable `require_3d_hash`** as soon as your bank sends a `Hash` field in the callback. Until then the
    order binding compares browser-supplied values.
 5. **Network.** VakıfBank requires server IP whitelisting and public HTTPS callback URLs without `localhost`. Use
@@ -36,9 +39,13 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
 6. **Secrets.** Keep merchant credentials in environment variables or a secret manager, not in the repository.
 7. **Logging.** Pass your logger via `createPosGateway(..., { logger })`. Do not log request or callback bodies
    yourself: they contain card data and keys.
-8. **Timezones.** Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00), independent of the
+8. **Outcome unknown: never retry payments blindly.** A `PosHttpError` (timeout, non-2xx, HTML/WAF page) after a
+   request that moves money (provisioning, non-3D payment, post-authorization, cancel, refund) may arrive after the
+   bank has processed it. Call `pos.status(order)` before any retry; retry only when the bank has no record of it.
+   The same applies to your own job queues and HTTP retry middleware: never wrap payment calls in automatic retries.
+9. **Timezones.** Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00), independent of the
    server timezone.
-9. **Keep dependencies current** and watch the changelog: before 1.0 minor versions may break.
+10. **Keep dependencies current** and watch the changelog: before 1.0 minor versions may break.
 
 ## PCI DSS
 
@@ -57,7 +64,9 @@ This is not legal advice; confirm the scope with your bank or a QSA. Never store
 - [ ] `MerchantType` (PayFlex) matches your contract.
 - [ ] `require_3d_hash: true` once the bank signs PayFlex callbacks.
 - [ ] Callback handler loads the order by id, uses the gateway method and handles `HashMismatchError`,
-      `OrderMismatchError` and `requires_manual_review`.
+      `OrderMismatchError` (alerting on `paymentMayHaveCompleted`) and `requires_manual_review`.
+- [ ] No automatic retry of payment, cancel or refund calls; after a `PosHttpError` the order is reconciled with
+      `pos.status(order)` first.
 - [ ] Idempotent "mark as paid"; reconciliation job against the bank statement.
 - [ ] No card data in logs, databases or error trackers.
 - [ ] End-to-end test with the bank's test merchant, including a declined card and a failed 3D authentication.

@@ -64,8 +64,10 @@ export async function handleCallback(
     return { paid: response.status === 'approved', response }
   } catch (error) {
     if (error instanceof HashMismatchError || error instanceof OrderMismatchError) {
-      return { paid: false }
+      return { paid: false } // raised before the provision request: no money moved
     }
+    // PosHttpError etc. after the provision request: the outcome is unknown and the card may have been charged.
+    // Do not retry blindly; reconcile with pos.status(order) first.
     throw error
   }
 }

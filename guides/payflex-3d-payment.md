@@ -72,7 +72,13 @@ this format is not yet verified live against a real callback.
   in the `success_url` / `fail_url` query string (for example `?o=<orderId>`; use an unguessable token), then load the
   order from your database.
 - Always pass the body through `pos.payment(...)`. Do not trust `Status`, `Eci`, `Cavv` or `PurchAmount` directly.
-- Treat `HashMismatchError` and `OrderMismatchError` as failures. Do not provision the payment yourself.
+- Treat `HashMismatchError` and `OrderMismatchError` as failures. Do not provision the payment yourself. Both are
+  raised before the provision request, so no money has moved (`error.paymentMayHaveCompleted` is `false`).
+- **Outcome unknown.** `pos.payment(...)` sends the provision request from your server. A `PosHttpError` (timeout,
+  non-2xx, HTML/WAF page) there, or after a non-3D payment, post-authorization, cancel or refund, does not mean the
+  bank did nothing: it may have processed the request before the connection failed. Never retry a payment blindly,
+  since that can charge the customer twice. Call `pos.status(order)` first and retry only when the bank has no record
+  of the transaction.
 
 ```ts
 try {
@@ -80,6 +86,7 @@ try {
   return response.status === 'approved'
 } catch (error) {
   if (error instanceof HashMismatchError || error instanceof OrderMismatchError) return false
+  // PosHttpError etc.: outcome unknown. Never retry blindly; check pos.status(order) first.
   throw error
 }
 ```
