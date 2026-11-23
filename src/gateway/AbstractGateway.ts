@@ -41,6 +41,11 @@ export type GatewayConfig = {
   }
   test_mode?: boolean
   lang?: Lang
+  /**
+   * PayFlex V4: reject a 3D callback that carries no `Hash` (`HashMismatchError`). Default false, because not every
+   * VakifBank merchant receives a signed callback yet; enable it when yours does.
+   */
+  require_3d_hash?: boolean
 }
 
 export type GatewayDeps<A extends AbstractPosAccount = AbstractPosAccount> = {

@@ -19,6 +19,7 @@ import { BasicResponseValueFormatter } from '../../../src/data-mapper/response/v
 import { PayFlexV4PosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayFlexV4PosResponseValueMapper.js'
 import {
   HashMismatchError,
+  OrderMismatchError,
   PosError,
   UnsupportedFormFormatError,
   UnsupportedPaymentModelError,
@@ -29,7 +30,7 @@ import { CreditCardFactory } from '../../../src/factory/CreditCardFactory.js'
 import type { GatewayConfig, GatewayDeps } from '../../../src/gateway/AbstractGateway.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { noopLogger } from '../../../src/logger.js'
-import type { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
+import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
 import {
   CARD_TYPE,
   CURRENCY,
@@ -351,6 +352,11 @@ describe('PayFlexV4Pos (mocked collaborators)', () => {
     expect(result).toStrictEqual({ form: '3d-form-data' })
   })
 
+  // Order binding: the callback must carry the order's amount and currency and this account's merchant id
+  // (PurchAmount '101' for 1.01).
+  const boundOrder: PosOrder = { amount: 1.01, currency: CURRENCY.TRY }
+  const boundCallback = { MerchantId: '000000000111111', PurchAmount: '101', PurchCurrency: '949' }
+
   const make3DPaymentCases: Array<[string, PosOrder, TxType, GatewayResponseData, Data, Data, boolean]> = [
     [
       'auth_fail',
@@ -374,10 +380,10 @@ describe('PayFlexV4Pos (mocked collaborators)', () => {
     ],
     [
       '3d_auth_success_payment_fail',
-      {},
+      boundOrder,
       TX_TYPE.PAY_PRE_AUTH,
       {
-        MerchantId: '000100000013506',
+        ...boundCallback,
         VerifyEnrollmentRequestId: 'ce06048a3e9c0cd1d437803fb38b5ad0',
         Xid: 'ondg8d9t5besgt88sk8h',
       },
@@ -402,10 +408,10 @@ describe('PayFlexV4Pos (mocked collaborators)', () => {
     ],
     [
       'success',
-      {},
+      boundOrder,
       TX_TYPE.PAY_PRE_AUTH,
       {
-        MerchantId: '000100000013506',
+        ...boundCallback,
         VerifyEnrollmentRequestId: 'ce06048a3e9c0cd1d437803fb38b5ad0',
         Xid: 'ondg8d9t5besgt88sk8h',
         SessionInfo: 'jpf58sdjj8p9mpb9shurh47v64',
@@ -487,7 +493,7 @@ describe('PayFlexV4Pos (mocked collaborators)', () => {
     clientStrategy.getClient.mockReturnValue(httpClient as unknown as AbstractHttpClient)
     httpClient.request.mockResolvedValue({})
     responseMapper.map3DPaymentData.mockReturnValue({ status: 'approved' })
-    const data = { Status: 'Y' }
+    const data = { Status: 'Y', MerchantId: '000000000111111', PurchAmount: '100.00', PurchCurrency: '949' }
 
     await pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, data)
 
@@ -507,6 +513,21 @@ describe('PayFlexV4Pos (mocked collaborators)', () => {
 
     await expect(pos.payment(MODEL.THREE_D_SECURE, {}, TX_TYPE.PAY_AUTH, card, data)).rejects.toThrow(HashMismatchError)
     expect(crypt.check3DHash).toHaveBeenCalledWith(account, data)
+    expect(responseMapper.map3DPaymentData).not.toHaveBeenCalled()
+    expect(requestMapper.create3DPaymentRequestData).not.toHaveBeenCalled()
+    expect(requestDataPrepared).not.toHaveBeenCalled()
+    expect(clientStrategy.getClient).not.toHaveBeenCalled()
+  })
+
+  it('make3DPayment order mismatch: checked after the hash, nothing is provisioned or mapped', async () => {
+    const data = { Status: 'Y', MerchantId: '000000000111111', PurchAmount: '99.00', PurchCurrency: '949' }
+    crypt.check3DHash.mockReturnValue(true)
+    responseMapper.is3dAuthSuccess.mockReturnValue(true)
+
+    await expect(pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, data)).rejects.toThrow(
+      OrderMismatchError,
+    )
+    expect(crypt.check3DHash).toHaveBeenCalledTimes(1)
     expect(responseMapper.map3DPaymentData).not.toHaveBeenCalled()
     expect(requestMapper.create3DPaymentRequestData).not.toHaveBeenCalled()
     expect(requestDataPrepared).not.toHaveBeenCalled()
@@ -611,8 +632,16 @@ function recordingFetch(sent: Sent[], respond: (req: Sent) => string | Promise<s
   }) as unknown as typeof fetch
 }
 
-function realGateway(fetchImpl: typeof fetch) {
-  const realAccount = AccountFactory.createPayFlexPosAccount('vakifbank', '000000000111111', PASSWORD, 'VP999999')
+function realGateway(
+  fetchImpl: typeof fetch,
+  cfg: GatewayConfig = config,
+  realAccount: PayFlexPosAccount = AccountFactory.createPayFlexPosAccount(
+    'vakifbank',
+    '000000000111111',
+    PASSWORD,
+    'VP999999',
+  ),
+) {
   const crypt = new PayFlexV4PosCrypt()
   const valueMapper = new PayFlexV4PosRequestValueMapper()
   const valueFormatter = new PayFlexV4PosRequestValueFormatter()
@@ -635,7 +664,7 @@ function realGateway(fetchImpl: typeof fetch) {
     logger: noopLogger,
     hooks: {},
   }
-  return new PayFlexV4Pos(config, realAccount, deps)
+  return new PayFlexV4Pos(cfg, realAccount, deps)
 }
 
 /** The callback hash the bank computes (VakıfBank 2026 Standard API §15), built independently of the crypt. */
@@ -890,5 +919,147 @@ describe('PayFlexV4Pos (end to end)', () => {
     expect(b.transaction_id).toBe('C-TX-B')
     expect('isSuccess' in pos).toBe(false)
     expect('getResponse' in pos).toBe(false)
+  })
+
+  describe('order binding (amount, currency, merchant) before provisioning', () => {
+    const provisions = async (change: Record<string, string | undefined>, order: PosOrder = defaultOrder) => {
+      const sent: Sent[] = []
+      const pos = realGateway(recordingFetch(sent, () => provisionApproved))
+      const data = { ...callback, ...change } as Record<string, string>
+      for (const [k, v] of Object.entries(change)) if (v === undefined) delete data[k]
+      const res = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, card, { ...data, Hash: sign(data) })
+      return { res, sent }
+    }
+
+    it.each([
+      ['major units with a dot', '100.00'],
+      ['major units, one decimal', '100.0'],
+      ['minor units without a dot', '10000'],
+    ])('a matching amount in %s provisions', async (_name, purchAmount) => {
+      const { res, sent } = await provisions({ PurchAmount: purchAmount })
+      expect(res.status).toBe('approved')
+      expect(sent).toHaveLength(1)
+    })
+
+    it.each(['1.01', '101'])('PurchAmount %j matches an order amount of 1.01', async (purchAmount) => {
+      const { sent } = await provisions({ PurchAmount: purchAmount }, { ...defaultOrder, amount: 1.01 })
+      expect(sent).toHaveLength(1)
+    })
+
+    it.each([
+      ['amount', 'another amount', { PurchAmount: '99.99' }, defaultOrder],
+      ['amount', 'minor units of another amount', { PurchAmount: '100' }, defaultOrder],
+      ['amount', 'a missing amount', { PurchAmount: undefined }, defaultOrder],
+      ['amount', 'an empty amount', { PurchAmount: '' }, defaultOrder],
+      ['amount', 'an exponent amount', { PurchAmount: '1e4' }, defaultOrder],
+      ['amount', 'a non-numeric amount', { PurchAmount: 'abc' }, defaultOrder],
+      ['amount', 'a negative amount', { PurchAmount: '-100.00' }, defaultOrder],
+      ['amount', 'an order without amount', {}, { ...defaultOrder, amount: undefined }],
+      ['currency', 'another currency', { PurchCurrency: '840' }, defaultOrder],
+      ['currency', 'a missing currency', { PurchCurrency: undefined }, defaultOrder],
+      ['currency', 'an order in another currency', {}, { ...defaultOrder, currency: CURRENCY.USD }],
+      ['merchant_id', 'another merchant', { MerchantId: '000000000999999' }, defaultOrder],
+      ['merchant_id', 'a missing merchant', { MerchantId: undefined }, defaultOrder],
+    ] as Array<[string, string, Record<string, string | undefined>, PosOrder]>)(
+      '%s: %s raises OrderMismatchError without an HTTP call',
+      async (field, _name, change, order) => {
+        const fetchSpy = vi.fn(unexpectedNetwork)
+        const pos = realGateway(fetchSpy as unknown as typeof fetch)
+        const data = { ...callback, ...change } as Record<string, string>
+        for (const [k, v] of Object.entries(change)) if (v === undefined) delete data[k]
+
+        const err = await pos
+          .payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, card, { ...data, Hash: sign(data) })
+          .catch((e: unknown) => e)
+
+        expect(err).toBeInstanceOf(OrderMismatchError)
+        expect((err as OrderMismatchError).field).toBe(field)
+        expect(fetchSpy).toHaveBeenCalledTimes(0)
+      },
+    )
+
+    it('an order without currency is bound to TRY (the request default)', async () => {
+      const { sent } = await provisions({}, { ...defaultOrder, currency: undefined })
+      expect(sent).toHaveLength(1)
+    })
+
+    it('a sub-branch account is bound to the main MerchantId it sends in the enrollment request', async () => {
+      const subAccount = AccountFactory.createPayFlexPosAccount(
+        'vakifbank',
+        '000000000111111',
+        PASSWORD,
+        'VP999999',
+        PayFlexPosAccount.MERCHANT_TYPE_SUB_DEALER,
+        '000000000222222',
+      )
+      const sent: Sent[] = []
+      const pos = realGateway(
+        recordingFetch(sent, () => provisionApproved),
+        config,
+        subAccount,
+      )
+      const res = await pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, { ...callback })
+      expect(res.status).toBe('approved')
+      expect(sent).toHaveLength(1)
+
+      const fetchSpy = vi.fn(unexpectedNetwork)
+      const other = realGateway(fetchSpy as unknown as typeof fetch, config, subAccount)
+      await expect(
+        other.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, {
+          ...callback,
+          MerchantId: '000000000222222',
+        }),
+      ).rejects.toThrow(OrderMismatchError)
+      expect(fetchSpy).toHaveBeenCalledTimes(0)
+    })
+  })
+
+  describe('require_3d_hash', () => {
+    const strictConfig: GatewayConfig = { ...config, require_3d_hash: true }
+
+    it('true: a callback without Hash raises HashMismatchError without an HTTP call', async () => {
+      const fetchSpy = vi.fn(unexpectedNetwork)
+      const pos = realGateway(fetchSpy as unknown as typeof fetch, strictConfig)
+      await expect(
+        pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, { ...callback }),
+      ).rejects.toThrow(HashMismatchError)
+      expect(fetchSpy).toHaveBeenCalledTimes(0)
+    })
+
+    it('true: a callback with a valid Hash provisions', async () => {
+      const sent: Sent[] = []
+      const pos = realGateway(
+        recordingFetch(sent, () => provisionApproved),
+        strictConfig,
+      )
+      const res = await pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, {
+        ...callback,
+        Hash: sign(callback),
+      })
+      expect(res.status).toBe('approved')
+      expect(sent).toHaveLength(1)
+    })
+
+    it('true: a declined callback without Hash is still mapped as declined (no hash use)', async () => {
+      const fetchSpy = vi.fn(unexpectedNetwork)
+      const pos = realGateway(fetchSpy as unknown as typeof fetch, strictConfig)
+      const res = await pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, {
+        ...callback,
+        Eci: '06',
+      })
+      expect(res.status).toBe('declined')
+      expect(fetchSpy).toHaveBeenCalledTimes(0)
+    })
+
+    it.each([undefined, false])('%s (default): a callback without Hash provisions', async (requireHash) => {
+      const sent: Sent[] = []
+      const pos = realGateway(
+        recordingFetch(sent, () => provisionApproved),
+        { ...config, require_3d_hash: requireHash },
+      )
+      const res = await pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, { ...callback })
+      expect(res.status).toBe('approved')
+      expect(sent).toHaveLength(1)
+    })
   })
 })

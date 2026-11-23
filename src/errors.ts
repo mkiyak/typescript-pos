@@ -17,12 +17,15 @@ export class CardTypeNotSupportedError extends PosError {}
 export class GatewayClassNotConfiguredError extends PosError {}
 export class NotImplementedError extends PosError {}
 
+/** Callback field that did not match the order / account. */
+export type OrderMismatchField = 'order_id' | 'amount' | 'currency' | 'merchant_id'
+
 export class OrderMismatchError extends PosError {
-  readonly field: 'order_id' | 'amount'
+  readonly field: OrderMismatchField
   readonly expected: string
   readonly actual: string
 
-  constructor(field: 'order_id' | 'amount', expected: string, actual: string) {
+  constructor(field: OrderMismatchField, expected: string, actual: string) {
     super(`Callback ${field} mismatch: expected "${expected}", got "${actual}"`)
     this.field = field
     this.expected = expected

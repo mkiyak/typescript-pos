@@ -114,4 +114,12 @@ describe('PayFlexV4PosCrypt', () => {
     expect(logged).not.toContain(hash)
     expect(logger.error).toHaveBeenCalled()
   })
+
+  it('reads callback fields from own properties only (prototype values are ignored)', () => {
+    const hash = expectedHash('vakif1954a000000000011445949109' + '05AAABBBCCC1YAb123456')
+    const { Cavv: _cavv, ...rest } = baseData()
+    const data = Object.assign(Object.create({ Cavv: 'AAABBBCCC' }) as GatewayResponseData, rest, { Hash: hash })
+    expect(crypt.check3DHash(account, data)).toBe(false)
+    expect(crypt.check3DHash(account, { ...rest, Cavv: 'AAABBBCCC', Hash: hash })).toBe(true)
+  })
 })

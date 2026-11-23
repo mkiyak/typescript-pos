@@ -30,6 +30,12 @@ describe('errors', () => {
     expect(e).toBeInstanceOf(E.PosError)
   })
 
+  it.each(['currency', 'merchant_id'] as const)('OrderMismatchError supports the %s field', (field) => {
+    const e = new E.OrderMismatchError(field, '949', '840')
+    expect(e.field).toBe(field)
+    expect(e.message).toBe(`Callback ${field} mismatch: expected "949", got "840"`)
+  })
+
   it('PosHttpError masks and truncates body snippet', () => {
     const e = new E.PosHttpError('fail', { url: 'https://x', status: 502, body: `${'a'.repeat(600)} 4111111111111111` })
     expect(e.name).toBe('PosHttpError')

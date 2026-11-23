@@ -30,7 +30,7 @@ export class PayFlexV4PosCrypt extends NullCrypt<PayFlexPosAccount> {
     }
 
     const field = (name: string): string => {
-      const value = (data as Record<string, unknown>)[name]
+      const value = Object.hasOwn(data, name) ? (data as Record<string, unknown>)[name] : undefined
       return typeof value === 'string' ? value : ''
     }
 

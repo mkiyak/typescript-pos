@@ -1,5 +1,6 @@
 import {
   HashMismatchError,
+  OrderMismatchError,
   PosError,
   UnsupportedFormFormatError,
   UnsupportedPaymentModelError,
@@ -7,11 +8,31 @@ import {
 } from '../errors.js'
 import type { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import type { CreditCard } from '../model/card/CreditCard.js'
-import { FORM_FORMAT, type FormFormat, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../PosInterface.js'
+import {
+  CURRENCY,
+  FORM_FORMAT,
+  type FormFormat,
+  MODEL,
+  type PaymentModel,
+  TX_TYPE,
+  type TxType,
+} from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
 
 type Raw = Record<string, unknown>
+
+/** Largest difference between the callback amount and the order amount still treated as equal. */
+const AMOUNT_TOLERANCE = 0.005
+
+/** Callback `PurchAmount` in major units with a dot, e.g. `100.00`. */
+const MAJOR_UNIT_AMOUNT = /^\d+\.\d{1,2}$/
+
+/** Callback `PurchAmount` in minor units without a dot, e.g. `101` for 1.01. */
+const MINOR_UNIT_AMOUNT = /^\d+$/
+
+/** A plain decimal order amount (no hex, exponent or Infinity, which `Number()` would accept). */
+const DECIMAL = /^\s*[+-]?(\d+(\.\d*)?|\.\d+)\s*$/
 
 /** A nested record of a decoded bank response, or an empty one. */
 function record(data: unknown, key: string): Raw {
@@ -23,6 +44,29 @@ function record(data: unknown, key: string): Raw {
   }
 
   return {}
+}
+
+/**
+ * The callback `PurchAmount` as a number. The bank's formats are `100.00` (major units; the DOC-STD §15 hash drops
+ * the dot) and `10000` (minor units); anything else is NaN.
+ */
+function parseCallbackAmount(value: unknown): number {
+  if (typeof value !== 'string') return Number.NaN
+  if (MAJOR_UNIT_AMOUNT.test(value)) return Number(value)
+  if (MINOR_UNIT_AMOUNT.test(value)) return Number(value) / 100
+
+  return Number.NaN
+}
+
+/** A finite order amount from a number or a plain decimal string; NaN otherwise. */
+function parseOrderAmount(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN
+
+  return typeof value === 'string' && DECIMAL.test(value) ? Number(value) : Number.NaN
+}
+
+function asText(value: unknown): string {
+  return value === null || value === undefined ? '' : String(value)
 }
 
 function text(data: Raw, key: string): string {
@@ -37,7 +81,10 @@ function text(data: Raw, key: string): string {
  * - `make3DPayment` provisions only a fully authenticated callback: `Status` `Y`, `Eci` `02`/`05`, a non-empty
  *   `Cavv` and `MdStatus` absent or `1`. Anything else (half secure, attempts, errors) is mapped as declined
  *   without an HTTP call. The rule is checked first, so a malformed `Eci` never reaches the hash check.
- * - The callback `Hash`, when present, must verify (`HashMismatchError` otherwise) before provisioning.
+ * - The callback `Hash`, when present, must verify (`HashMismatchError` otherwise) before provisioning; with
+ *   `require_3d_hash` a callback without `Hash` is rejected too.
+ * - The callback must belong to this payment: `PurchAmount` equals the order amount (within 0.005),
+ *   `PurchCurrency` the order currency code and `MerchantId` this account (`OrderMismatchError` otherwise).
  * - Enrollment continues only for `Status` `Y`; every other status is a `PosError`.
  */
 export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
@@ -69,13 +116,21 @@ export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
   ): Promise<PosResponse> {
     const paymentModel = MODEL.THREE_D_SECURE
 
+    // Strict rule first: a malformed ECI never reaches the hash; a declined callback is mapped without the hash
+    // check and a successful one must pass it, so both paths fail closed.
     if (!this.is3dAuthSuccess(gatewayResponseData)) {
       return this.responseDataMapper.map3DPaymentData(gatewayResponseData, null, txType, order)
+    }
+
+    if (this.config.require_3d_hash === true && !Object.keys(gatewayResponseData).some(isHashKey)) {
+      throw new HashMismatchError('3D callback has no Hash')
     }
 
     if (!this.crypt.check3DHash(this.account, gatewayResponseData)) {
       throw new HashMismatchError('3D callback hash mismatch')
     }
+
+    this.assertCallbackMatchesOrder(gatewayResponseData, order)
 
     const requestData = await this.dispatchRequestDataPrepared(
       this.requestDataMapper.create3DPaymentRequestData(this.account, order, txType, gatewayResponseData, card),
@@ -181,6 +236,37 @@ export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
     return false
   }
 
+  /**
+   * Binds a verified callback to this payment (fail closed: missing values never match). The enrollment request
+   * sends `MerchantId` = the account merchant id (sub branches add a separate `SubMerchantId`), which the bank
+   * echoes back.
+   */
+  private assertCallbackMatchesOrder(callback: GatewayResponseData, order: PosOrder): void {
+    const own = (key: string): unknown => (Object.hasOwn(callback, key) ? callback[key] : undefined)
+
+    const callbackAmount = parseCallbackAmount(own('PurchAmount'))
+    const orderAmount = parseOrderAmount(order.amount)
+    // NaN (missing or malformed on either side) never matches
+    if (!(Math.abs(callbackAmount - orderAmount) < AMOUNT_TOLERANCE)) {
+      this.fail('amount', asText(order.amount), asText(own('PurchAmount')))
+    }
+
+    const expectedCurrency = String(this.requestValueMapper.mapCurrency(order.currency ?? CURRENCY.TRY))
+    if (own('PurchCurrency') !== expectedCurrency) {
+      this.fail('currency', expectedCurrency, asText(own('PurchCurrency')))
+    }
+
+    const expectedMerchant = this.account.getMerchantId()
+    if (own('MerchantId') !== expectedMerchant) {
+      this.fail('merchant_id', expectedMerchant, asText(own('MerchantId')))
+    }
+  }
+
+  private fail(field: 'amount' | 'currency' | 'merchant_id', expected: string, actual: string): never {
+    this.logger.error(`3D callback ${field} does not match the payment`, { expected, actual })
+    throw new OrderMismatchError(field, expected, actual)
+  }
+
   /** Enrollment status query (VerifyEnrollmentRequest) sent to `gateway_3d`. */
   private async sendEnrollmentRequest(
     order: PosOrder,
@@ -198,4 +284,8 @@ export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
 
     return this.sendRequest(requestTxType, paymentModel, requestData, order)
   }
+}
+
+function isHashKey(key: string): boolean {
+  return key.toLowerCase() === 'hash'
 }
