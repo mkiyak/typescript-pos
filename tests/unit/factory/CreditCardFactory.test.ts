@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CardTypeNotSupportedError, CardTypeRequiredError } from '../../../src/errors.js'
+import { CardTypeNotSupportedError, CardTypeRequiredError, InvalidCardError, PosError } from '../../../src/errors.js'
 import { CreditCardFactory } from '../../../src/factory/CreditCardFactory.js'
 import { CARD_TYPE } from '../../../src/PosInterface.js'
 
@@ -69,5 +69,7 @@ describe('CreditCardFactory', () => {
     ['22', 'xx'],
   ])('create rejects invalid date %s/%s', (y, m) => {
     expect(() => CreditCardFactory.create('4444555566667777', y, m, '123')).toThrow('INVALID DATE FORMAT')
+    expect(() => CreditCardFactory.create('4444555566667777', y, m, '123')).toThrow(InvalidCardError)
+    expect(() => CreditCardFactory.create('4444555566667777', y, m, '123')).toThrow(PosError)
   })
 })

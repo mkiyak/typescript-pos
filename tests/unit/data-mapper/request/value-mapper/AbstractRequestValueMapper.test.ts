@@ -38,6 +38,7 @@ describe('AbstractRequestValueMapper', () => {
     expect(() => mapper.mapTxType(TX_TYPE.PAY_PRE_AUTH)).toThrow(
       'paymentModel must be provided for the transaction type pre',
     )
+    expect(() => mapper.mapTxType(TX_TYPE.PAY_PRE_AUTH)).toThrow(PosError)
   })
 
   it('has ISO 4217 currency mappings by default', () => {

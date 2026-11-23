@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { PosError } from '../errors.js'
 import { createSafeLogger, noopLogger, type PosLogger } from '../logger.js'
 import type { AbstractPosAccount } from '../model/account/AbstractPosAccount.js'
 import type { GatewayResponseData } from '../types.js'
@@ -47,7 +48,7 @@ export abstract class AbstractCrypt<A extends AbstractPosAccount = AbstractPosAc
 
   hashFromParams(account: A, data: Record<string, unknown>, hashParamsValue: string, paramSeparator = ':'): string {
     if (hashParamsValue === '') {
-      throw new Error('hashParamsValue cannot be empty')
+      throw new PosError('hashParamsValue cannot be empty')
     }
 
     const secretKey = account.getSecretKey()

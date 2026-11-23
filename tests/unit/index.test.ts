@@ -23,6 +23,7 @@ describe('public index', () => {
         'CardTypeNotSupportedError',
         'GatewayClassNotConfiguredError',
         'NotImplementedError',
+        'InvalidCardError',
         'PosHttpError',
         'PosFactory',
         'AccountFactory',

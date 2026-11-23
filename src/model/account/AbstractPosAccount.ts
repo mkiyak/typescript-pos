@@ -1,3 +1,5 @@
+import { MissingAccountInfoError } from '../../errors.js'
+
 const INSPECT = Symbol.for('nodejs.util.inspect.custom')
 
 /** Credentials live in #private fields and never serialize. */
@@ -42,7 +44,7 @@ export abstract class AbstractPosAccount {
 
   getSecretKey(): string {
     if (this.#secretKey === null) {
-      throw new Error(`${this.constructor.name}.secretKey is not set.`)
+      throw new MissingAccountInfoError(`${this.constructor.name}.secretKey is not set.`)
     }
     return this.#secretKey
   }
@@ -57,7 +59,7 @@ export abstract class AbstractPosAccount {
 
   getTerminalId(): string {
     if (this.#terminalId === null) {
-      throw new Error(`${this.constructor.name}.terminalId is not set.`)
+      throw new MissingAccountInfoError(`${this.constructor.name}.terminalId is not set.`)
     }
     return this.#terminalId
   }

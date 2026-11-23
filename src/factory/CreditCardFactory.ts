@@ -1,4 +1,4 @@
-import { CardTypeNotSupportedError, CardTypeRequiredError } from '../errors.js'
+import { CardTypeNotSupportedError, CardTypeRequiredError, InvalidCardError } from '../errors.js'
 import { CreditCard } from '../model/card/CreditCard.js'
 import type { CardType } from '../PosInterface.js'
 
@@ -13,7 +13,7 @@ function createExpiration(expireYear: string, expireMonth: string): { year: numb
   const m = expireMonth.padStart(2, '0')
   const month = Number(m)
   if (!/^\d{4}$/.test(y) || !/^\d{2}$/.test(m) || month < 1 || month > 12) {
-    throw new Error('INVALID DATE FORMAT')
+    throw new InvalidCardError('INVALID DATE FORMAT')
   }
   return { year: Number(y), month }
 }

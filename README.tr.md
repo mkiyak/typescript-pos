@@ -120,6 +120,9 @@ bir `PosHttpError` (zaman aşımı, 2xx dışı cevap, HTML/WAF sayfası), banka
 olabilir. Tekrar denemek müşteriden iki kez çekim yapılmasına yol açabilir. Önce `pos.status(order)` çağırın ve
 yalnızca bankada işlemin kaydı yoksa tekrar deneyin.
 
+Kütüphanenin fırlattığı her hata `PosError` sınıfından türer (örneğin `HashMismatchError`, `OrderMismatchError`,
+`MissingAccountInfoError`, `InvalidCardError`, `PosHttpError`).
+
 Saat dilimi (offset) içermeyen banka zaman damgaları Türkiye saati (UTC+03:00) olarak yorumlanır.
 
 ## Tasarım

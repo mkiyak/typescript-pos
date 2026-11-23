@@ -117,6 +117,9 @@ request that moves money (PayFlex 3D Secure or Asseco `MODEL.THREE_D_SECURE` pro
 post-authorization, cancel, refund) may arrive after the bank has already processed it. Retrying can charge the
 customer twice. Call `pos.status(order)` first and retry only when the bank has no record of the transaction.
 
+Every error the library throws extends `PosError` (for example `HashMismatchError`, `OrderMismatchError`,
+`MissingAccountInfoError`, `InvalidCardError`, `PosHttpError`).
+
 Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00).
 
 ## Design

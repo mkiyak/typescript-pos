@@ -130,7 +130,7 @@ export abstract class AbstractRequestValueMapper implements RequestValueMapperIn
 
     if (typeof mapping !== 'string') {
       if (paymentModel === null) {
-        throw new Error(`paymentModel must be provided for the transaction type ${txType}`)
+        throw new PosError(`paymentModel must be provided for the transaction type ${txType}`)
       }
 
       return ownValue(mapping, paymentModel) !== undefined

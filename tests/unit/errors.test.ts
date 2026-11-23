@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import * as E from '../../src/errors.js'
 import { randomHexString } from '../../src/util/random.js'
@@ -13,6 +15,7 @@ describe('errors', () => {
     CardTypeNotSupportedError: E.CardTypeNotSupportedError,
     GatewayClassNotConfiguredError: E.GatewayClassNotConfiguredError,
     NotImplementedError: E.NotImplementedError,
+    InvalidCardError: E.InvalidCardError,
   }
 
   it.each(Object.keys(simpleErrors))('%s extends PosError and sets name', (n) => {
@@ -73,6 +76,14 @@ describe('errors', () => {
       // the caller's object is never mutated
       expect(response.requires_manual_review).toBe(false)
     })
+  })
+
+  it('src/ never throws a plain Error (every library error is a PosError)', () => {
+    const root = join(import.meta.dirname, '../../src')
+    const offenders = (readdirSync(root, { recursive: true }) as string[])
+      .filter((f) => f.endsWith('.ts'))
+      .filter((f) => /\b(new|throw)\s+(Type|Range|Syntax)?Error\(/.test(readFileSync(join(root, f), 'utf8')))
+    expect(offenders).toEqual([])
   })
 
   it('PosHttpError masks and truncates body snippet', () => {

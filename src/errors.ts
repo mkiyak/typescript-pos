@@ -17,6 +17,8 @@ export class CardTypeRequiredError extends PosError {}
 export class CardTypeNotSupportedError extends PosError {}
 export class GatewayClassNotConfiguredError extends PosError {}
 export class NotImplementedError extends PosError {}
+/** Invalid card input, e.g. an expiry month or year that is not a valid date. */
+export class InvalidCardError extends PosError {}
 
 /** Callback field that did not match the order / account. */
 export type OrderMismatchField = 'order_id' | 'amount' | 'currency' | 'merchant_id' | 'storetype'

@@ -1,6 +1,6 @@
 import { inspect } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import { MissingAccountInfoError } from '../../../src/errors.js'
+import { MissingAccountInfoError, PosError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
@@ -15,6 +15,8 @@ describe('AccountFactory', () => {
     expect(a.getUsername()).toBe('user')
     expect(a.getPassword()).toBe('pass')
     expect(() => a.getSecretKey()).toThrow('secretKey is not set')
+    expect(() => a.getSecretKey()).toThrow(MissingAccountInfoError)
+    expect(() => a.getSecretKey()).toThrow(PosError)
   })
 
   it('createAssecoPosAccount 3D secure', () => {
@@ -79,6 +81,7 @@ describe('AccountFactory', () => {
   it('getTerminalId on Asseco account without terminal throws', () => {
     const a = AccountFactory.createAssecoPosAccount('b', 'm', 'u', 'p')
     expect(() => a.getTerminalId()).toThrow('terminalId is not set')
+    expect(() => a.getTerminalId()).toThrow(MissingAccountInfoError)
   })
 })
 

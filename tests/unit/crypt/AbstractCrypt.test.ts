@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { AbstractCrypt } from '../../../src/crypt/AbstractCrypt.js'
+import { MissingAccountInfoError, PosError } from '../../../src/errors.js'
 import type { AbstractPosAccount } from '../../../src/model/account/AbstractPosAccount.js'
 import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js'
 
@@ -73,11 +74,13 @@ describe('AbstractCrypt', () => {
 
     it('throws when hashParamsValue is empty', () => {
       expect(() => crypt.hashFromParams(account, data, '')).toThrow('hashParamsValue cannot be empty')
+      expect(() => crypt.hashFromParams(account, data, '')).toThrow(PosError)
     })
 
     it('throws when the account has no secret key', () => {
       const noKey = new AssecoPosAccount('bank', 'merchant', 'user', 'pass') as AbstractPosAccount
       expect(() => crypt.hashFromParams(noKey, data, 'MerchantNo')).toThrow(/secretKey is not set/)
+      expect(() => crypt.hashFromParams(noKey, data, 'MerchantNo')).toThrow(MissingAccountInfoError)
     })
   })
 

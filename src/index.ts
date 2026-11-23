@@ -6,6 +6,7 @@ export {
   CardTypeRequiredError,
   GatewayClassNotConfiguredError,
   HashMismatchError,
+  InvalidCardError,
   MissingAccountInfoError,
   NotImplementedError,
   OrderMismatchError,
