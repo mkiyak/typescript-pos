@@ -8,7 +8,10 @@ export interface HttpTransportOptions {
 
 export interface HttpTransportResponse {
   status: number
+  /** The body decoded as UTF-8. */
   body: string
+  /** The raw body bytes, for gateways that answer in another charset (e.g. ISO-8859-9). */
+  bytes: Uint8Array
   headers: Headers
 }
 
@@ -35,10 +38,12 @@ export class HttpTransport {
 
     const exchange = async (): Promise<HttpTransportResponse> => {
       let res: Response
+      let bytes: Uint8Array
       let text: string
       try {
         res = await this.fetchImpl(url, { method: 'POST', body: body as string, headers, signal: controller.signal })
-        text = await res.text()
+        bytes = new Uint8Array(await res.arrayBuffer())
+        text = new TextDecoder().decode(bytes)
       } catch (e) {
         if (e instanceof PosHttpError) throw e
         throw new PosHttpError(
@@ -50,7 +55,7 @@ export class HttpTransport {
       if (res.status < 200 || res.status >= 300) {
         throw new PosHttpError(`Bank returned HTTP ${res.status}`, { url, status: res.status, body: text })
       }
-      return { status: res.status, body: text, headers: res.headers }
+      return { status: res.status, body: text, bytes, headers: res.headers }
     }
 
     const pending = exchange()

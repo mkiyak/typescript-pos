@@ -5,7 +5,7 @@ import type { EncodedData } from '../serializer/EncodedData.js'
 import { JsonDecoder } from '../serializer/JsonDecoder.js'
 import type { PosOrder } from '../types.js'
 import { maskSensitiveData } from '../util/maskSensitiveData.js'
-import type { HttpTransport } from './HttpTransport.js'
+import type { HttpTransport, HttpTransportResponse } from './HttpTransport.js'
 
 const CONTENT_TYPES: Record<EncodedData['format'], string> = {
   xml: 'text/xml; charset=UTF-8',
@@ -39,9 +39,13 @@ export abstract class AbstractHttpClient {
 
     this.logger.debug('sending request', { url: target, tx_type: txType, payment_model: paymentModel })
 
-    let response: Awaited<ReturnType<HttpTransport['post']>>
+    let response: HttpTransportResponse
     try {
-      response = await this.transport.post(target, encoded.data, this.headers(txType, paymentModel, encoded))
+      response = await this.transport.post(
+        target,
+        this.requestBody(encoded),
+        this.headers(txType, paymentModel, encoded),
+      )
     } catch (e) {
       this.logger.error('api request failed', {
         url: target,
@@ -62,7 +66,7 @@ export abstract class AbstractHttpClient {
 
     let decoded: Record<string, unknown>
     try {
-      decoded = await this.decode(response.body, txType, paymentModel)
+      decoded = await this.decode(this.responseText(response), txType, paymentModel)
     } catch (e) {
       this.logger.error('parsing bank response failed', {
         status_code: response.status,
@@ -101,6 +105,16 @@ export abstract class AbstractHttpClient {
   /** Default: JSON. */
   protected decode(body: string, _txType: TxType, _paymentModel: PaymentModel): Promise<Record<string, unknown>> {
     return Promise.resolve(JsonDecoder.decode(body))
+  }
+
+  /** The bytes put on the wire. Default: the encoded string (sent as UTF-8). */
+  protected requestBody(encoded: EncodedData): string | Uint8Array {
+    return encoded.data
+  }
+
+  /** The response body handed to `decode()`. Default: the body decoded as UTF-8. */
+  protected responseText(response: HttpTransportResponse): string {
+    return response.body
   }
 
   protected headers(_txType: TxType, _paymentModel: PaymentModel, encoded: EncodedData): Record<string, string> {

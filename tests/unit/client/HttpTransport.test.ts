@@ -73,4 +73,12 @@ describe('HttpTransport', () => {
     const res = await new HttpTransport({ fetch: fakeFetch(200, '') }).post('https://bank.test/api', '', {})
     expect(() => XmlDecoder.decode(res.body)).toThrow(PosHttpError)
   })
+
+  it('exposes the raw body bytes next to the UTF-8 text', async () => {
+    const raw = new Uint8Array([0x3c, 0x61, 0x3e, 0xdd, 0x3c, 0x2f, 0x61, 0x3e]) // <a>\xDD</a> (ISO-8859-9 İ)
+    const f = (async () => new Response(raw, { status: 200 })) as unknown as typeof fetch
+    const res = await new HttpTransport({ fetch: f }).post('https://bank.test/api', new Uint8Array([0x61]), {})
+    expect(res.bytes).toStrictEqual(raw)
+    expect(res.body).toBe('<a>\uFFFD</a>')
+  })
 })
