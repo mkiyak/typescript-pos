@@ -24,6 +24,10 @@ describe('XmlDecoder', () => {
     expect(XmlDecoder.decode(input)).toEqual(expected)
   })
 
+  it('decodes numeric character references and standard entities', () => {
+    expect(XmlDecoder.decode('<R><A>&#65;&#x42;&amp;&lt;</A></R>')).toEqual({ A: 'AB&<' })
+  })
+
   it('throws PosHttpError on empty string', () => {
     expect(() => XmlDecoder.decode('')).toThrow(PosHttpError)
     expect(() => XmlDecoder.decode('   ')).toThrow(PosHttpError)

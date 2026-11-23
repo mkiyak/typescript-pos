@@ -135,4 +135,19 @@ describe('AbstractHttpClient', () => {
     expect(err.url).toBe('https://bank.test/api')
     expect(err.status).toBe(200)
   })
+
+  it('masks PAN and CVV in the logged body when decoding fails', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    class C extends TestClient {
+      protected override decode(): Promise<Record<string, unknown>> {
+        return Promise.reject(new PosHttpError('bad', { url: '' }))
+      }
+    }
+    const body = '<html>4355084355084358 <Cvv2Val>123</Cvv2Val></html>'
+    await new C(() => true, ok(body), logger).request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, {}, {}).catch(() => {})
+    const logged = JSON.stringify(logger.error.mock.calls)
+    expect(logged).toContain('parsing bank response failed')
+    expect(logged).not.toContain('4355084355084358')
+    expect(logged).not.toContain('>123<')
+  })
 })

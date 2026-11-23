@@ -10,6 +10,7 @@ const parser = new XMLParser({
   trimValues: true,
   ignoreDeclaration: true,
   processEntities: true,
+  htmlEntities: true,
 })
 
 const fail = (message: string, body: string): never => {

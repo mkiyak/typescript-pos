@@ -1,9 +1,10 @@
 import { PosHttpError } from '../errors.js'
-import type { PosLogger } from '../logger.js'
+import { createSafeLogger, type PosLogger } from '../logger.js'
 import type { PaymentModel, TxType } from '../PosInterface.js'
 import type { EncodedData } from '../serializer/EncodedData.js'
 import { JsonDecoder } from '../serializer/JsonDecoder.js'
 import type { PosOrder } from '../types.js'
+import { maskSensitiveData } from '../util/maskSensitiveData.js'
 import type { HttpTransport } from './HttpTransport.js'
 
 const CONTENT_TYPES: Record<EncodedData['format'], string> = {
@@ -14,11 +15,15 @@ const CONTENT_TYPES: Record<EncodedData['format'], string> = {
 
 /** Encode -> post -> decode. Concrete clients override encode/decode/headers. */
 export abstract class AbstractHttpClient {
+  protected readonly logger: PosLogger
+
   constructor(
     protected readonly endpoint: string,
     protected readonly transport: HttpTransport,
-    protected readonly logger: PosLogger,
-  ) {}
+    logger: PosLogger,
+  ) {
+    this.logger = createSafeLogger(logger)
+  }
 
   abstract supportsTx(txType: TxType, paymentModel: PaymentModel): boolean
 
@@ -61,7 +66,7 @@ export abstract class AbstractHttpClient {
     } catch (e) {
       this.logger.error('parsing bank response failed', {
         status_code: response.status,
-        response: response.body.slice(0, 500),
+        response: maskSensitiveData(response.body).slice(0, 500),
         message: e instanceof Error ? e.message : String(e),
       })
       if (e instanceof PosHttpError && e.url === '') {
