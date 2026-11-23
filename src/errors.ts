@@ -26,8 +26,9 @@ export class OrderMismatchError extends PosError {
   readonly expected: string
   readonly actual: string
   /**
-   * The response mapped from the (hash-verified) callback, when one exists, so merchants can inspect
-   * `transaction_id`, `proc_return_code` and `requires_manual_review` when money may have moved.
+   * The response mapped from the callback (hash-verified when hash verification is enabled), when one exists, so
+   * merchants can inspect `transaction_id`, `proc_return_code` and `requires_manual_review` when money may have
+   * moved. The raw bank data in `all` is masked (card numbers, passwords and keys never reach logs).
    */
   readonly response?: PosResponse
 
@@ -37,7 +38,7 @@ export class OrderMismatchError extends PosError {
     this.expected = expected
     this.actual = actual
     if (response !== undefined) {
-      this.response = response
+      this.response = { ...response, all: maskSensitiveData(response.all) }
     }
   }
 }

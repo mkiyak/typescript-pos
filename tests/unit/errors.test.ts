@@ -36,6 +36,22 @@ describe('errors', () => {
     expect(e.message).toBe(`Callback ${field} mismatch: expected "949", got "840"`)
   })
 
+  it('OrderMismatchError masks the raw bank data attached in response.all', () => {
+    const response = {
+      status: 'declined' as const,
+      order_id: 'A',
+      proc_return_code: '00',
+      error_code: null,
+      error_message: null,
+      transaction_id: 'T1',
+      all: { oid: 'A', Password: 'secret', pan: '4111111111111111', note: 'card 4111111111111111' },
+    }
+    const e = new E.OrderMismatchError('order_id', 'A', 'B', response)
+    expect(e.response?.transaction_id).toBe('T1')
+    expect(e.response?.all).toEqual({ oid: 'A', Password: '***', pan: '***', note: 'card 411111****1111' })
+    expect(response.all.Password).toBe('secret')
+  })
+
   it('PosHttpError masks and truncates body snippet', () => {
     const e = new E.PosHttpError('fail', { url: 'https://x', status: 502, body: `${'a'.repeat(600)} 4111111111111111` })
     expect(e.name).toBe('PosHttpError')

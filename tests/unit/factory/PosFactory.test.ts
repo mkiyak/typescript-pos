@@ -4,7 +4,7 @@ import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { GatewayClassNotConfiguredError, PosError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { type PosConfig, PosFactory } from '../../../src/factory/PosFactory.js'
-import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
+import type { AbstractGateway, GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../src/PosInterface.js'
@@ -150,6 +150,16 @@ describe('PosFactory.createPosGateway', () => {
   })
 
   it('builds a gateway for every entry of the test config', () => {
-    expect(Object.keys(posTestConfig.banks).length).toBeGreaterThan(0)
+    const accounts = {
+      AssecoPos: (bank: string) => assecoAccount(bank),
+      PayFlexV4Pos: (bank: string) => payFlexAccount(bank),
+    } as const
+    const entries = Object.entries(posTestConfig.banks)
+    expect(entries.length).toBeGreaterThan(0)
+    for (const [bank, bankConfig] of entries) {
+      const makeAccount = accounts[bankConfig.class as keyof typeof accounts]
+      const gateway = PosFactory.createPosGateway(makeAccount(bank), posTestConfig)
+      expect((gateway.constructor as typeof AbstractGateway).GATEWAY_CLASS).toBe(bankConfig.class)
+    }
   })
 })
