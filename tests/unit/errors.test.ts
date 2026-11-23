@@ -3,18 +3,20 @@ import * as E from '../../src/errors.js'
 import { randomHexString } from '../../src/util/random.js'
 
 describe('errors', () => {
-  it.each([
-    'HashMismatchError',
-    'UnsupportedPaymentModelError',
-    'UnsupportedTransactionTypeError',
-    'UnsupportedFormFormatError',
-    'MissingAccountInfoError',
-    'CardTypeRequiredError',
-    'CardTypeNotSupportedError',
-    'GatewayClassNotConfiguredError',
-    'NotImplementedError',
-  ] as const)('%s extends PosError and sets name', (n) => {
-    const e = new (E[n] as new (m?: string) => E.PosError)('boom')
+  const simpleErrors: Record<string, new (m?: string) => E.PosError> = {
+    HashMismatchError: E.HashMismatchError,
+    UnsupportedPaymentModelError: E.UnsupportedPaymentModelError,
+    UnsupportedTransactionTypeError: E.UnsupportedTransactionTypeError,
+    UnsupportedFormFormatError: E.UnsupportedFormFormatError,
+    MissingAccountInfoError: E.MissingAccountInfoError,
+    CardTypeRequiredError: E.CardTypeRequiredError,
+    CardTypeNotSupportedError: E.CardTypeNotSupportedError,
+    GatewayClassNotConfiguredError: E.GatewayClassNotConfiguredError,
+    NotImplementedError: E.NotImplementedError,
+  }
+
+  it.each(Object.keys(simpleErrors))('%s extends PosError and sets name', (n) => {
+    const e = new (simpleErrors[n] as new (m?: string) => E.PosError)('boom')
     expect(e).toBeInstanceOf(E.PosError)
     expect(e).toBeInstanceOf(Error)
     expect(e.name).toBe(n)

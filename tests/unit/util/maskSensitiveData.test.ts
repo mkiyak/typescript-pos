@@ -26,8 +26,10 @@ describe('maskSensitiveData', () => {
       'expires',
     ]
     for (const key of keys) {
-      const out = maskSensitiveData({ a: { b: [{ [key.toUpperCase()]: 'secretvalue' }] }, [key]: 'x' }) as any
-      expect(out.a.b[0][key.toUpperCase()]).not.toBe('secretvalue')
+      const out = maskSensitiveData({ a: { b: [{ [key.toUpperCase()]: 'secretvalue' }] }, [key]: 'x' }) as unknown as {
+        a: { b: Record<string, unknown>[] }
+      } & Record<string, unknown>
+      expect(out.a.b[0]?.[key.toUpperCase()]).not.toBe('secretvalue')
       expect(out[key]).not.toBe('x')
       expect(JSON.stringify(out)).not.toContain('secretvalue')
     }
