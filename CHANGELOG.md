@@ -1,5 +1,11 @@
 # typescript-pos
 
+## 0.1.1
+
+### Patch Changes
+
+- Documentation: the npm page now shows the English README (the Turkish README is renamed to `README-tr.md` and is no longer shipped in the package), and pending live-verification notes are removed from the READMEs and guides. No API or behaviour change.
+
 ## 0.1.0
 
 ### Minor Changes
