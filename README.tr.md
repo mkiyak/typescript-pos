@@ -1,18 +1,21 @@
 # typescript-pos
 
+[![CI](https://github.com/mkiyak/typescript-pos/actions/workflows/ci.yml/badge.svg)](https://github.com/mkiyak/typescript-pos/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/typescript-pos.svg)](https://www.npmjs.com/package/typescript-pos)
+[![lisans](https://img.shields.io/github/license/mkiyak/typescript-pos.svg)](./LICENSE)
+
 Türk bankalarının sanal POS altyapılarını (3D Secure akışları dahil) tek, durumsuz (stateless) ve async bir arayüz arkasında
-toplayan TypeScript kütüphanesi. Node.js 20 veya üzeri gerekir.
+toplayan TypeScript kütüphanesi. Node.js 20 veya üzeri gerekir; ESM ve CommonJS desteklenir, çalışma zamanı bağımlılıkları yalnızca
+`fast-xml-parser` ve `iconv-lite`'tır.
 
-> Durum: erken geliştirme aşamasında. Henüz yayınlanmış bir sürüm yoktur.
+> Durum: v0.1, 1.0 öncesi. Minor sürümler kırıcı değişiklik içerebilir (bkz. [Versiyonlama](#versiyonlama)).
 
-## Durum
+## Desteklenen gateway'ler
 
-| Gateway                                                                                                 | Bankalar                                                                                    | Durum             |
-| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------- |
-| `AssecoPos`                                                                                             | İş Bankası, Ziraat (Asseco), Akbank (Asseco), Halkbank, TEB, Şekerbank, Finansbank (Asseco) | planlandı (v0.1)  |
-| `PayFlexV4Pos`                                                                                          | VakıfBank, Ziraat (PayFlex)                                                                 | planlandı (v0.1)  |
-| `PayFlexCPV4Pos`                                                                                        | VakıfBank Güvenli Ortak Ödeme                                                               | planlandı (v0.2)  |
-| Garanti, Akbank (yeni API), PosNet, PayFor, InterPos, Kuveyt, VakıfKatılım, Param, Tosla, PayTR, Iyzico |                                                                                             | planlandı (v0.3+) |
+| Gateway        | Bankalar                                                                                          | Doğrulama                                                                                                                                                                                                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AssecoPos`    | İş Bankası, Ziraat (Asseco), Akbank (Asseco), Halkbank, TEB, Şekerbank, QNB Finansbank (Asseco)   | Birim testli; 3D hash'i PHP ile karşılaştırmalı test edildi (1000 rastgele kümede 0 uyuşmazlık). Henüz canlı bir banka ortamında çalıştırılmadı.                                                                                                            |
+| `PayFlexV4Pos` | VakıfBank (8443 portu), Ziraat (PayFlex)                                                          | Birim testli. VakıfBank herkese açık TEST ortamında 2026-11-23'te canlı doğrulandı: 3D kayıt kontrolü (Status `Y`), 3D'siz Satış (`0000`) ve İptal (`0000`). Tarayıcıdaki tam 3D tamamlama (ACS, callback, provizyon) ve gerçek callback `PurchAmount` biçimi **henüz canlı doğrulanmadı**. |
 
 ## Kurulum
 
@@ -20,7 +23,109 @@ toplayan TypeScript kütüphanesi. Node.js 20 veya üzeri gerekir.
 npm install typescript-pos
 ```
 
-Kullanım dokümantasyonu ilk sürümle birlikte eklenecektir.
+## Hızlı başlangıç
+
+Her şey düz nesnelerle kurulur. Sipariş anahtarları ve normalize cevap anahtarları snake_case'tir ve tüm
+gateway'lerde aynıdır (`id`, `amount`, `success_url`, ... ve `status`, `proc_return_code`, `order_id`, ...). Tutarlar ana
+birimdedir (`10.5` = 10,50 TL).
+
+### Asseco 3D Pay Hosting (kart verisi sunucunuza uğramaz)
+
+```ts
+import { AccountFactory, MODEL, PosFactory, posProductionConfig, TX_TYPE } from 'typescript-pos'
+
+const account = AccountFactory.createAssecoPosAccount('isbank', clientId, username, password, storeKey)
+const pos = PosFactory.createPosGateway(account, posProductionConfig) // durumsuz, paylaşabilirsiniz
+
+// 1. Sayfanızın bankaya otomatik göndereceği formu üretin.
+const form = await pos.get3DFormData(order, MODEL.THREE_D_PAY_HOSTING, TX_TYPE.PAY_AUTH)
+// { gateway, method: 'POST', inputs }
+
+// 2. Banka müşteriyi success_url / fail_url adresine POST ile geri yönlendirir.
+const response = await pos.payment(MODEL.THREE_D_PAY_HOSTING, order, TX_TYPE.PAY_AUTH, null, callbackBody)
+if (response.status === 'approved') {
+  /* ödendi */
+}
+```
+
+### PayFlex 3D Secure (kart verisi sunucunuzdan geçer, PCI SAQ D)
+
+```ts
+import { AccountFactory, CARD_TYPE, CreditCardFactory, MODEL, PosFactory, posProductionConfig, TX_TYPE } from 'typescript-pos'
+
+const account = AccountFactory.createPayFlexPosAccount('vakifbank', merchantId, password, terminalNo)
+const pos = PosFactory.createPosGateway(account, posProductionConfig)
+const card = CreditCardFactory.create('4938410157705591', '29', '12', '453', 'John Doe', CARD_TYPE.VISA)
+
+// 1. Kayıt kontrolü: ACS formunu döner (kart 3D'ye kayıtlı değilse hata fırlatır).
+const form = await pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card)
+
+// 2. Callback: sonucu doğrular ve provizyon isteğini gönderir. PayFlex kartı yeniden ister.
+const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, card, callbackBody)
+```
+
+Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](./examples) altındadır. Adım adım kılavuzlar:
+
+- [Asseco 3D Pay Hosting](./guides/asseco-3d-payment.md)
+- [PayFlex V4 3D Secure](./guides/payflex-3d-payment.md)
+- [Güvenlik ve canlıya çıkış kontrol listesi](./guides/security.md)
+
+Diğer işlemler: `pos.cancel(order)`, `pos.refund(order)` (`order.order_amount` verilmiş ve `order.amount` ondan
+küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (yalnızca Asseco), 3D Secure'suz ödeme için
+`pos.payment(MODEL.NON_SECURE, ...)` ve ön/son provizyon için `TX_TYPE.PAY_PRE_AUTH` / `TX_TYPE.PAY_POST_AUTH`.
+
+### Test ve canlı yapılandırma
+
+`posProductionConfig` banka adıyla anahtarlanır (`isbank`, `akbank`, `vakifbank`, ...). `posTestConfig` ise
+sağlayıcı adıyla anahtarlanır: `asseco`, `vakifbank`, `ziraat-vpos`. Bu yüzden test ortamındaki bir
+İşbank hesabı `asseco` banka adını kullanır; ya da kodunuzda tek ad tutmak için şu kalıbı kullanın:
+
+```ts
+import { posTestConfig } from 'typescript-pos'
+
+const testConfig = { banks: { isbank: posTestConfig.banks.asseco! } }
+```
+
+## Callback yönetimi
+
+Banka müşteriyi siteler arası (cross-site) bir POST ile geri gönderir; bu yüzden `SameSite` oturum çerezleri
+gelmeyebilir. Siparişi sunucuda sipariş numarasıyla bulun, callback'i her zaman gateway metodundan geçirin
+(`pos.payment(...)`, `make3DPayment`, ...) ve callback alanlarına doğrudan güvenmeyin. `OrderMismatchError`
+reddedilen (declined) cevaplar dahil her Asseco 3D Pay / 3D Host callback'inde oluşabilir: bunu başarısızlık sayın ve
+`error.response` içindeki `transaction_id`, `proc_return_code`, `requires_manual_review` alanlarını okuyun.
+`requires_manual_review` `true` ise para hareket etmiş olabilir: inceleyin, iptal veya iade edin. Ayrıntılar
+kılavuzlardadır.
+
+Saat dilimi (offset) içermeyen banka zaman damgaları Türkiye saati (UTC+03:00) olarak yorumlanır.
+
+## Tasarım
+
+1. Durumsuz, async API: her ağ metodu kendi cevabını döner; `isSuccess()` / `getResponse()` durumu yoktur.
+2. Sipariş ve normalize cevap anahtarları snake_case'tir ve her gateway'de aynıdır.
+3. 3D hash doğrulaması kapatılamaz (`disable_3d_hash_check` yoktur).
+4. Hassas veri (PAN, CVV, son kullanma, şifreler, store key) logger'a ulaşmadan maskelenir.
+5. Sabit zamanlı hash karşılaştırması; Asseco hash'i bankanın beklediği doğal, büyük/küçük harf duyarsız anahtar sıralamasını birebir kullanır.
+6. Ek Asseco korumaları: dönen sipariş numarası ve tutar siparişle karşılaştırılır (`OrderMismatchError`);
+   provizyon verilmiş ama 3D başarısız cevap `declined` olur ve `requires_manual_review` ile işaretlenir.
+7. Ek PayFlex korumaları: katı 3D kuralı (Status `Y`, ECI `02`/`05`, CAVV, varsa `MdStatus` 1), callback tutar, para
+   birimi ve üye işyeri bağlaması, isteğe bağlı `require_3d_hash`.
+8. VakıfBank varsayılan uçları 8443 portunu kullanır; `MerchantType` hesap başına ayarlanır.
+9. Giden veriyi incelemek veya değiştirmek için kancalar (`onRequestDataPrepared`, `onBefore3DFormHashCalculated`).
+10. `fetch` tabanlı ince HTTP katmanı (enjekte edilebilir, varsayılan zaman aşımı 60 sn); banka HTML/WAF sayfaları
+    `PosHttpError` fırlatır.
+
+## Güvenlik
+
+Açık bildirmek için [SECURITY.md](./SECURITY.md), canlıya çıkış kontrol listesi için
+[guides/security.md](./guides/security.md) dosyasına bakın. PCI DSS: PayFlex 3D Secure (MPI) kart verisinin
+sunucunuzdan geçmesini gerektirir; bu nedenle SAQ D kapsamına girersiniz. Asseco 3D Pay Hosting kart verisini
+sunucunuzun dışında tutar.
+
+## Versiyonlama
+
+[SemVer](https://semver.org). 1.0 öncesinde kırıcı değişiklik minor, diğer değişiklikler patch sürümü artırır.
+Commit'ler [Conventional Commits](https://www.conventionalcommits.org) kurallarına uyar; sürümler
+[Changesets](https://github.com/changesets/changesets) ile yönetilir (bkz. [CONTRIBUTING.md](./CONTRIBUTING.md)).
 
 ## Lisans
 

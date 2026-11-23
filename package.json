@@ -64,10 +64,11 @@
     "format": "biome format --write .",
     "test": "vitest run",
     "test:functional": "FUNCTIONAL_TESTS=1 vitest run tests/functional",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run typecheck:examples && npm run test && npm run build",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "prepare": "husky"
+    "prepare": "husky",
+    "typecheck:examples": "tsc --noEmit -p tsconfig.examples.json"
   },
   "dependencies": {
     "fast-xml-parser": "^5.12.1",
