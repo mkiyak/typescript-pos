@@ -1,4 +1,21 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import type {
+  AbstractGatewayLike,
+  CardExpiration,
+  CryptInterface,
+  EncodedData,
+  GatewayConfig,
+  GatewayDeps,
+  PosTestBank,
+  RecurringFrequency,
+  RequestDataMapperInterface,
+  RequestTxTypeMappings,
+  RequestValueFormatterInterface,
+  RequestValueMapperInterface,
+  ResponseDataMapperInterface,
+  ShippedPosConfig,
+  SupportedTransactions,
+} from '../../src/index.js'
 import * as mod from '../../src/index.js'
 
 describe('public index', () => {
@@ -47,5 +64,26 @@ describe('public index', () => {
   it('PosFactory creates a gateway from the shipped test config', () => {
     const account = mod.AccountFactory.createPayFlexPosAccount('vakifbank', 'm', 'p', 't')
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.PayFlexV4Pos)
+  })
+
+  it('exports the types the public API refers to', () => {
+    const expiration: CardExpiration = { year: 2030, month: 12 }
+    expect(new mod.CreditCard('4111111111111111', expiration, '123').getExpireMonth()).toBe('12')
+    expectTypeOf<GatewayDeps['crypt']>().toEqualTypeOf<CryptInterface>()
+    expectTypeOf<GatewayDeps['requestDataMapper']>().toEqualTypeOf<RequestDataMapperInterface>()
+    expectTypeOf<GatewayDeps['responseDataMapper']>().toEqualTypeOf<ResponseDataMapperInterface>()
+    expectTypeOf<GatewayDeps['requestValueMapper']>().toEqualTypeOf<RequestValueMapperInterface>()
+    expectTypeOf<GatewayDeps['requestValueFormatter']>().toEqualTypeOf<RequestValueFormatterInterface>()
+    expectTypeOf<SupportedTransactions>().toMatchTypeOf<object>()
+    expectTypeOf<RecurringFrequency>().toEqualTypeOf<'DAY' | 'WEEK' | 'MONTH' | 'YEAR'>()
+    expectTypeOf<RequestTxTypeMappings>().toMatchTypeOf<object>()
+    expectTypeOf<EncodedData['format']>().toEqualTypeOf<'xml' | 'form' | 'json'>()
+    expectTypeOf<typeof mod.posTestConfig>().toEqualTypeOf<ShippedPosConfig<PosTestBank>>()
+    expectTypeOf<typeof mod.posTestConfig.banks.asseco>().toMatchTypeOf<GatewayConfig>()
+    const gatewayLike: AbstractGatewayLike = mod.PosFactory.createPosGateway(
+      mod.AccountFactory.createAssecoPosAccount('asseco', 'c', 'u', 'p', 'k'),
+      mod.posTestConfig,
+    )
+    expect(gatewayLike.getCardTypeMapping()).toBeTypeOf('object')
   })
 })
