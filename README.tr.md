@@ -5,7 +5,7 @@
 [![lisans](https://img.shields.io/github/license/mkiyak/typescript-pos.svg)](https://github.com/mkiyak/typescript-pos/blob/main/LICENSE)
 
 Türk bankalarının sanal POS altyapılarını (3D Secure akışları dahil) tek, durumsuz (stateless) ve async bir arayüz arkasında
-toplayan TypeScript kütüphanesi. Node.js 20 veya üzeri gerekir; ESM ve CommonJS desteklenir, çalışma zamanı bağımlılıkları yalnızca
+toplayan TypeScript kütüphanesi. Node.js 22 veya üzeri gerekir; ESM ve CommonJS desteklenir, çalışma zamanı bağımlılıkları yalnızca
 `fast-xml-parser` ve `iconv-lite`'tır.
 
 > Durum: v0.1, 1.0 öncesi. Minor sürümler kırıcı değişiklik içerebilir (bkz. [Versiyonlama](#versiyonlama)).

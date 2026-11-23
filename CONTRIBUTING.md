@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping out! Before opening a pull request, run:
+Thanks for helping out! Development requires Node.js 22 or newer. Before opening a pull request, run:
 
 ```sh
 npm install

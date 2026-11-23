@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/typescript-pos.svg)](https://www.npmjs.com/package/typescript-pos)
 [![license](https://img.shields.io/github/license/mkiyak/typescript-pos.svg)](https://github.com/mkiyak/typescript-pos/blob/main/LICENSE)
 
-A single, stateless, async TypeScript interface to Turkish bank virtual POS (sanal POS) gateways, including 3D Secure flows. Node.js 20 or newer,
+A single, stateless, async TypeScript interface to Turkish bank virtual POS (sanal POS) gateways, including 3D Secure flows. Node.js 22 or newer,
 ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
 
 > Status: v0.1, pre-1.0. Minor versions may contain breaking changes (see [Versioning](#versioning)).
