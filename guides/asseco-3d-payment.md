@@ -1,7 +1,7 @@
 # Asseco / Payten 3D Pay Hosting
 
 Gateway `AssecoPos` covers İş Bankası, Ziraat (Asseco), Akbank (Asseco), Halkbank, TEB, Şekerbank and QNB
-Finansbank (Asseco). Complete compile-checked code: [`examples/asseco-3d-secure.ts`](../examples/asseco-3d-secure.ts).
+Finansbank (Asseco). Complete compile-checked code: [`examples/asseco-3d-secure.ts`](https://github.com/mkiyak/typescript-pos/blob/main/examples/asseco-3d-secure.ts).
 
 Status: unit-tested, the hash is differential-tested against PHP; not yet run against a live
 bank environment. Do your own end-to-end test with your bank's test merchant before going live.

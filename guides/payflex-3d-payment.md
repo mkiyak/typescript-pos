@@ -1,6 +1,6 @@
 # PayFlex V4 3D Secure (VakıfBank, Ziraat PayFlex)
 
-Gateway `PayFlexV4Pos`. Complete compile-checked code: [`examples/payflex-3d-secure.ts`](../examples/payflex-3d-secure.ts).
+Gateway `PayFlexV4Pos`. Complete compile-checked code: [`examples/payflex-3d-secure.ts`](https://github.com/mkiyak/typescript-pos/blob/main/examples/payflex-3d-secure.ts).
 
 Status: unit-tested. Verified live against the VakıfBank public TEST environment (port 8443) on 2026-11-23:
 3D enrollment (Status `Y`), non-3D Sale (`0000`) and Cancel (`0000`). **Not yet verified live:** the full browser 3D
@@ -27,7 +27,9 @@ const account = AccountFactory.createPayFlexPosAccount(
   PayFlexPosAccount.MERCHANT_TYPE_STANDARD, // 0 standard, 1 main dealer, 2 sub dealer (needs subMerchantId)
 )
 const bank = posProductionConfig.banks.vakifbank as GatewayConfig
-const pos = PosFactory.createPosGateway(account, { banks: { vakifbank: { ...bank, require_3d_hash: true } } })
+// Opt-in: set require_3d_hash only when your bank signs the callback with `Hash` (see below).
+const requireHash = process.env.PAYFLEX_REQUIRE_HASH === '1'
+const pos = PosFactory.createPosGateway(account, { banks: { vakifbank: { ...bank, require_3d_hash: requireHash } } })
 ```
 
 - **MerchantType must match your contract.** The public test merchant is a main dealer (`MERCHANT_TYPE_MAIN_DEALER`,

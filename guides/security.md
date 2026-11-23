@@ -1,11 +1,11 @@
 # Security and production checklist
 
-Report vulnerabilities privately: see [SECURITY.md](../SECURITY.md).
+Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/typescript-pos/blob/main/SECURITY.md).
 
 ## What the library does for you
 
-- **3D hash verification cannot be turned off.** Comparison is constant time.
-  - `AssecoPos`: a valid hash is always required; a missing, empty or non-string `HASH` raises `HashMismatchError`.
+- **Hash verification, per gateway.** Comparison is constant time, and no option disables it.
+  - `AssecoPos`: hash verification cannot be turned off; a valid hash is always required; a missing, empty or non-string `HASH` raises `HashMismatchError`.
   - `PayFlexV4Pos`: a `Hash` that is present is always verified (`HashMismatchError` on mismatch). A callback
     without `Hash` is rejected only with `require_3d_hash: true`; otherwise (and for declined callbacks, which are
     mapped without a provision request) the defence is the strict 3D rule, the order-binding guard and the bank's
