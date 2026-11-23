@@ -946,6 +946,29 @@ describe('AssecoPos (end to end)', () => {
     expect(sent[0]?.body).toContain('<Number>435508:EC9C:4333:##700655000200</Number>')
   })
 
+  it('make3DPayment: accepts a valid hashed callback that carries no storetype field', async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        '<?xml version="1.0" encoding="ISO-8859-9"?><CC5Response><OrderId>2022103030CB</OrderId>' +
+          '<GroupId>2022103030CB</GroupId><Response>Approved</Response><AuthCode>P1</AuthCode>' +
+          '<HostRefNum>1</HostRefNum><ProcReturnCode>00</ProcReturnCode><TransId>T1</TransId><ErrMsg></ErrMsg>' +
+          '<Extra><TRXDATE>20221030 11:51:41</TRXDATE><NUMCODE>00</NUMCODE></Extra></CC5Response>',
+      )) as unknown as typeof fetch
+    const { pos, crypt, account: acc } = realGateway(fetchImpl)
+    const { storetype: _omitted, ...withoutStoretype } = payCallback
+    const callback = signedCallback(crypt, acc, {
+      ...withoutStoretype,
+      md: '435508:EC9C:4333:##700655000200',
+      xid: 'xid',
+    })
+    expect(callback).not.toHaveProperty('storetype')
+
+    const res = await pos.payment(MODEL.THREE_D_SECURE, payOrder, TX_TYPE.PAY_AUTH, null, callback)
+
+    expect(res.status).toBe('approved')
+    expect(res.transaction_id).toBe('T1')
+  })
+
   it('one instance serves concurrent status() calls with independent responses', async () => {
     const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
       const body = Buffer.from(init?.body as Uint8Array).toString('latin1')

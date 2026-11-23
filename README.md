@@ -93,7 +93,8 @@ Both shipped configs are deeply frozen and their bank keys are typed. To change 
 The bank sends the customer back with a cross-site POST, so `SameSite` session cookies may be missing. Look the
 order up by id on the server, always pass the callback through the gateway method (`pos.payment(...)`,
 `make3DPayment`, ...) and never trust callback fields directly. `OrderMismatchError` can occur on any Asseco
-3D Pay / 3D Host callback, including declined ones (`error.field` is `order_id`, `amount` or `storetype`): treat it
+3D Pay / 3D Host callback, including declined ones (`error.field` is `order_id`, `amount` or `storetype`), and on a
+3D Secure callback whose `storetype` does not match the payment model: treat it
 as a failure for the order and read `error.response` (`transaction_id`, `proc_return_code`). When
 `error.paymentMayHaveCompleted` is `true` the bank reported a completed payment for that callback, so the card may
 have been charged: alert someone and void or refund it. A declined response with `requires_manual_review: true`

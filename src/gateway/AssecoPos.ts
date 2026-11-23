@@ -53,6 +53,7 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
 
   /**
    * @throws HashMismatchError when 3D authentication succeeded but the callback hash does not verify
+   * @throws OrderMismatchError (field `storetype`) when the callback carries a storetype other than `3d`
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,

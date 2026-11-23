@@ -94,8 +94,9 @@ değiştirmek için onu yeni bir nesneye yayın (spread): `{ ...posProductionCon
 Banka müşteriyi siteler arası (cross-site) bir POST ile geri gönderir; bu yüzden `SameSite` oturum çerezleri
 gelmeyebilir. Siparişi sunucuda sipariş numarasıyla bulun, callback'i her zaman gateway metodundan geçirin
 (`pos.payment(...)`, `make3DPayment`, ...) ve callback alanlarına doğrudan güvenmeyin. `OrderMismatchError`
-reddedilen (declined) cevaplar dahil her Asseco 3D Pay / 3D Host callback'inde oluşabilir (`error.field` değeri
-`order_id`, `amount` veya `storetype` olur): bunu sipariş için başarısızlık sayın ve `error.response` içindeki
+reddedilen (declined) cevaplar dahil her Asseco 3D Pay / 3D Host callback'inde, ayrıca `storetype` değeri ödeme
+modeliyle eşleşmeyen 3D Secure callback'lerinde oluşabilir (`error.field` değeri `order_id`, `amount` veya
+`storetype` olur): bunu sipariş için başarısızlık sayın ve `error.response` içindeki
 `transaction_id`, `proc_return_code` alanlarını okuyun. `error.paymentMayHaveCompleted` `true` ise banka bu
 callback için tamamlanmış bir ödeme bildirmiştir, yani karttan çekim yapılmış olabilir: ilgili kişiyi uyarın, ödemeyi
 iptal veya iade edin. `requires_manual_review: true` taşıyan reddedilmiş (declined) bir cevap da (3D doğrulaması
