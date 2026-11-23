@@ -165,4 +165,4 @@ with [Changesets](https://github.com/changesets/changesets) (see [CONTRIBUTING.m
 
 [MIT](https://github.com/mkiyak/typescript-pos/blob/main/LICENSE)
 
-Türkçe: [README.tr.md](https://github.com/mkiyak/typescript-pos/blob/main/README.tr.md)
+Türkçe: [README-tr.md](https://github.com/mkiyak/typescript-pos/blob/main/README-tr.md)
