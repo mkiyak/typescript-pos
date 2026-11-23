@@ -16,6 +16,18 @@ export const noopLogger: PosLogger = {
 
 /** Wraps a logger so every context object is passed through maskSensitiveData(). */
 export function createSafeLogger(inner: PosLogger): PosLogger {
-  const wrap = (level: keyof PosLogger) => (msg: string, ctx?: unknown) => inner[level](msg, maskSensitiveData(ctx))
+  const wrap = (level: keyof PosLogger) => (msg: string, ctx?: unknown) => {
+    let safe: unknown
+    try {
+      safe = maskSensitiveData(ctx)
+    } catch {
+      safe = '[unloggable]'
+    }
+    try {
+      inner[level](msg, safe)
+    } catch {
+      // A logging failure must never break a payment flow.
+    }
+  }
   return { debug: wrap('debug'), info: wrap('info'), warn: wrap('warn'), error: wrap('error') }
 }

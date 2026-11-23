@@ -23,4 +23,29 @@ describe('logger', () => {
     createSafeLogger(inner).info('hi')
     expect(inner.info).toHaveBeenCalledWith('hi', undefined)
   })
+
+  it('never throws on throwing getters, deep nesting or throwing inner logger', () => {
+    const inner: PosLogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const log = createSafeLogger(inner)
+    const bad = {
+      get boom(): string {
+        throw new Error('nope')
+      },
+    }
+    expect(() => log.error('x', bad)).not.toThrow()
+    expect(inner.error).toHaveBeenCalledWith('x', '[unloggable]')
+
+    let deep: Record<string, unknown> = {}
+    for (let i = 0; i < 20000; i++) deep = { n: deep }
+    expect(() => log.warn('deep', deep)).not.toThrow()
+    expect(inner.warn).toHaveBeenCalled()
+
+    const throwing: PosLogger = {
+      ...inner,
+      info: () => {
+        throw new Error('sink down')
+      },
+    }
+    expect(() => createSafeLogger(throwing).info('x', {})).not.toThrow()
+  })
 })
