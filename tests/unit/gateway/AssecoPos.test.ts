@@ -755,6 +755,27 @@ describe('AssecoPos (end to end)', () => {
     expect((err as OrderMismatchError).actual).toBe('1.01')
   })
 
+  it('OrderMismatchError carries the mapped response (manual-review flag, no card data) for 3D Pay and 3D Host', async () => {
+    const { pos, crypt, account: acc } = realGateway(noNetwork)
+    const check = async (model: PaymentModel, cb: Record<string, string>, o: PosOrder) => {
+      const err = (await pos
+        .payment(model, o, TX_TYPE.PAY_AUTH, null, signedCallback(crypt, acc, cb))
+        .catch((e) => e)) as OrderMismatchError
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      const response = err.response
+      expect(response).toBeDefined()
+      expect(response?.order_id).toBe(cb.oid)
+      expect(typeof response?.requires_manual_review).toBe('boolean')
+      expect(response).toHaveProperty('transaction_id')
+      const serialized = JSON.stringify(response)
+      expect(serialized).not.toMatch(/\d{13,19}/)
+      expect(serialized.toLowerCase()).not.toContain('cvv')
+    }
+    await check(MODEL.THREE_D_PAY, { ...payCallback, oid: 'SOMEONE-ELSE' }, payOrder)
+    await check(MODEL.THREE_D_PAY, payCallback, { ...payOrder, amount: 100 })
+    await check(MODEL.THREE_D_HOST, { ...payCallback, storetype: '3d_host', oid: 'X' }, payOrder)
+  })
+
   it('provisioned (ProcReturnCode 00) but mdStatus 2 is declined and flagged for manual review', async () => {
     const { pos, crypt, account: acc } = realGateway(noNetwork)
     const callback = signedCallback(crypt, acc, { ...payCallback, mdStatus: '2' })

@@ -1,3 +1,4 @@
+import type { PosResponse } from './types.js'
 import { maskSensitiveData } from './util/maskSensitiveData.js'
 
 export class PosError extends Error {
@@ -24,12 +25,20 @@ export class OrderMismatchError extends PosError {
   readonly field: OrderMismatchField
   readonly expected: string
   readonly actual: string
+  /**
+   * The response mapped from the (hash-verified) callback, when one exists, so merchants can inspect
+   * `transaction_id`, `proc_return_code` and `requires_manual_review` when money may have moved.
+   */
+  readonly response?: PosResponse
 
-  constructor(field: OrderMismatchField, expected: string, actual: string) {
+  constructor(field: OrderMismatchField, expected: string, actual: string, response?: PosResponse) {
     super(`Callback ${field} mismatch: expected "${expected}", got "${actual}"`)
     this.field = field
     this.expected = expected
     this.actual = actual
+    if (response !== undefined) {
+      this.response = response
+    }
   }
 }
 

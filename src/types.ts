@@ -25,6 +25,8 @@ export type PosResponse = Record<string, unknown> & {
   proc_return_code: string | null
   error_code: string | null
   error_message: string | null
+  /** `true` when the bank may have moved money although the response is declined: review it manually. */
+  requires_manual_review?: boolean
   all: unknown
 }
 
