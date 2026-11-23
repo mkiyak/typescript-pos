@@ -5,6 +5,7 @@ import { HttpTransport } from '../../src/client/HttpTransport.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../../src/client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../../src/client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../../src/client/PayFlexV4PosSearchApiHttpClient.js'
+import { posTestConfig } from '../../src/config/posTestConfig.js'
 import { PayFlexV4PosCrypt } from '../../src/crypt/PayFlexV4PosCrypt.js'
 import { PayFlexV4PosRequestDataMapper } from '../../src/data-mapper/request/mapper/PayFlexV4PosRequestDataMapper.js'
 import { PayFlexV4PosRequestValueFormatter } from '../../src/data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
@@ -21,19 +22,11 @@ import { CARD_TYPE, CURRENCY, MODEL, TX_TYPE } from '../../src/PosInterface.js'
 import type { PosOrder, PosResponse } from '../../src/types.js'
 
 // Runs against the public VakıfBank test environment (8443 API gateway). Skipped unless FUNCTIONAL_TESTS=1;
-// never run in CI. Endpoints are inline until the shared test config exists.
+// never run in CI. Endpoints come from the shared test config.
 
 const RUN = process.env.FUNCTIONAL_TESTS === '1'
 
-const config: GatewayConfig = {
-  name: 'VakifBank-VPOS',
-  class: 'PayFlexV4Pos',
-  gateway_endpoints: {
-    payment_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/virtualPos/Vposreq',
-    gateway_3d: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/threeDGateway/Enrollment',
-    query_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/virtualPos/Search',
-  },
-}
+const config: GatewayConfig = posTestConfig.banks.vakifbank as GatewayConfig
 
 function createGateway(): PayFlexV4Pos {
   const account = AccountFactory.createPayFlexPosAccount(

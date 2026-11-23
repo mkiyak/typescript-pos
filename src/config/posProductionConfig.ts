@@ -1,0 +1,85 @@
+import type { PosConfig } from '../factory/PosFactory.js'
+
+/**
+ * Production endpoints for the AssecoPos and PayFlexV4Pos banks (the VakifBank
+ * API gateway on port 8443). Copy and adjust the entries you use; `require_3d_hash` is left at its default.
+ */
+export const posProductionConfig: PosConfig = {
+  banks: {
+    akbank: {
+      name: 'AKBANK T.A.S. Asseco',
+      class: 'AssecoPos',
+      gateway_endpoints: {
+        payment_api: 'https://www.sanalakpos.com/fim/api',
+        gateway_3d: 'https://www.sanalakpos.com/fim/est3Dgate',
+        gateway_3d_host: 'https://sanalpos.sanalakpos.com.tr/fim/est3Dgate',
+      },
+    },
+    finansbank: {
+      name: 'QNB Finansbank Asseco',
+      class: 'AssecoPos',
+      gateway_endpoints: {
+        payment_api: 'https://www.fbwebpos.com/fim/api',
+        gateway_3d: 'https://www.fbwebpos.com/fim/est3dgate',
+      },
+    },
+    halkbank: {
+      name: 'Halkbank Asseco',
+      class: 'AssecoPos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalpos.halkbank.com.tr/fim/api',
+        gateway_3d: 'https://sanalpos.halkbank.com.tr/fim/est3dgate',
+      },
+    },
+    teb: {
+      name: 'TEB Asseco',
+      class: 'AssecoPos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalpos.teb.com.tr/fim/api',
+        gateway_3d: 'https://sanalpos.teb.com.tr/fim/est3Dgate',
+      },
+    },
+    isbank: {
+      name: 'İşbank T.A.S. Asseco',
+      class: 'AssecoPos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalpos.isbank.com.tr/fim/api',
+        gateway_3d: 'https://sanalpos.isbank.com.tr/fim/est3Dgate',
+      },
+    },
+    sekerbank: {
+      name: 'Şeker Bank Asseco',
+      class: 'AssecoPos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalpos.sekerbank.com.tr/fim/api',
+        gateway_3d: 'https://sanalpos.sekerbank.com.tr/fim/est3Dgate',
+      },
+    },
+    vakifbank: {
+      name: 'VakifBank-VPOS',
+      class: 'PayFlexV4Pos',
+      gateway_endpoints: {
+        payment_api: 'https://apigw.vakifbank.com.tr:8443/virtualPos/Vposreq',
+        gateway_3d: 'https://inbound.apigateway.vakifbank.com.tr:8443/threeDGateway/Enrollment',
+        query_api: 'https://apigw.vakifbank.com.tr:8443/virtualPos/Search',
+      },
+    },
+    'ziraat-vpos': {
+      name: 'Ziraat Bankası PayFlex',
+      class: 'PayFlexV4Pos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalpos.ziraatbank.com.tr/v4/v3/Vposreq.aspx',
+        gateway_3d: 'https://mpi.ziraatbank.com.tr/Enrollment.aspx',
+        query_api: 'https://sanalpos.ziraatbank.com.tr/v4/UIWebService/Search.aspx',
+      },
+    },
+    'ziraat-asseco': {
+      name: 'Ziraat Bankası Asseco',
+      class: 'AssecoPos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalpos2.ziraatbank.com.tr/fim/api',
+        gateway_3d: 'https://sanalpos2.ziraatbank.com.tr/fim/est3Dgate',
+      },
+    },
+  },
+}

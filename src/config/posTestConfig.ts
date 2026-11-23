@@ -1,0 +1,37 @@
+import type { PosConfig } from '../factory/PosFactory.js'
+
+/**
+ * Test endpoints for the AssecoPos and PayFlexV4Pos banks (the VakifBank test API
+ * gateway on port 8443). `test_mode` only changes request data for gateways that support it; for these two
+ * gateways the environment is selected by the endpoint URLs.
+ */
+export const posTestConfig: PosConfig = {
+  banks: {
+    asseco: {
+      name: 'Asseco/Payten',
+      class: 'AssecoPos',
+      gateway_endpoints: {
+        payment_api: 'https://entegrasyon.asseco-see.com.tr/fim/api',
+        gateway_3d: 'https://entegrasyon.asseco-see.com.tr/fim/est3Dgate',
+      },
+    },
+    vakifbank: {
+      name: 'VakifBank-VPOS',
+      class: 'PayFlexV4Pos',
+      gateway_endpoints: {
+        payment_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/virtualPos/Vposreq',
+        gateway_3d: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/threeDGateway/Enrollment',
+        query_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/virtualPos/Search',
+      },
+    },
+    'ziraat-vpos': {
+      name: 'Ziraat Bankası',
+      class: 'PayFlexV4Pos',
+      gateway_endpoints: {
+        payment_api: 'https://preprod.payflex.com.tr/Ziraatbank/VposWeb/v3/Vposreq.aspx',
+        gateway_3d: 'https://preprod.payflex.com.tr/ZiraatBank/MpiWeb/MPI_Enrollment.aspx',
+        query_api: 'https://sanalpos.ziraatbank.com.tr/v4/UIWebService/Search.aspx',
+      },
+    },
+  },
+}
