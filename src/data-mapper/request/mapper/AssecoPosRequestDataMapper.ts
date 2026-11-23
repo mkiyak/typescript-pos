@@ -3,29 +3,10 @@ import type { AssecoPosAccount } from '../../../model/account/AssecoPosAccount.j
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
+import { isSet, required } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
 const GATEWAY_CLASS = 'AssecoPos'
-
-/** PHP isset(): neither undefined nor null. */
-function isSet<T>(value: T | null | undefined): value is T {
-  return value !== undefined && value !== null
-}
-
-/**
- * Returns a required order field. Missing (undefined/null) values, and empty strings for text fields, are
- * rejected instead of being cast to the literal "undefined" and signed/posted to the bank.
- *
- * @throws PosError when the field is missing
- */
-function required<K extends keyof PosOrder>(order: PosOrder, key: K): NonNullable<PosOrder[K]> {
-  const value = order[key]
-  if (!isSet(value) || value === '') {
-    throw new PosError(`Order field "${String(key)}" is required`)
-  }
-
-  return value as NonNullable<PosOrder[K]>
-}
 
 /**
  * Creates request data for Asseco/Payten (NestPay/EST) gateways that use the ver3 hash algorithm.

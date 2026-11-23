@@ -1,39 +1,10 @@
-import { PosError } from '../../../errors.js'
+import { NotImplementedError, PosError } from '../../../errors.js'
 import type { PayFlexPosAccount } from '../../../model/account/PayFlexPosAccount.js'
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
+import { isSet, required, requiredString } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
-
-/** PHP isset(): neither undefined nor null. */
-function isSet<T>(value: T | null | undefined): value is T {
-  return value !== undefined && value !== null
-}
-
-/**
- * Returns a required order field. Missing (undefined/null) values and empty strings are rejected instead of being
- * cast to the literal "undefined" and posted to the bank.
- *
- * @throws PosError when the field is missing
- */
-function required<K extends keyof PosOrder>(order: PosOrder, key: K): NonNullable<PosOrder[K]> {
-  const value = order[key]
-  if (!isSet(value) || value === '') {
-    throw new PosError(`Order field "${String(key)}" is required`)
-  }
-
-  return value as NonNullable<PosOrder[K]>
-}
-
-/** Same rule for a field of the bank's 3D enrollment response. */
-function requiredResponse(data: Record<string, unknown>, key: string): string {
-  const value = data[key]
-  if (!isSet(value) || value === '') {
-    throw new PosError(`3D response field "${key}" is required`)
-  }
-
-  return String(value)
-}
 
 /**
  * Creates request data for PayFlex V4 (VakifBank / Ziraat PayFlex) gateway requests. `MerchantType` comes from the
@@ -63,9 +34,9 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
       TransactionId: String(required(o, 'id')),
       CurrencyAmount: this.valueFormatter.formatAmount(required(o, 'amount')),
       CurrencyCode: this.valueMapper.mapCurrency(o.currency),
-      ECI: requiredResponse(responseData, 'Eci'),
-      CAVV: requiredResponse(responseData, 'Cavv'),
-      MpiTransactionId: requiredResponse(responseData, 'VerifyEnrollmentRequestId'),
+      ECI: requiredString(responseData, 'Eci', '3D response'),
+      CAVV: requiredString(responseData, 'Cavv', '3D response'),
+      MpiTransactionId: requiredString(responseData, 'VerifyEnrollmentRequestId', '3D response'),
       OrderId: String(required(o, 'id')),
       ClientIp: String(o.ip),
       TransactionDeviceSource: '0', // ECommerce
@@ -197,7 +168,7 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
   }
 
   createOrderHistoryRequestData(_account: PayFlexPosAccount, _order: PosOrder): Record<string, unknown> {
-    throw new PosError('Not implemented: order history is not supported by PayFlex V4')
+    throw new NotImplementedError('Order history is not supported by PayFlex V4')
   }
 
   /**
@@ -218,12 +189,12 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
     }
 
     return {
-      gateway: requiredResponse(extraData, 'ACSUrl'),
+      gateway: requiredString(extraData, 'ACSUrl', '3D response'),
       method: 'POST',
       inputs: {
-        PaReq: requiredResponse(extraData, 'PaReq'),
-        TermUrl: requiredResponse(extraData, 'TermUrl'),
-        MD: requiredResponse(extraData, 'MD'),
+        PaReq: requiredString(extraData, 'PaReq', '3D response'),
+        TermUrl: requiredString(extraData, 'TermUrl', '3D response'),
+        MD: requiredString(extraData, 'MD', '3D response'),
       },
     }
   }
@@ -260,11 +231,13 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
 
     return {
       IsRecurring: 'true',
-      RecurringFrequency: String(recurring.frequency),
+      RecurringFrequency: requiredString(recurring, 'frequency', 'Recurring'),
       // Day|Month|Year
-      RecurringFrequencyType: this.valueMapper.mapRecurringFrequency(String(recurring.frequencyType)),
+      RecurringFrequencyType: this.valueMapper.mapRecurringFrequency(
+        requiredString(recurring, 'frequencyType', 'Recurring'),
+      ),
       // total number of repetitions
-      RecurringInstallmentCount: String(recurring.installment),
+      RecurringInstallmentCount: requiredString(recurring, 'installment', 'Recurring'),
       // the ACS rejects the transaction when this date is after the card expiry date
       RecurringEndDate: this.valueFormatter.formatDateTime(endDate, 'RecurringEndDate'),
       TriggerDate: startDate instanceof Date ? this.valueFormatter.formatDateTime(startDate, 'TriggerDate') : '',

@@ -81,6 +81,10 @@ describe('PayFlexV4PosCrypt', () => {
     expect(crypt.check3DHash(account, { ...baseData(), Hash: 123 as never })).toBe(false)
   })
 
+  it.each([null, undefined, 'str', 42])('returns false (never throws) for non-object data %s', (data) => {
+    expect(crypt.check3DHash(account, data as never)).toBe(false)
+  })
+
   it('removes the dot from PurchAmount', () => {
     const hash = expectedHash('vakif1954a000000000011445949' + '1000' + '05AAABBBCCC1YAb123456')
     expect(crypt.check3DHash(account, { ...baseData(), PurchAmount: '10.00', Hash: hash })).toBe(true)

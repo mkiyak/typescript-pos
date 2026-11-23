@@ -3,28 +3,29 @@ import type { CreditCard } from '../../../model/card/CreditCard.js'
 import type { TxType } from '../../../PosInterface.js'
 import type { RequestValueFormatterInterface } from './RequestValueFormatterInterface.js'
 
+/** Amounts at or above this are rejected: PHP's own rounding becomes erratic beyond ~7e13, far past any real payment. */
+const MAX_AMOUNT = 1e13
+
 /**
- * PHP `number_format($amount, 2, '.', '')`: PHP rounds half away from zero on the value's 15 significant digit
- * decimal form (1.005 -> "1.01", 2.675 -> "2.68"), unlike `toFixed`, which rounds the binary value.
+ * PHP >= 8.4 `number_format($amount, 2, '.', '')`: `_php_math_round(value, 2, HALF_UP)` without pre-rounding, then
+ * `%.2f`. The scaled value is rounded half up, but a value whose scaled form lies just below a tie
+ * (0.285 * 100 = 28.499999999999996) is still rounded up when it is not below `(floor + 0.5) / 100`.
+ * Verified against PHP 8.5 with a differential run.
  */
 function numberFormat2(amount: number): string {
-  if (!Number.isFinite(amount) || Math.abs(amount) >= 1e15) {
+  if (!Number.isFinite(amount) || Math.abs(amount) >= MAX_AMOUNT) {
     throw new PosError(`Invalid amount: ${amount}`)
   }
 
-  const negative = amount < 0
-  // toFixed(8) of the 15-digit-rounded value is an exact plain decimal string (no exponent form).
-  const [intPart = '0', fraction = ''] = Number(Math.abs(amount).toPrecision(15)).toFixed(8).split('.')
-  // Work in thousandths, round the third decimal half-up (magnitude => half away from zero).
-  const thousandths = BigInt(intPart + fraction.slice(0, 3).padEnd(3, '0'))
-  const hundredths = (thousandths + 5n) / 10n
-  const text = hundredths.toString().padStart(3, '0')
-  const result = `${text.slice(0, -2)}.${text.slice(-2)}`
+  const magnitude = Math.abs(amount)
+  const floor = Math.floor(magnitude * 100)
+  const cents = magnitude >= (floor + 0.5) / 100 ? floor + 1 : floor
+  const text = (cents / 100).toFixed(2)
 
-  return negative && hundredths !== 0n ? `-${result}` : result
+  return amount < 0 && cents !== 0 ? `-${text}` : text
 }
 
-/** Intl-free calendar date in the bank's time zone (Europe/Istanbul). */
+/** Calendar date in the bank's time zone (Europe/Istanbul). */
 function istanbulParts(dateTime: Date): { year: string; month: string; day: string } {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Europe/Istanbul',

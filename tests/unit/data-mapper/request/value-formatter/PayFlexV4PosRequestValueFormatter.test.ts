@@ -21,7 +21,7 @@ describe('PayFlexV4PosRequestValueFormatter', () => {
     [0, '0'],
     [1, '0'],
     [2, '2'],
-  ])('formatInstallment(%d) = %j', (installment, expected) => {
+  ])('formatInstallment(%s) = %s', (installment, expected) => {
     expect(formatter.formatInstallment(installment)).toBe(expected)
   })
 
@@ -42,11 +42,15 @@ describe('PayFlexV4PosRequestValueFormatter', () => {
     [99999999.995, '100000000.00'],
     [1.0049999, '1.00'],
     [0, '0.00'],
-  ])('formatAmount(%d) = %j', (amount, expected) => {
+    [79611956.115, '79611956.12'],
+    [999999999999.995, '1000000000000.00'],
+    [11796.724999999999, '11796.72'],
+    [9999999999999.99, '9999999999999.99'],
+  ])('formatAmount(%s) = %s', (amount, expected) => {
     expect(formatter.formatAmount(amount)).toBe(expected)
   })
 
-  it.each([Number.NaN, Number.POSITIVE_INFINITY, 1e15])('formatAmount rejects %d', (amount) => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, 1e13])('formatAmount rejects %s', (amount) => {
     expect(() => formatter.formatAmount(amount)).toThrow(PosError)
   })
 

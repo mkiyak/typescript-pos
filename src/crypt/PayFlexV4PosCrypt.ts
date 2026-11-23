@@ -20,6 +20,10 @@ export class PayFlexV4PosCrypt extends NullCrypt<PayFlexPosAccount> {
    * + Eci(2 chars) + Cavv + MdStatus + Status + password))). The password and the generated hash are never logged.
    */
   override check3DHash(account: PayFlexPosAccount, data: GatewayResponseData): boolean {
+    if (typeof data !== 'object' || data === null) {
+      return false
+    }
+
     const hashKey = Object.keys(data).find((key) => key.toLowerCase() === 'hash')
     if (hashKey === undefined) {
       return true

@@ -3,7 +3,7 @@ import type { CryptInterface } from '../../../../../src/crypt/CryptInterface.js'
 import { PayFlexV4PosRequestDataMapper } from '../../../../../src/data-mapper/request/mapper/PayFlexV4PosRequestDataMapper.js'
 import { PayFlexV4PosRequestValueFormatter } from '../../../../../src/data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueMapper } from '../../../../../src/data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
-import { PosError } from '../../../../../src/errors.js'
+import { NotImplementedError, PosError } from '../../../../../src/errors.js'
 import { AccountFactory } from '../../../../../src/factory/AccountFactory.js'
 import { CreditCardFactory } from '../../../../../src/factory/CreditCardFactory.js'
 import { PayFlexPosAccount } from '../../../../../src/model/account/PayFlexPosAccount.js'
@@ -226,6 +226,25 @@ describe('PayFlexV4PosRequestDataMapper', () => {
         RecurringEndDate: '20250414',
         TriggerDate: '20241014',
       })
+    })
+
+    it.each(['frequency', 'installment', 'frequencyType'])('throws when recurring %s is missing', (key) => {
+      const recurring: Record<string, unknown> = {
+        frequency: 3,
+        frequencyType: 'MONTH',
+        installment: 2,
+        endDate: day(2024, 4, 14),
+      }
+      delete recurring[key]
+      expect(() =>
+        mapper.create3DFormInitializeRequestData(
+          account,
+          { ...order, recurring },
+          MODEL.THREE_D_SECURE,
+          TX_TYPE.PAY_AUTH,
+          card,
+        ),
+      ).toThrow(PosError)
     })
 
     it('throws without a card', () => {
@@ -468,6 +487,6 @@ describe('PayFlexV4PosRequestDataMapper', () => {
   })
 
   it('createOrderHistoryRequestData is not implemented', () => {
-    expect(() => mapper.createOrderHistoryRequestData(account, {})).toThrow(PosError)
+    expect(() => mapper.createOrderHistoryRequestData(account, {})).toThrow(NotImplementedError)
   })
 })
