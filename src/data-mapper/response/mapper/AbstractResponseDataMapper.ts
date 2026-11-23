@@ -5,6 +5,8 @@ import type { ResponseValueFormatterInterface } from '../value-formatter/Respons
 import type { ResponseValueMapperInterface } from '../value-mapper/ResponseValueMapperInterface.js'
 import { type ResponseDataMapperInterface, TX_APPROVED, TX_DECLINED } from './ResponseDataMapperInterface.js'
 
+type Raw = Record<string, unknown>
+
 /** Characters stripped by PHP trim(). */
 const PHP_TRIM_CHARS = new Set([' ', '\t', '\n', '\r', '\0', '\x0B'])
 
@@ -23,7 +25,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 export abstract class AbstractResponseDataMapper implements ResponseDataMapperInterface {
-  static readonly PROCEDURE_SUCCESS_CODE = '00'
+  static readonly PROCEDURE_SUCCESS_CODE: string = '00'
   static readonly TX_APPROVED = TX_APPROVED
   static readonly TX_DECLINED = TX_DECLINED
 
@@ -72,7 +74,7 @@ export abstract class AbstractResponseDataMapper implements ResponseDataMapperIn
 
   abstract extractMdStatus(raw3DAuthResponseData: Record<string, unknown>): string | null
 
-  abstract is3dAuthSuccess(mdStatus: string | null): boolean
+  abstract is3dAuthSuccess(mdStatus: string | null, raw3DAuthResponseData?: Raw | null): boolean
 
   /** Bank procedure return code of a response (e.g. ProcReturnCode, ResultCode). */
   protected abstract getProcReturnCode(response: Record<string, unknown>): string | null

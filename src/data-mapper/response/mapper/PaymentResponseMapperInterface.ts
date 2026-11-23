@@ -19,5 +19,9 @@ export interface PaymentResponseMapperInterface {
   /** Extracts the MD / 3D auth status (numeric string) from a 3D auth response. */
   extractMdStatus(raw3DAuthResponseData: Record<string, unknown>): string | null
 
-  is3dAuthSuccess(mdStatus: string | null): boolean
+  /**
+   * @param raw3DAuthResponseData the 3D callback, for gateways whose success rule needs more than the status
+   *   (PayFlex V4: ECI/CAVV). Gateways that decide on the status alone ignore it.
+   */
+  is3dAuthSuccess(mdStatus: string | null, raw3DAuthResponseData?: Record<string, unknown> | null): boolean
 }
