@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+docs/
+.superpowers/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.claude-*
+.env*
+*.log
+.DS_Store
