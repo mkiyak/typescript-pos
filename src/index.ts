@@ -1,6 +1,7 @@
 export { HttpTransport, type HttpTransportOptions, type HttpTransportResponse } from './client/HttpTransport.js'
-export { posProductionConfig } from './config/posProductionConfig.js'
-export { posTestConfig } from './config/posTestConfig.js'
+export type { ShippedPosConfig } from './config/freezeConfig.js'
+export { type PosProductionBank, posProductionConfig } from './config/posProductionConfig.js'
+export { type PosTestBank, posTestConfig } from './config/posTestConfig.js'
 export {
   CardTypeNotSupportedError,
   CardTypeRequiredError,

@@ -1,11 +1,17 @@
-import type { PosConfig } from '../factory/PosFactory.js'
+import { freezeConfig, type ShippedPosConfig } from './freezeConfig.js'
+
+/** Bank keys of `posTestConfig`. */
+export type PosTestBank = 'asseco' | 'vakifbank' | 'ziraat-vpos'
 
 /**
  * Test endpoints for the AssecoPos and PayFlexV4Pos banks (the VakifBank test API
  * gateway on port 8443). `test_mode` only changes request data for gateways that support it; for these two
  * gateways the environment is selected by the endpoint URLs.
+ *
+ * Deeply frozen: spread an entry into a new object to change it
+ * (`{ ...posTestConfig.banks.vakifbank, require_3d_hash: true }`).
  */
-export const posTestConfig: PosConfig = {
+export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
   banks: {
     asseco: {
       name: 'Asseco/Payten',
@@ -30,8 +36,10 @@ export const posTestConfig: PosConfig = {
       gateway_endpoints: {
         payment_api: 'https://preprod.payflex.com.tr/Ziraatbank/VposWeb/v3/Vposreq.aspx',
         gateway_3d: 'https://preprod.payflex.com.tr/ZiraatBank/MpiWeb/MPI_Enrollment.aspx',
+        // Note: this test entry's query_api points at the Ziraat PRODUCTION host. Status queries
+        // made with test credentials go to production; override it if your bank gives you a test Search URL.
         query_api: 'https://sanalpos.ziraatbank.com.tr/v4/UIWebService/Search.aspx',
       },
     },
   },
-}
+})

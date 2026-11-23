@@ -82,8 +82,11 @@ vendor: `asseco`, `vakifbank`, `ziraat-vpos`. An İşbank test account therefore
 ```ts
 import { posTestConfig } from 'typescript-pos'
 
-const testConfig = { banks: { isbank: posTestConfig.banks.asseco! } }
+const testConfig = { banks: { isbank: posTestConfig.banks.asseco } }
 ```
+
+Both shipped configs are deeply frozen and their bank keys are typed. To change an entry, spread it into a new object:
+`{ ...posProductionConfig.banks.vakifbank, require_3d_hash: true }`.
 
 ## Callback handling
 

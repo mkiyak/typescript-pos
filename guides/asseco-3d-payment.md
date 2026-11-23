@@ -30,7 +30,7 @@ const pos = PosFactory.createPosGateway(account, posProductionConfig, { timeoutM
 - `storeKey` is the 3D secret key you configure in the bank's merchant panel.
 - Test environment: `posTestConfig` only has the vendor entry `asseco` (plus `vakifbank` and `ziraat-vpos`).
   Use the bank name `asseco` for the test account, or keep your production name with
-  `{ banks: { isbank: posTestConfig.banks.asseco! } }`.
+  `{ banks: { isbank: posTestConfig.banks.asseco } }`.
 - Options of `createPosGateway`: `logger` (receives only masked data), `hooks`, `fetch`, `transport`, `timeoutMs`,
   `testMode`.
 

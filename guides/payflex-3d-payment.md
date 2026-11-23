@@ -17,7 +17,7 @@ data off your server (for example Asseco 3D Pay Hosting) or a bank-hosted common
 ## Configuration
 
 ```ts
-import { AccountFactory, PayFlexPosAccount, PosFactory, posProductionConfig, type GatewayConfig } from 'typescript-pos'
+import { AccountFactory, PayFlexPosAccount, PosFactory, posProductionConfig } from 'typescript-pos'
 
 const account = AccountFactory.createPayFlexPosAccount(
   'vakifbank',
@@ -26,7 +26,7 @@ const account = AccountFactory.createPayFlexPosAccount(
   terminalNo,
   PayFlexPosAccount.MERCHANT_TYPE_STANDARD, // 0 standard, 1 main dealer, 2 sub dealer (needs subMerchantId)
 )
-const bank = posProductionConfig.banks.vakifbank as GatewayConfig
+const bank = posProductionConfig.banks.vakifbank
 // Opt-in: set require_3d_hash only when your bank signs the callback with `Hash` (see below).
 const requireHash = process.env.PAYFLEX_REQUIRE_HASH === '1'
 const pos = PosFactory.createPosGateway(account, { banks: { vakifbank: { ...bank, require_3d_hash: requireHash } } })
@@ -37,7 +37,7 @@ const pos = PosFactory.createPosGateway(account, { banks: { vakifbank: { ...bank
 - **Network requirements (VakıfBank).** Your server IP must be whitelisted by the bank. `success_url` / `fail_url`
   must be public HTTPS URLs and must not contain `localhost` (the WAF rejects them).
 - **Test config.** `posTestConfig` has `vakifbank` and `ziraat-vpos`. Use `vakifbank` as bank
-  name in test; to keep a different name use `{ banks: { myname: posTestConfig.banks.vakifbank! } }`.
+  name in test; to keep a different name use `{ banks: { myname: posTestConfig.banks.vakifbank } }`.
 - **`require_3d_hash` (default `false`).** When your bank sends a `Hash` field in the callback, enable it: a callback
   without `Hash` is then rejected (`HashMismatchError`). Without it, and without a `Hash` in the callback, the
   order-binding guard compares values supplied by the browser, which only stops naive replays. A present `Hash` is

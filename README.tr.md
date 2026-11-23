@@ -83,8 +83,11 @@ sağlayıcı adıyla anahtarlanır: `asseco`, `vakifbank`, `ziraat-vpos`. Bu yü
 ```ts
 import { posTestConfig } from 'typescript-pos'
 
-const testConfig = { banks: { isbank: posTestConfig.banks.asseco! } }
+const testConfig = { banks: { isbank: posTestConfig.banks.asseco } }
 ```
+
+Hazır gelen iki yapılandırma da derinlemesine dondurulmuştur (deep freeze) ve banka anahtarları tiplidir. Bir girdiyi
+değiştirmek için onu yeni bir nesneye yayın (spread): `{ ...posProductionConfig.banks.vakifbank, require_3d_hash: true }`.
 
 ## Callback yönetimi
 

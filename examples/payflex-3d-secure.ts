@@ -4,7 +4,6 @@ import {
   AccountFactory,
   CARD_TYPE,
   CreditCardFactory,
-  type GatewayConfig,
   HashMismatchError,
   MODEL,
   OrderMismatchError,
@@ -29,7 +28,7 @@ const account = AccountFactory.createPayFlexPosAccount(
 const pos = PosFactory.createPosGateway(account, {
   banks: {
     vakifbank: {
-      ...(posProductionConfig.banks.vakifbank as GatewayConfig),
+      ...posProductionConfig.banks.vakifbank,
       require_3d_hash: process.env.PAYFLEX_REQUIRE_HASH === '1',
     },
   },

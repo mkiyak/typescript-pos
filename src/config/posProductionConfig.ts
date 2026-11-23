@@ -1,10 +1,25 @@
-import type { PosConfig } from '../factory/PosFactory.js'
+import { freezeConfig, type ShippedPosConfig } from './freezeConfig.js'
+
+/** Bank keys of `posProductionConfig`. */
+export type PosProductionBank =
+  | 'akbank'
+  | 'finansbank'
+  | 'halkbank'
+  | 'teb'
+  | 'isbank'
+  | 'sekerbank'
+  | 'vakifbank'
+  | 'ziraat-vpos'
+  | 'ziraat-asseco'
 
 /**
  * Production endpoints for the AssecoPos and PayFlexV4Pos banks (the VakifBank
  * API gateway on port 8443). Copy and adjust the entries you use; `require_3d_hash` is left at its default.
+ *
+ * Deeply frozen: spread an entry into a new object to change it
+ * (`{ ...posProductionConfig.banks.vakifbank, require_3d_hash: true }`).
  */
-export const posProductionConfig: PosConfig = {
+export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeConfig({
   banks: {
     akbank: {
       name: 'AKBANK T.A.S. Asseco',
@@ -82,4 +97,4 @@ export const posProductionConfig: PosConfig = {
       },
     },
   },
-}
+})

@@ -26,7 +26,7 @@ import type { PosOrder, PosResponse } from '../../src/types.js'
 
 const RUN = process.env.FUNCTIONAL_TESTS === '1'
 
-const config: GatewayConfig = posTestConfig.banks.vakifbank as GatewayConfig
+const config: GatewayConfig = posTestConfig.banks.vakifbank
 
 function createGateway(): PayFlexV4Pos {
   const account = AccountFactory.createPayFlexPosAccount(
