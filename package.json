@@ -69,6 +69,7 @@
     "check": "npm run lint && npm run typecheck && npm run typecheck:examples && npm run test && npm run build && npm run lint:package",
     "changeset": "changeset",
     "version-packages": "changeset version",
+    "prepublishOnly": "npm run build",
     "prepare": "husky"
   },
   "dependencies": {
