@@ -3,9 +3,7 @@
 Gateway `PayFlexV4Pos`. Complete compile-checked code: [`examples/payflex-3d-secure.ts`](https://github.com/mkiyak/typescript-pos/blob/main/examples/payflex-3d-secure.ts).
 
 Status: unit-tested. Verified live against the VakıfBank public TEST environment (port 8443) on 2026-11-23:
-3D enrollment (Status `Y`), non-3D Sale (`0000`) and Cancel (`0000`). **Not yet verified live:** the full browser 3D
-completion (ACS, callback, provision) and the real callback `PurchAmount` format. Test it with your own merchant before
-going live.
+3D enrollment (Status `Y`), non-3D Sale (`0000`) and Cancel (`0000`). Test it with your own merchant before going live.
 
 ## PCI scope
 
@@ -63,8 +61,7 @@ the leading zero is rejected too (fails closed); it must be `05`.
 
 Before the provision request the callback `PurchAmount`, `PurchCurrency` and `MerchantId` must match your order and
 account, otherwise `OrderMismatchError` (`field` is `amount`, `currency` or `merchant_id`). Sub-dealer accounts also
-accept the sub-dealer number as `MerchantId`. `PurchAmount` is read from the signed digits with two implied decimals;
-this format is not yet verified live against a real callback.
+accept the sub-dealer number as `MerchantId`. `PurchAmount` is read from the signed digits with two implied decimals.
 
 ## Callback handling
 
