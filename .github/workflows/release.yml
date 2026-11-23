@@ -22,17 +22,7 @@ jobs:
       - name: Verify tag matches package version
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
       - run: npm run check
-      - name: Check for npm token
-        id: npm_token
-        env:
-          HAS_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
-        run: |
-          echo "has_token=$HAS_TOKEN" >> "$GITHUB_OUTPUT"
-          if [ "$HAS_TOKEN" != "true" ]; then
-            echo "::warning::NPM_TOKEN secret not set — skipping npm publish. Add the secret and re-run this workflow."
-          fi
+      # npm trusted publishing (OIDC): no token is stored; npm >= 11.5.1 is required.
+      - run: npm install -g npm@11
       - name: Publish to npm
-        if: steps.npm_token.outputs.has_token == 'true'
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
