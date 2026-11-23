@@ -377,3 +377,95 @@ describe('AssecoPosRequestDataMapper', () => {
     })
   })
 })
+
+describe('AssecoPosRequestDataMapper required order fields', () => {
+  const mapper = new AssecoPosRequestDataMapper(
+    new AssecoPosRequestValueMapper(),
+    new AssecoPosRequestValueFormatter(),
+    {},
+    {
+      hashString: (s: string) => s,
+      check3DHash: () => false,
+      create3DHash: () => 'H',
+      createHash: () => '',
+      hashFromParams: () => '',
+      generateRandomString: () => 'RND',
+    } as CryptInterface<never>,
+  )
+  const url = 'https://entegrasyon.asseco-see.com.tr/fim/est3Dgate'
+  const formOrder: PosOrder = {
+    id: 'order222',
+    amount: 100.25,
+    success_url: 'https://domain.com/success',
+    fail_url: 'https://domain.com/fail_url',
+  }
+  const without = (order: PosOrder, key: string, value?: unknown): PosOrder => {
+    const copy: PosOrder = { ...order }
+    if (value === undefined) delete copy[key]
+    else copy[key] = value
+    return copy
+  }
+
+  it.each([
+    ['id', undefined],
+    ['id', null],
+    ['id', ''],
+    ['success_url', undefined],
+    ['success_url', ''],
+    ['fail_url', undefined],
+    ['fail_url', null],
+    ['amount', undefined],
+    ['amount', null],
+  ])('create3DFormData rejects an order without %s (%s)', async (key, value) => {
+    for (const model of [MODEL.THREE_D_SECURE, MODEL.THREE_D_PAY, MODEL.THREE_D_HOST, MODEL.THREE_D_PAY_HOSTING]) {
+      await expect(
+        mapper.create3DFormData(account, without(formOrder, key, value), model, TX_TYPE.PAY_AUTH, url),
+      ).rejects.toThrow(new PosError(`Order field "${key}" is required`))
+    }
+  })
+
+  it('never signs or posts the literal "undefined"', async () => {
+    const form = await mapper.create3DFormData(account, formOrder, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH, url)
+    expect(Object.values(form.inputs)).not.toContain('undefined')
+    const data = mapper.create3DPaymentRequestData(account, { id: 'o1', amount: 1 }, TX_TYPE.PAY_AUTH, {})
+    expect(JSON.stringify(data)).not.toContain('undefined')
+  })
+
+  it.each(['id', 'amount'])('create3DPaymentRequestData rejects an order without %s', (key) => {
+    const order = without({ id: 'o1', amount: 1 }, key)
+    expect(() => mapper.create3DPaymentRequestData(account, order, TX_TYPE.PAY_AUTH, {})).toThrow(
+      new PosError(`Order field "${key}" is required`),
+    )
+  })
+
+  it.each(['id', 'amount'])('createNonSecurePaymentRequestData rejects an order without %s', (key) => {
+    const order = without({ id: 'o1', amount: 1 }, key)
+    expect(() => mapper.createNonSecurePaymentRequestData(account, order, TX_TYPE.PAY_AUTH, card)).toThrow(
+      new PosError(`Order field "${key}" is required`),
+    )
+  })
+
+  it.each([
+    [
+      'createNonSecurePostAuthPaymentRequestData',
+      (o: PosOrder) => mapper.createNonSecurePostAuthPaymentRequestData(account, o),
+    ],
+    ['createRefundRequestData', (o: PosOrder) => mapper.createRefundRequestData(account, o, TX_TYPE.REFUND)],
+    ['createOrderHistoryRequestData', (o: PosOrder) => mapper.createOrderHistoryRequestData(account, o)],
+    ['createCancelRequestData', (o: PosOrder) => mapper.createCancelRequestData(account, o)],
+    [
+      'createCancelRequestData (recurring)',
+      (o: PosOrder) => mapper.createCancelRequestData(account, { ...o, recurringOrderInstallmentNumber: 2 }),
+    ],
+  ])('%s rejects an order without id', (_n, create) => {
+    expect(() => create({ amount: 1 })).toThrow(new PosError('Order field "id" is required'))
+    expect(() => create({ id: '', amount: 1 })).toThrow(new PosError('Order field "id" is required'))
+  })
+
+  it('keeps PHP (string) semantics for optional fields', () => {
+    const data = mapper.create3DPaymentRequestData(account, { id: 'o1', amount: 1 }, TX_TYPE.PAY_AUTH, {})
+    expect(data.IPAddress).toBe('')
+    expect(mapper.createNonSecurePostAuthPaymentRequestData(account, { id: 'o1' }).Total).toBeNull()
+    expect(mapper.createRefundRequestData(account, { id: 'o1' }, TX_TYPE.REFUND)).not.toHaveProperty('Total')
+  })
+})

@@ -13,6 +13,21 @@ function isSet<T>(value: T | null | undefined): value is T {
 }
 
 /**
+ * Returns a required order field. Missing (undefined/null) values, and empty strings for text fields, are
+ * rejected instead of being cast to the literal "undefined" and signed/posted to the bank.
+ *
+ * @throws PosError when the field is missing
+ */
+function required<K extends keyof PosOrder>(order: PosOrder, key: K): NonNullable<PosOrder[K]> {
+  const value = order[key]
+  if (!isSet(value) || value === '') {
+    throw new PosError(`Order field "${String(key)}" is required`)
+  }
+
+  return value as NonNullable<PosOrder[K]>
+}
+
+/**
  * Creates request data for Asseco/Payten (NestPay/EST) gateways that use the ver3 hash algorithm.
  */
 export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<AssecoPosAccount> {
@@ -32,8 +47,8 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
       ...this.getRequestAccountData(account),
       Type: this.valueMapper.mapTxType(txType),
       IPAddress: String(o.ip),
-      OrderId: String(o.id),
-      Total: this.valueFormatter.formatAmount(o.amount as number),
+      OrderId: String(required(o, 'id')),
+      Total: this.valueFormatter.formatAmount(required(o, 'amount')),
       Currency: this.valueMapper.mapCurrency(o.currency),
       Taksit: this.valueFormatter.formatInstallment(o.installment),
       Number: responseData.md,
@@ -62,8 +77,8 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
       ...this.getRequestAccountData(account),
       Type: this.valueMapper.mapTxType(txType),
       IPAddress: String(o.ip),
-      OrderId: String(o.id),
-      Total: String(this.valueFormatter.formatAmount(o.amount as number)),
+      OrderId: String(required(o, 'id')),
+      Total: String(this.valueFormatter.formatAmount(required(o, 'amount'))),
       Currency: String(this.valueMapper.mapCurrency(o.currency)),
       Taksit: String(this.valueFormatter.formatInstallment(o.installment)),
       Number: creditCard.getNumber(),
@@ -86,7 +101,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
     const requestData: Record<string, unknown> = {
       ...this.getRequestAccountData(account),
       Type: this.valueMapper.mapTxType(TX_TYPE.PAY_POST_AUTH),
-      OrderId: String(order.id),
+      OrderId: String(required(order, 'id')),
       Total: isSet(amount) ? String(this.valueFormatter.formatAmount(amount)) : null,
     }
 
@@ -112,6 +127,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
   }
 
   createCancelRequestData(account: AssecoPosAccount, order: PosOrder): Record<string, unknown> {
+    const id = required(order, 'id')
     if (isSet(order.recurringOrderInstallmentNumber)) {
       // cancels only pending recurring order installments; fulfilled transactions are not cancelled.
       // Installment order ids look like '202210121ABC', '202210121ABC-2', '202210121ABC-3', ...
@@ -120,14 +136,14 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
         Extra: {
           RECORDTYPE: 'Order',
           RECURRINGOPERATION: 'Cancel',
-          RECORDID: `${order.id}-${order.recurringOrderInstallmentNumber}`,
+          RECORDID: `${id}-${order.recurringOrderInstallmentNumber}`,
         },
       }
     }
 
     return {
       ...this.getRequestAccountData(account),
-      OrderId: order.id,
+      OrderId: id,
       Type: this.valueMapper.mapTxType(TX_TYPE.CANCEL),
     }
   }
@@ -135,7 +151,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
   createRefundRequestData(account: AssecoPosAccount, order: PosOrder, refundTxType: TxType): Record<string, unknown> {
     const requestData: Record<string, unknown> = {
       ...this.getRequestAccountData(account),
-      OrderId: String(order.id),
+      OrderId: String(required(order, 'id')),
       Currency: String(this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY)),
       Type: this.valueMapper.mapTxType(refundTxType),
     }
@@ -150,7 +166,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
   createOrderHistoryRequestData(account: AssecoPosAccount, order: PosOrder): Record<string, unknown> {
     return {
       ...this.getRequestAccountData(account),
-      OrderId: String(order.id),
+      OrderId: String(required(order, 'id')),
       Extra: { [this.valueMapper.mapTxType(TX_TYPE.ORDER_HISTORY)]: 'QUERY' },
     }
   }
@@ -173,10 +189,10 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
       hashAlgorithm: 'ver3',
       clientid: account.getMerchantId(),
       storetype: this.valueMapper.mapSecureType(paymentModel),
-      amount: String(this.valueFormatter.formatAmount(Number(o.amount))),
-      oid: String(o.id),
-      okUrl: String(o.success_url),
-      failUrl: String(o.fail_url),
+      amount: String(this.valueFormatter.formatAmount(Number(required(o, 'amount')))),
+      oid: String(required(o, 'id')),
+      okUrl: String(required(o, 'success_url')),
+      failUrl: String(required(o, 'fail_url')),
       rnd: this.crypt.generateRandomString(),
       lang: this.getLang(o),
       currency: String(this.valueMapper.mapCurrency(o.currency)),
