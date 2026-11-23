@@ -984,6 +984,7 @@ describe('PayFlexV4Pos (end to end)', () => {
 
         expect(err).toBeInstanceOf(OrderMismatchError)
         expect((err as OrderMismatchError).field).toBe(field)
+        expect((err as OrderMismatchError).paymentMayHaveCompleted).toBe(false)
         expect(fetchSpy).toHaveBeenCalledTimes(0)
       },
     )

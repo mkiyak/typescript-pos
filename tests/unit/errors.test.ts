@@ -52,6 +52,29 @@ describe('errors', () => {
     expect(response.all.Password).toBe('secret')
   })
 
+  describe('OrderMismatchError.paymentMayHaveCompleted', () => {
+    const base = { order_id: 'A', error_code: null, error_message: null, all: {} }
+
+    it('is false without a response', () => {
+      expect(new E.OrderMismatchError('amount', '1', '2').paymentMayHaveCompleted).toBe(false)
+    })
+
+    it.each([
+      ['approved', '00', true],
+      ['approved', null, true],
+      ['declined', '00', true],
+      ['declined', '99', false],
+      ['declined', null, false],
+    ] as const)('status %s + proc_return_code %s -> %s', (status, code, expected) => {
+      const response = { ...base, status, proc_return_code: code, requires_manual_review: false }
+      const e = new E.OrderMismatchError('amount', '100', '1.00', response)
+      expect(e.paymentMayHaveCompleted).toBe(expected)
+      expect(e.response?.requires_manual_review).toBe(expected)
+      // the caller's object is never mutated
+      expect(response.requires_manual_review).toBe(false)
+    })
+  })
+
   it('PosHttpError masks and truncates body snippet', () => {
     const e = new E.PosHttpError('fail', { url: 'https://x', status: 502, body: `${'a'.repeat(600)} 4111111111111111` })
     expect(e.name).toBe('PosHttpError')

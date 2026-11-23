@@ -91,10 +91,34 @@ const testConfig = { banks: { isbank: posTestConfig.banks.asseco! } }
 Banka müşteriyi siteler arası (cross-site) bir POST ile geri gönderir; bu yüzden `SameSite` oturum çerezleri
 gelmeyebilir. Siparişi sunucuda sipariş numarasıyla bulun, callback'i her zaman gateway metodundan geçirin
 (`pos.payment(...)`, `make3DPayment`, ...) ve callback alanlarına doğrudan güvenmeyin. `OrderMismatchError`
-reddedilen (declined) cevaplar dahil her Asseco 3D Pay / 3D Host callback'inde oluşabilir: bunu başarısızlık sayın ve
-`error.response` içindeki `transaction_id`, `proc_return_code`, `requires_manual_review` alanlarını okuyun.
-`requires_manual_review` `true` ise para hareket etmiş olabilir: inceleyin, iptal veya iade edin. Ayrıntılar
+reddedilen (declined) cevaplar dahil her Asseco 3D Pay / 3D Host callback'inde oluşabilir (`error.field` değeri
+`order_id`, `amount` veya `storetype` olur): bunu sipariş için başarısızlık sayın ve `error.response` içindeki
+`transaction_id`, `proc_return_code` alanlarını okuyun. `error.paymentMayHaveCompleted` `true` ise banka bu
+callback için tamamlanmış bir ödeme bildirmiştir, yani karttan çekim yapılmış olabilir: ilgili kişiyi uyarın, ödemeyi
+iptal veya iade edin. `requires_manual_review: true` taşıyan reddedilmiş (declined) bir cevap da (3D doğrulaması
+başarısız olduğu hâlde banka provizyon vermiştir) para hareketi olmuş olabileceğini gösterir: inceleyin. Ayrıntılar
 kılavuzlardadır.
+
+```ts
+try {
+  const response = await pos.payment(MODEL.THREE_D_PAY_HOSTING, order, TX_TYPE.PAY_AUTH, null, body)
+  if (response.requires_manual_review) alertOps(response)
+  return response.status === 'approved'
+} catch (error) {
+  if (error instanceof HashMismatchError) return false
+  if (error instanceof OrderMismatchError) {
+    if (error.paymentMayHaveCompleted) alertOps(error.response) // iptal veya iade edin
+    return false
+  }
+  throw error // sonuç bilinmiyor: tekrar denemeden önce pos.status(order) ile kontrol edin
+}
+```
+
+**Sonuç bilinmiyor: ödemeleri asla körlemesine tekrar denemeyin.** Para hareketi yapan bir istekten (PayFlex 3D
+Secure veya Asseco `MODEL.THREE_D_SECURE` provizyonu, 3D'siz ödemeler, ön provizyon kapama, iptal, iade) sonra gelen
+bir `PosHttpError` (zaman aşımı, 2xx dışı cevap, HTML/WAF sayfası), banka isteği zaten işledikten sonra oluşmuş
+olabilir. Tekrar denemek müşteriden iki kez çekim yapılmasına yol açabilir. Önce `pos.status(order)` çağırın ve
+yalnızca bankada işlemin kaydı yoksa tekrar deneyin.
 
 Saat dilimi (offset) içermeyen banka zaman damgaları Türkiye saati (UTC+03:00) olarak yorumlanır.
 
@@ -105,8 +129,9 @@ Saat dilimi (offset) içermeyen banka zaman damgaları Türkiye saati (UTC+03:00
 3. 3D hash doğrulamasını kapatan bir seçenek yoktur. `AssecoPos` her zaman geçerli hash ister; `PayFlexV4Pos` callback `Hash` taşıyorsa her zaman doğrular, `Hash` eksikse yalnızca `require_3d_hash: true` ile reddeder.
 4. Hassas veri (PAN, CVV, son kullanma, şifreler, store key) logger'a ulaşmadan maskelenir.
 5. Sabit zamanlı hash karşılaştırması; Asseco hash'i bankanın beklediği doğal, büyük/küçük harf duyarsız anahtar sıralamasını birebir kullanır.
-6. Ek Asseco korumaları: dönen sipariş numarası ve tutar siparişle karşılaştırılır (`OrderMismatchError`);
-   provizyon verilmiş ama 3D başarısız cevap `declined` olur ve `requires_manual_review` ile işaretlenir.
+6. Ek Asseco korumaları: dönen sipariş numarası, tutar ve storetype (ödeme modeli) siparişle karşılaştırılır
+   (`OrderMismatchError`; banka onay verdiyse `paymentMayHaveCompleted` ile); provizyon verilmiş ama 3D başarısız
+   cevap `declined` olur ve `requires_manual_review` ile işaretlenir.
 7. Ek PayFlex korumaları: katı 3D kuralı (Status `Y`, ECI `02`/`05`, CAVV, varsa `MdStatus` 1), callback tutar, para
    birimi ve üye işyeri bağlaması, isteğe bağlı `require_3d_hash`.
 8. VakıfBank varsayılan uçları 8443 portunu kullanır; `MerchantType` hesap başına ayarlanır.

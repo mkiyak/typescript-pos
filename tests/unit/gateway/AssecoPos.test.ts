@@ -293,7 +293,7 @@ describe('AssecoPos (mocked collaborators)', () => {
   const make3DHostCase = () => ({
     order: { id: '202210305DCF', amount: 1.01 },
     txType: TX_TYPE.PAY_AUTH,
-    paymentData: { oid: '202210305DCF', mdStatus: '1', amount: '1.01' },
+    paymentData: { oid: '202210305DCF', mdStatus: '1', amount: '1.01', storetype: '3d_host' },
     expectedData: { status: 'approved', order_id: '202210305DCF' },
   })
 
@@ -338,7 +338,7 @@ describe('AssecoPos (mocked collaborators)', () => {
   const make3DPayCase = () => ({
     order: { id: '2022103030CB', currency: CURRENCY.TRY, amount: 1.01 },
     txType: TX_TYPE.PAY_AUTH,
-    paymentData: { oid: '2022103030CB', mdStatus: '1', amount: '1.01' },
+    paymentData: { oid: '2022103030CB', mdStatus: '1', amount: '1.01', storetype: '3d_pay' },
     expectedData: { status: 'approved', order_id: '2022103030CB' },
   })
 
@@ -379,14 +379,14 @@ describe('AssecoPos (mocked collaborators)', () => {
   })
 
   describe.each([
-    ['make3DPayPayment', MODEL.THREE_D_PAY, 'map3DPayResponseData'],
-    ['make3DHostPayment', MODEL.THREE_D_HOST, 'map3DHostResponseData'],
-  ] as const)('%s order guard', (_name, model, mapMethod) => {
+    ['make3DPayPayment', MODEL.THREE_D_PAY, 'map3DPayResponseData', '3d_pay'],
+    ['make3DHostPayment', MODEL.THREE_D_HOST, 'map3DHostResponseData', '3d_host'],
+  ] as const)('%s order guard', (_name, model, mapMethod, storetype) => {
     const order = { id: 'O-1', amount: 100 }
     const run = (callback: GatewayResponseData, mapped: Data, o: PosOrder = order) => {
       crypt.check3DHash.mockReturnValue(true)
       responseMapper[mapMethod].mockReturnValue(mapped)
-      return pos.payment(model, o, TX_TYPE.PAY_AUTH, null, callback)
+      return pos.payment(model, o, TX_TYPE.PAY_AUTH, null, { storetype, ...callback })
     }
 
     it('accepts a matching order id and amount (within 0.005)', async () => {
@@ -774,6 +774,115 @@ describe('AssecoPos (end to end)', () => {
     await check(MODEL.THREE_D_PAY, { ...payCallback, oid: 'SOMEONE-ELSE' }, payOrder)
     await check(MODEL.THREE_D_PAY, payCallback, { ...payOrder, amount: 100 })
     await check(MODEL.THREE_D_HOST, { ...payCallback, storetype: '3d_host', oid: 'X' }, payOrder)
+  })
+
+  it('a bank-approved callback for another amount reports paymentMayHaveCompleted (money moved)', async () => {
+    const { pos, crypt, account: acc } = realGateway(noNetwork)
+    const callback = signedCallback(crypt, acc, { ...payCallback, amount: '1.00' }) // 00 + mdStatus 1
+    const err = (await pos
+      .payment(MODEL.THREE_D_PAY, { ...payOrder, amount: 100 }, TX_TYPE.PAY_AUTH, null, callback)
+      .catch((e) => e)) as OrderMismatchError
+    expect(err).toBeInstanceOf(OrderMismatchError)
+    expect(err.field).toBe('amount')
+    expect(err.response?.status).toBe('approved')
+    expect(err.paymentMayHaveCompleted).toBe(true)
+    expect(err.response?.requires_manual_review).toBe(true)
+  })
+
+  it('a bank-approved callback for another order id reports paymentMayHaveCompleted', async () => {
+    const { pos, crypt, account: acc } = realGateway(noNetwork)
+    const callback = signedCallback(crypt, acc, { ...payCallback, oid: 'SOMEONE-ELSE' })
+    const err = (await pos
+      .payment(MODEL.THREE_D_PAY, payOrder, TX_TYPE.PAY_AUTH, null, callback)
+      .catch((e) => e)) as OrderMismatchError
+    expect(err.field).toBe('order_id')
+    expect(err.paymentMayHaveCompleted).toBe(true)
+    expect(err.response?.requires_manual_review).toBe(true)
+  })
+
+  it('a bank-declined callback for another amount does not report paymentMayHaveCompleted', async () => {
+    const { pos, crypt, account: acc } = realGateway(noNetwork)
+    const callback = signedCallback(crypt, acc, {
+      ...payCallback,
+      ProcReturnCode: '99',
+      Response: 'Declined',
+      amount: '1.00',
+    })
+    const err = (await pos
+      .payment(MODEL.THREE_D_PAY, { ...payOrder, amount: 100 }, TX_TYPE.PAY_AUTH, null, callback)
+      .catch((e) => e)) as OrderMismatchError
+    expect(err.field).toBe('amount')
+    expect(err.paymentMayHaveCompleted).toBe(false)
+    expect(err.response?.requires_manual_review).toBe(false)
+  })
+
+  describe('callback storetype is bound to the payment model', () => {
+    const run = async (model: PaymentModel, cb: Record<string, string>) => {
+      const { pos, crypt, account: acc } = realGateway(noNetwork)
+      return pos.payment(model, payOrder, TX_TYPE.PAY_AUTH, null, signedCallback(crypt, acc, cb)).catch((e) => e)
+    }
+
+    it('a declined 3D Pay Hosting callback completed as 3D Host is rejected, not approved', async () => {
+      const err = (await run(MODEL.THREE_D_HOST, {
+        ...payCallback,
+        storetype: '3d_pay_hosting',
+        ProcReturnCode: '99',
+        Response: 'Declined',
+      })) as OrderMismatchError
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      expect(err.field).toBe('storetype')
+      expect(err.expected).toBe('3d_host')
+      expect(err.actual).toBe('3d_pay_hosting')
+      expect(err.response?.status).toBe('declined')
+      expect(err.paymentMayHaveCompleted).toBe(false)
+    })
+
+    it('an approved 3D Host callback completed as 3D Pay is rejected and flagged', async () => {
+      const { ProcReturnCode: _p, ...host } = payCallback
+      const err = (await run(MODEL.THREE_D_PAY, { ...host, storetype: '3d_host' })) as OrderMismatchError
+      expect(err.field).toBe('storetype')
+      expect(err.expected).toBe('3d_pay | 3d_pay_hosting')
+      expect(err.paymentMayHaveCompleted).toBe(true)
+      expect(err.response?.requires_manual_review).toBe(true)
+    })
+
+    it.each([
+      [MODEL.THREE_D_PAY, '3d_pay'],
+      [MODEL.THREE_D_PAY, '3D_PAY'],
+      [MODEL.THREE_D_PAY, '3d_pay_hosting'],
+      [MODEL.THREE_D_PAY_HOSTING, '3d_pay_hosting'],
+      [MODEL.THREE_D_PAY_HOSTING, '3d_pay'],
+      [MODEL.THREE_D_HOST, '3d_host'],
+      [MODEL.THREE_D_HOST, '3D_HOST'],
+    ] as const)('%s accepts storetype %s', async (model, storetype) => {
+      const res = await run(model, { ...payCallback, storetype })
+      expect(res).not.toBeInstanceOf(Error)
+      expect(res.status).toBe('approved')
+    })
+
+    it.each([
+      [MODEL.THREE_D_PAY, '3d'],
+      [MODEL.THREE_D_PAY, '3d_host'],
+      [MODEL.THREE_D_PAY, ''],
+      [MODEL.THREE_D_PAY, undefined],
+      [MODEL.THREE_D_HOST, '3d_pay'],
+      [MODEL.THREE_D_HOST, '3d'],
+      [MODEL.THREE_D_HOST, undefined],
+    ] as const)('%s rejects storetype %s', async (model, storetype) => {
+      const { storetype: _s, ...rest } = payCallback
+      const err = await run(model, storetype === undefined ? rest : { ...rest, storetype })
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      expect((err as OrderMismatchError).field).toBe('storetype')
+    })
+
+    it('make3DPayment rejects a signed 3D Pay callback before any provisioning request', async () => {
+      const err = (await run(MODEL.THREE_D_SECURE, payCallback)) as OrderMismatchError
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      expect(err.field).toBe('storetype')
+      expect(err.expected).toBe('3d')
+      // the 3D Pay callback was already provisioned by the bank
+      expect(err.paymentMayHaveCompleted).toBe(true)
+    })
   })
 
   it('provisioned (ProcReturnCode 00) but mdStatus 2 is declined and flagged for manual review', async () => {

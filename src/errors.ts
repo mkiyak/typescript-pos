@@ -19,7 +19,7 @@ export class GatewayClassNotConfiguredError extends PosError {}
 export class NotImplementedError extends PosError {}
 
 /** Callback field that did not match the order / account. */
-export type OrderMismatchField = 'order_id' | 'amount' | 'currency' | 'merchant_id'
+export type OrderMismatchField = 'order_id' | 'amount' | 'currency' | 'merchant_id' | 'storetype'
 
 export class OrderMismatchError extends PosError {
   readonly field: OrderMismatchField
@@ -31,14 +31,24 @@ export class OrderMismatchError extends PosError {
    * moved. The raw bank data in `all` is masked (card numbers, passwords and keys never reach logs).
    */
   readonly response?: PosResponse
+  /**
+   * `true` when the bank reported the callback as a completed payment (`status === 'approved'` or
+   * `proc_return_code === '00'`) although it does not belong to this order: the card may have been charged.
+   * Alert, then void or refund it. `response.requires_manual_review` is also `true` in that case.
+   * Always `false` when no response is attached.
+   */
+  readonly paymentMayHaveCompleted: boolean
 
   constructor(field: OrderMismatchField, expected: string, actual: string, response?: PosResponse) {
     super(`Callback ${field} mismatch: expected "${expected}", got "${actual}"`)
     this.field = field
     this.expected = expected
     this.actual = actual
+    this.paymentMayHaveCompleted =
+      response !== undefined && (response.status === 'approved' || response.proc_return_code === '00')
     if (response !== undefined) {
       this.response = { ...response, all: maskSensitiveData(response.all) }
+      if (this.paymentMayHaveCompleted) this.response.requires_manual_review = true
     }
   }
 }

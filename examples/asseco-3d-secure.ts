@@ -53,9 +53,13 @@ export async function handleCallback(
       return { paid: false, review: false } // forged or corrupted callback
     }
     if (error instanceof OrderMismatchError) {
-      // Treat as a failure, even for a declined bank answer. If the bank approved, money may have moved.
-      return { paid: false, review: error.response?.requires_manual_review === true, response: error.response }
+      // Always a failure for this order (wrong order id, amount or storetype), even when the bank approved.
+      // paymentMayHaveCompleted: the bank reported a completed payment, so the card may have been charged:
+      // alert someone and void or refund it (error.response.transaction_id).
+      return { paid: false, review: error.paymentMayHaveCompleted, response: error.response }
     }
+    // PosHttpError etc.: the outcome is unknown. Do not mark the order paid or failed yet; reconcile with
+    // pos.status(order) before anything else.
     throw error
   }
 }

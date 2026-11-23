@@ -90,9 +90,32 @@ const testConfig = { banks: { isbank: posTestConfig.banks.asseco! } }
 The bank sends the customer back with a cross-site POST, so `SameSite` session cookies may be missing. Look the
 order up by id on the server, always pass the callback through the gateway method (`pos.payment(...)`,
 `make3DPayment`, ...) and never trust callback fields directly. `OrderMismatchError` can occur on any Asseco
-3D Pay / 3D Host callback, including declined ones: treat it as a failure and read `error.response`
-(`transaction_id`, `proc_return_code`, `requires_manual_review`). When `requires_manual_review` is `true`, money may
-have moved: investigate and void or refund. Details in the guides.
+3D Pay / 3D Host callback, including declined ones (`error.field` is `order_id`, `amount` or `storetype`): treat it
+as a failure for the order and read `error.response` (`transaction_id`, `proc_return_code`). When
+`error.paymentMayHaveCompleted` is `true` the bank reported a completed payment for that callback, so the card may
+have been charged: alert someone and void or refund it. A declined response with `requires_manual_review: true`
+(authorized by the bank although 3D verification failed) may also mean money moved: investigate. Details in the
+guides.
+
+```ts
+try {
+  const response = await pos.payment(MODEL.THREE_D_PAY_HOSTING, order, TX_TYPE.PAY_AUTH, null, body)
+  if (response.requires_manual_review) alertOps(response)
+  return response.status === 'approved'
+} catch (error) {
+  if (error instanceof HashMismatchError) return false
+  if (error instanceof OrderMismatchError) {
+    if (error.paymentMayHaveCompleted) alertOps(error.response) // void or refund it
+    return false
+  }
+  throw error // outcome unknown: check pos.status(order) before any retry
+}
+```
+
+**Outcome unknown: never retry payments blindly.** A `PosHttpError` (timeout, non-2xx, HTML/WAF page) after a
+request that moves money (PayFlex 3D Secure or Asseco `MODEL.THREE_D_SECURE` provisioning, non-3D payments,
+post-authorization, cancel, refund) may arrive after the bank has already processed it. Retrying can charge the
+customer twice. Call `pos.status(order)` first and retry only when the bank has no record of the transaction.
 
 Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00).
 
@@ -103,8 +126,9 @@ Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00).
 3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`.
 4. Sensitive data (PAN, CVV, expiry, passwords, store keys) is masked before it reaches the logger.
 5. Constant-time hash comparison; the Asseco hash uses the exact natural, case-insensitive key ordering the bank expects.
-6. Extra Asseco safeguards: returned order id and amount are compared with the order (`OrderMismatchError`);
-   an authorized-but-3D-failed response is declined and flagged `requires_manual_review`.
+6. Extra Asseco safeguards: returned order id, amount and storetype (payment model) are compared with the order
+   (`OrderMismatchError`, with `paymentMayHaveCompleted` when the bank approved); an authorized-but-3D-failed
+   response is declined and flagged `requires_manual_review`.
 7. Extra PayFlex safeguards: strict 3D rule (Status `Y`, ECI `02`/`05`, CAVV, `MdStatus` 1 when present), callback
    amount, currency and merchant binding, optional `require_3d_hash`.
 8. VakıfBank default endpoints use port 8443; `MerchantType` is configurable per account.

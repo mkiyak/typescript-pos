@@ -42,7 +42,9 @@ const pos = PosFactory.createPosGateway(account, posProductionConfig, { timeoutM
    same URL), as are `id`, `amount`, `currency` and `ip`.
 3. The bank POSTs the customer to your callback URL. Load the order **by id on the server** and call
    `pos.payment(MODEL.THREE_D_PAY_HOSTING, order, TX_TYPE.PAY_AUTH, null, body)`.
-4. Check `response.status` (`approved` / `declined`). Also look at `requires_manual_review`.
+4. Check `response.status` (`approved` / `declined`). Also look at `requires_manual_review`. The callback must be
+   completed with the model it was started with: the signed `storetype` (`3d_pay_hosting`, `3d_pay`, `3d_host`,
+   `3d`) is checked against the method (`OrderMismatchError` with `field: 'storetype'` otherwise).
 
 ## Callback handling
 
@@ -55,11 +57,21 @@ const pos = PosFactory.createPosGateway(account, posProductionConfig, { timeoutM
   returned order id and amount with your order. Never read `ProcReturnCode`, `mdStatus` or `Response` straight from
   the callback body.
 - **`OrderMismatchError` is a failure, always.** It can occur on any 3D Pay / 3D Host callback, even a declined one.
-  `error.field` is `order_id` or `amount`. `error.response` carries the mapped response (`transaction_id`,
-  `proc_return_code`, `requires_manual_review`; `all` is masked). When `error.response.requires_manual_review` is
-  `true` the bank may have authorized the payment: investigate and void/refund it.
+  `error.field` is `order_id`, `amount` or `storetype` (a callback produced for another payment model, e.g. a
+  3D Pay Hosting callback completed with `MODEL.THREE_D_HOST`). `error.response` carries the mapped response
+  (`transaction_id`, `proc_return_code`, `requires_manual_review`; `all` is masked).
+- **`error.paymentMayHaveCompleted`.** `true` when the bank reported the callback as a completed payment
+  (`status: 'approved'` or `ProcReturnCode=00`), for example a genuine, correctly signed approval for another amount.
+  The card may have been charged although your order is not paid: alert someone and void or refund it using
+  `error.response.transaction_id`. `error.response.requires_manual_review` is `true` in that case too. Do not only
+  check `requires_manual_review` on the mapped response: branch on `paymentMayHaveCompleted`.
 - **`requires_manual_review`.** The bank authorized (`ProcReturnCode=00`) but 3D verification (`mdStatus`) failed. The
   response is `declined`, yet money may have moved. Alert someone and reconcile with the bank panel or `pos.status()`.
+- **Outcome unknown.** A `PosHttpError` (timeout, non-2xx, HTML/WAF page) after a request that moves money
+  (`MODEL.THREE_D_SECURE` provisioning, non-3D payments, post-authorization, cancel, refund) does not mean the
+  bank did nothing: the request may have been processed before the connection failed. Never retry a payment blindly,
+  since that can charge the customer twice. Call `pos.status(order)` first and retry only when the bank has no record
+  of the transaction.
 
 ```ts
 try {
@@ -69,10 +81,12 @@ try {
 } catch (error) {
   if (error instanceof HashMismatchError) return false // forged or corrupted
   if (error instanceof OrderMismatchError) {
-    if (error.response?.requires_manual_review) alertOps(error.expected, error.response.transaction_id)
+    // the bank may have charged the card for this callback: alert, then void or refund
+    if (error.paymentMayHaveCompleted) alertOps(error.expected, error.response?.transaction_id)
     return false
   }
-  throw error // PosHttpError etc.: retry or inspect
+  // PosHttpError etc.: outcome unknown. Never retry blindly; check pos.status(order) first.
+  throw error
 }
 ```
 
