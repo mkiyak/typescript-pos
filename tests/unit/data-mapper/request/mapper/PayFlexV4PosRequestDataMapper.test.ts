@@ -118,11 +118,17 @@ describe('PayFlexV4PosRequestDataMapper', () => {
       expect(() => mapper.create3DPaymentRequestData(account, order, TX_TYPE.PAY_AUTH, rest, card3d)).toThrow(PosError)
     })
 
-    it.each(['id', 'amount'])('throws when order %s is missing', (key) => {
+    it.each(['id', 'amount', 'ip'])('throws when order %s is missing', (key) => {
       const { [key]: _omitted, ...rest } = order as Record<string, unknown>
       expect(() => mapper.create3DPaymentRequestData(account, rest, TX_TYPE.PAY_AUTH, responseData, card3d)).toThrow(
         PosError,
       )
+    })
+
+    it('requires the client ip (VakifBank rejects provisioning without ClientIp)', () => {
+      expect(() =>
+        mapper.create3DPaymentRequestData(account, { ...order, ip: '' }, TX_TYPE.PAY_AUTH, responseData, card3d),
+      ).toThrow('Order field "ip" is required')
     })
   })
 
@@ -385,7 +391,7 @@ describe('PayFlexV4PosRequestDataMapper', () => {
       })
     })
 
-    it.each(['id', 'amount'])('throws instead of sending "undefined" when %s is missing', (key) => {
+    it.each(['id', 'amount', 'ip'])('throws instead of sending "undefined" when %s is missing', (key) => {
       const { [key]: _omitted, ...rest } = order as Record<string, unknown>
       expect(() => mapper.createNonSecurePaymentRequestData(account, rest, TX_TYPE.PAY_AUTH, card)).toThrow(PosError)
     })
@@ -413,7 +419,7 @@ describe('PayFlexV4PosRequestDataMapper', () => {
       )
     })
 
-    it.each(['transaction_id', 'amount'])('throws when %s is missing', (key) => {
+    it.each(['transaction_id', 'amount', 'ip'])('throws when %s is missing', (key) => {
       const order: Record<string, unknown> = { id: 'o', transaction_id: 'tx123', amount: 10, ip: '127.0.0.1' }
       delete order[key]
       expect(() => mapper.createNonSecurePostAuthPaymentRequestData(account, order)).toThrow(PosError)

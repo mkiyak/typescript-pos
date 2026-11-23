@@ -8,7 +8,8 @@ import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
 /**
  * Creates request data for PayFlex V4 (VakifBank / Ziraat PayFlex) gateway requests. `MerchantType` comes from the
- * account (0 standard, 1 main dealer, 2 sub dealer), never hard-coded.
+ * account (0 standard, 1 main dealer, 2 sub dealer), never hard-coded. VakifBank rejects provisioning requests
+ * (Sale/Auth, 3D and non-secure, and Capture) without `ClientIp`, so `order.ip` is required for those.
  */
 export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<PayFlexPosAccount> {
   static supports(gatewayClass: string): boolean {
@@ -38,7 +39,7 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
       CAVV: requiredString(responseData, 'Cavv', '3D response'),
       MpiTransactionId: requiredString(responseData, 'VerifyEnrollmentRequestId', '3D response'),
       OrderId: String(required(o, 'id')),
-      ClientIp: String(o.ip),
+      ClientIp: String(required(order, 'ip')),
       TransactionDeviceSource: '0', // ECommerce
       CardHoldersName: creditCard.getHolderName(),
       Cvv: creditCard.getCvv(),
@@ -111,7 +112,7 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
       OrderId: String(required(o, 'id')),
       CurrencyAmount: this.valueFormatter.formatAmount(required(o, 'amount')),
       CurrencyCode: this.valueMapper.mapCurrency(o.currency),
-      ClientIp: String(o.ip),
+      ClientIp: String(required(order, 'ip')),
       TransactionDeviceSource: '0',
       Pan: creditCard.getNumber(),
       Expiry: this.valueFormatter.formatCardExpDate(creditCard, 'Expiry'),
@@ -126,7 +127,7 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
       ReferenceTransactionId: String(required(order, 'transaction_id')),
       CurrencyAmount: String(this.valueFormatter.formatAmount(required(order, 'amount'))),
       CurrencyCode: String(this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY)),
-      ClientIp: String(order.ip ?? ''),
+      ClientIp: String(required(order, 'ip')),
     }
   }
 
@@ -206,7 +207,6 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
       ...order,
       installment: order.installment ?? 0,
       currency: order.currency ?? CURRENCY.TRY,
-      ip: order.ip ?? '',
     }
   }
 
