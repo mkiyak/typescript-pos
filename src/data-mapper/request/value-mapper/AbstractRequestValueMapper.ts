@@ -1,4 +1,4 @@
-import { NotImplementedError, UnsupportedTransactionTypeError } from '../../../errors.js'
+import { NotImplementedError, PosError, UnsupportedTransactionTypeError } from '../../../errors.js'
 import {
   type CardType,
   CURRENCY,
@@ -19,7 +19,7 @@ import type {
 function requireMapped<T>(table: Readonly<Partial<Record<string, T>>>, key: string, what: string): T {
   const value = ownValue(table, key)
   if (value === undefined) {
-    throw new Error(`${what} "${key}" is not mapped.`)
+    throw new PosError(`${what} "${key}" is not mapped.`)
   }
   return value
 }

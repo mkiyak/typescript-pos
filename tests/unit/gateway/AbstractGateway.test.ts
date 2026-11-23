@@ -143,7 +143,7 @@ const routed = (route: string): PosResponse => ({
 })
 
 class StubGateway extends AbstractGateway {
-  static readonly NAME = 'Stub'
+  static override readonly GATEWAY_CLASS: string = 'StubGateway'
   protected static override supportedTransactions: SupportedTransactions = {
     [TX_TYPE.PAY_AUTH]: [
       MODEL.THREE_D_SECURE,
@@ -196,6 +196,9 @@ class StubGateway extends AbstractGateway {
   }
   authSuccess(data: Record<string, unknown>): boolean {
     return this.is3dAuthSuccess(data)
+  }
+  prepare(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.dispatchRequestDataPrepared(data, TX_TYPE.STATUS, { id: 'X' }, MODEL.NON_SECURE)
   }
 }
 
@@ -510,6 +513,89 @@ describe('AbstractGateway', () => {
       if (method === 'makeRegularPayment') await gateway.makeRegularPayment(order, card, TX_TYPE.PAY_AUTH)
       else await gateway[method](order)
       expect(seen).toEqual([txType])
+    })
+  })
+
+  describe('dispatchRequestDataPrepared edge cases', () => {
+    class Money {
+      constructor(readonly value: number) {}
+    }
+    const changedLogged = (logger: ReturnType<typeof spyLogger>) =>
+      logger.debug.mock.calls.some(([msg]) => msg === 'Request data is changed via listeners')
+
+    it.each([[undefined], [[]]])(
+      'without hooks (%j) returns the very same object, even if not cloneable',
+      async (h) => {
+        const logger = spyLogger()
+        const { gateway } = build({ logger, hooks: h === undefined ? {} : { onRequestDataPrepared: h } })
+        const data = { fn: () => 1, money: new Money(5) }
+        await expect(gateway.prepare(data)).resolves.toBe(data)
+        expect(changedLogged(logger)).toBe(false)
+      },
+    )
+
+    it('with hooks, non-cloneable data -> PosError (not DataCloneError)', async () => {
+      const { gateway } = build({ hooks: { onRequestDataPrepared: [() => {}] } })
+      const p = gateway.prepare({ fn: () => 1 })
+      await expect(p).rejects.toThrow(PosError)
+      await expect(gateway.prepare({ fn: () => 1 })).rejects.toThrow(/cannot be cloned/)
+    })
+
+    it('with a no-op hook, class instances are kept and no change is logged', async () => {
+      const logger = spyLogger()
+      const { gateway } = build({ logger, hooks: { onRequestDataPrepared: [() => {}] } })
+      const data = { money: new Money(5) }
+      await expect(gateway.prepare(data)).resolves.toBe(data)
+      expect(changedLogged(logger)).toBe(false)
+    })
+
+    it('hooks receive a frozen copy of the order; the caller order is untouched', async () => {
+      const errors: unknown[] = []
+      let frozen = false
+      const { gateway } = build({
+        hooks: {
+          onRequestDataPrepared: [
+            (e) => {
+              frozen = Object.isFrozen(e.order)
+              try {
+                ;(e.order as Record<string, unknown>).id = 'hacked'
+              } catch (err) {
+                errors.push(err)
+              }
+            },
+          ],
+        },
+      })
+      const order = { id: 'R1', amount: 10 }
+      const res = await gateway.refund(order)
+      expect(frozen).toBe(true)
+      expect(errors[0]).toBeInstanceOf(TypeError)
+      expect(order).toEqual({ id: 'R1', amount: 10 })
+      expect(Object.isFrozen(order)).toBe(false)
+      expect(res.order_id).toBe('R1')
+    })
+  })
+
+  describe('gateway class identifier', () => {
+    it('hook gatewayClass comes from static GATEWAY_CLASS, not constructor.name', async () => {
+      const Renamed = class X extends StubGateway {
+        static override readonly GATEWAY_CLASS = 'RenamedGateway'
+      }
+      const seen: string[] = []
+      const { gateway } = build({
+        Gateway: Renamed,
+        hooks: { onRequestDataPrepared: [(e) => void seen.push(e.gatewayClass)] },
+      })
+      await gateway.status({ id: 'S' })
+      expect(seen).toEqual(['RenamedGateway'])
+    })
+
+    it('a gateway without GATEWAY_CLASS cannot be constructed', () => {
+      class Nameless extends StubGateway {
+        static override readonly GATEWAY_CLASS = ''
+      }
+      expect(() => build({ Gateway: Nameless })).toThrow(PosError)
+      expect(() => build({ Gateway: Nameless })).toThrow(/GATEWAY_CLASS/)
     })
   })
 

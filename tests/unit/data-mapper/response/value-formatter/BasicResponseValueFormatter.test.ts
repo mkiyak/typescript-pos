@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { BANK_TIMEZONE_OFFSET_MINUTES } from '../../../../../src/data-mapper/response/value-formatter/AbstractResponseValueFormatter.js'
 import { BasicResponseValueFormatter } from '../../../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
+import { PosError } from '../../../../../src/errors.js'
 import { TX_TYPE } from '../../../../../src/PosInterface.js'
 
-const pad = (n: number) => String(n).padStart(2, '0')
-const fmt = (d: Date) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+/** Türkiye wall-clock time (UTC+03:00) as epoch ms. */
+const tr = (y: number, mo: number, d: number, h: number, mi: number, s: number, ms = 0) =>
+  Date.UTC(y, mo - 1, d, h - 3, mi, s, ms)
 
 describe('BasicResponseValueFormatter', () => {
   const formatter = new BasicResponseValueFormatter()
@@ -45,22 +47,30 @@ describe('BasicResponseValueFormatter', () => {
     expect(formatter.formatInstallment(installment, txType)).toBe(expected)
   })
 
-  it.each([
-    ['2024-04-23T16:14:00.264', '2024-04-23 16:14:00'],
-    ['2022-10-30 12:29:53.773', '2022-10-30 12:29:53'],
-    ['2024-06-03 16:06:29', '2024-06-03 16:06:29'],
-    ['2019-11-0813:58:37.909', '2019-11-08 13:58:37'],
-    ['20221101 13:14:19', '2022-11-01 13:14:19'],
-    ['20230309221037', '2023-03-09 22:10:37'],
-    ['09.08.2024 10:40:34', '2024-08-09 10:40:34'],
-    ['2019-08-16T10:54:23.81069', '2019-08-16 10:54:23'],
-    ['2024-07-01T13:15:47.2754872+03:00', '2024-07-01 13:15:47'],
-  ])('formatDateTime(%j) -> %j', (input, expected) => {
-    expect(fmt(formatter.formatDateTime(input, ''))).toBe(expected)
+  it('bank time zone is Türkiye, fixed UTC+03:00', () => {
+    expect(BANK_TIMEZONE_OFFSET_MINUTES).toBe(180)
   })
 
-  it('keeps milliseconds', () => {
-    expect(formatter.formatDateTime('2022-10-30 12:29:53.773', '').getMilliseconds()).toBe(773)
+  // Offset-less inputs are Türkiye time (UTC+03:00), independent of the server TZ.
+  it.each([
+    ['2024-04-23T16:14:00.264', tr(2024, 4, 23, 16, 14, 0, 264)],
+    ['2022-10-30 12:29:53.773', tr(2022, 10, 30, 12, 29, 53, 773)],
+    ['2024-06-03 16:06:29', tr(2024, 6, 3, 16, 6, 29)],
+    ['2019-11-0813:58:37.909', tr(2019, 11, 8, 13, 58, 37, 909)],
+    ['20221101 13:14:19', tr(2022, 11, 1, 13, 14, 19)],
+    ['20230309221037', tr(2023, 3, 9, 22, 10, 37)],
+    ['09.08.2024 10:40:34', tr(2024, 8, 9, 10, 40, 34)],
+    ['2019-08-16T10:54:23.81069', tr(2019, 8, 16, 10, 54, 23, 810)],
+    // explicit offsets are honoured exactly
+    ['2024-07-01T13:15:47.2754872+03:00', Date.UTC(2024, 6, 1, 10, 15, 47, 275)],
+    ['2024-07-01T13:15:47Z', Date.UTC(2024, 6, 1, 13, 15, 47)],
+    ['2024-07-01T13:15:47-0500', Date.UTC(2024, 6, 1, 18, 15, 47)],
+    // day rollover into UTC
+    ['2024-01-01 01:30:00', Date.UTC(2023, 11, 31, 22, 30, 0)],
+    // a US DST gap wall time is valid in Türkiye time
+    ['2024-03-10 02:30:00', Date.UTC(2024, 2, 9, 23, 30, 0)],
+  ])('formatDateTime(%j) -> %d', (input, expected) => {
+    expect(formatter.formatDateTime(input, '').getTime()).toBe(expected)
   })
 
   it('formatDateTime("now") returns the current time', () => {
@@ -70,8 +80,11 @@ describe('BasicResponseValueFormatter', () => {
     expect(d).toBeLessThanOrEqual(Date.now())
   })
 
-  it('formatDateTime throws on unparseable input', () => {
-    expect(() => formatter.formatDateTime('not a date', '')).toThrow(/Unsupported date time format/)
-    expect(() => formatter.formatDateTime('2024-13-45 99:99:99', '')).toThrow(/Unsupported date time format/)
-  })
+  it.each([['not a date'], ['2024-13-45 99:99:99'], ['2024-02-30 10:00:00'], ['2024-07-01T25:00:00+03:00']])(
+    'formatDateTime(%j) throws PosError',
+    (input) => {
+      expect(() => formatter.formatDateTime(input, '')).toThrow(PosError)
+      expect(() => formatter.formatDateTime(input, '')).toThrow(/Unsupported date time format/)
+    },
+  )
 })

@@ -1,3 +1,4 @@
+import { PosError } from '../../../errors.js'
 import type { TxType } from '../../../PosInterface.js'
 import type { ResponseValueFormatterInterface } from './ResponseValueFormatterInterface.js'
 
@@ -21,20 +22,44 @@ function phpFloat(value: string | number): number {
   return Number.isFinite(n) ? n : 0
 }
 
+/**
+ * Offset of bank timestamps that carry no UTC offset: Türkiye time, fixed UTC+03:00 (no DST since 2016).
+ * Independent of the server timezone.
+ */
+export const BANK_TIMEZONE_OFFSET_MINUTES = 180
+
 // Bank date-time layouts seen across gateways.
-const ISO_LIKE = /^(\d{4})-?(\d{2})-?(\d{2})(?:[T ]?(\d{2}):?(\d{2}):?(\d{2})(?:[.,](\d+))?)?(?:Z|[+-]\d{2}:?\d{2})?$/
+const ISO_LIKE = /^(\d{4})-?(\d{2})-?(\d{2})(?:[T ]?(\d{2}):?(\d{2}):?(\d{2})(?:[.,](\d+))?)?(Z|[+-]\d{2}:?\d{2})?$/
 const DOTTED = /^(\d{2})\.(\d{2})\.(\d{4})(?:[T ](\d{2}):(\d{2}):(\d{2}))?$/
 
+type DateParts = [string, string, string, string?, string?, string?, string?, string?]
+
+function unsupported(input: string): PosError {
+  return new PosError(`Unsupported date time format: "${input}"`)
+}
+
+/** Offset in minutes east of UTC for `Z`, `+03:00`, `-0500`. */
+function parseOffset(offset: string): number {
+  if (offset === 'Z') return 0
+  const sign = offset.startsWith('-') ? -1 : 1
+  const digits = offset.slice(1).replace(':', '')
+  return sign * (Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2)))
+}
+
+/**
+ * Parses a bank timestamp into an absolute instant. An explicit offset (`Z`, `±HH:MM`, `±HHMM`) is honoured;
+ * without one the wall-clock time is Türkiye time (BANK_TIMEZONE_OFFSET_MINUTES). Independent of the server TZ.
+ */
 function parseDateTime(input: string): Date {
   const value = input.trim()
   if (value.toLowerCase() === 'now') {
     return new Date()
   }
 
-  let parts: [string, string, string, string?, string?, string?, string?] | null = null
+  let parts: DateParts | null = null
   const iso = ISO_LIKE.exec(value)
   if (iso) {
-    parts = [iso[1] as string, iso[2] as string, iso[3] as string, iso[4], iso[5], iso[6], iso[7]]
+    parts = [iso[1] as string, iso[2] as string, iso[3] as string, iso[4], iso[5], iso[6], iso[7], iso[8]]
   } else {
     const dotted = DOTTED.exec(value)
     if (dotted) {
@@ -42,27 +67,35 @@ function parseDateTime(input: string): Date {
     }
   }
   if (parts === null) {
-    throw new Error(`Unsupported date time format: "${input}"`)
+    throw unsupported(input)
   }
 
-  const [y, mo, d, h = '0', mi = '0', s = '0', frac = ''] = parts
-  const nums = [y, mo, d, h, mi, s].map(Number) as [number, number, number, number, number, number]
+  const [y, mo, d, h = '0', mi = '0', s = '0', frac = '', offset] = parts
+  const [year, month, day, hour, minute, second] = [y, mo, d, h, mi, s].map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ]
   const ms = frac === '' ? 0 : Number(frac.slice(0, 3).padEnd(3, '0'))
-  const date = new Date(nums[0], nums[1] - 1, nums[2], nums[3], nums[4], nums[5], ms)
+  const wallClock = new Date(Date.UTC(year, month - 1, day, hour, minute, second, ms))
 
-  // Reject overflowing components (e.g. month 13) instead of silently rolling over.
+  // Reject overflowing components (e.g. month 13, Feb 30) instead of silently rolling over.
   if (
-    date.getFullYear() !== nums[0] ||
-    date.getMonth() !== nums[1] - 1 ||
-    date.getDate() !== nums[2] ||
-    date.getHours() !== nums[3] ||
-    date.getMinutes() !== nums[4] ||
-    date.getSeconds() !== nums[5]
+    wallClock.getUTCFullYear() !== year ||
+    wallClock.getUTCMonth() !== month - 1 ||
+    wallClock.getUTCDate() !== day ||
+    wallClock.getUTCHours() !== hour ||
+    wallClock.getUTCMinutes() !== minute ||
+    wallClock.getUTCSeconds() !== second
   ) {
-    throw new Error(`Unsupported date time format: "${input}"`)
+    throw unsupported(input)
   }
 
-  return date
+  const offsetMinutes = offset === undefined ? BANK_TIMEZONE_OFFSET_MINUTES : parseOffset(offset)
+  return new Date(wallClock.getTime() - offsetMinutes * 60_000)
 }
 
 export abstract class AbstractResponseValueFormatter implements ResponseValueFormatterInterface {

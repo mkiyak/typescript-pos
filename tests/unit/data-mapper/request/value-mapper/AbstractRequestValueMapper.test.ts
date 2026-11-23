@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AbstractRequestValueMapper } from '../../../../../src/data-mapper/request/value-mapper/AbstractRequestValueMapper.js'
-import { NotImplementedError, UnsupportedTransactionTypeError } from '../../../../../src/errors.js'
+import { NotImplementedError, PosError, UnsupportedTransactionTypeError } from '../../../../../src/errors.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../../../src/PosInterface.js'
 
 class MappedValueMapper extends AbstractRequestValueMapper {
@@ -76,6 +76,9 @@ describe('AbstractRequestValueMapper', () => {
     expect(() => mapper.mapCardType('amex')).toThrow(/not mapped/)
     expect(() => mapper.mapCardType('constructor')).toThrow(/not mapped/)
     expect(() => empty.mapCurrency('XXX' as never)).toThrow(/not mapped/)
+    expect(() => mapper.mapCardType('amex')).toThrow(PosError)
+    expect(() => empty.mapCurrency('XXX' as never)).toThrow(PosError)
+    expect(() => mapper.mapRecurringFrequency('YEAR')).toThrow(PosError)
   })
 
   it('exposes its mapping tables', () => {

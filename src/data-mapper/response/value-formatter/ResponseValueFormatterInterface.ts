@@ -11,9 +11,10 @@ export interface ResponseValueFormatterInterface {
   formatAmount(amount: string | number, txType: TxType | string): number
 
   /**
-   * Parses a bank date-time into a Date holding the same wall-clock time in the process time zone
-   * (any UTC offset in the input is ignored).
+   * Parses a bank date-time into an absolute Date. An explicit UTC offset in the input is honoured; without one the
+   * value is Türkiye time (UTC+03:00, see BANK_TIMEZONE_OFFSET_MINUTES), independent of the server time zone.
    *
+   * @throws PosError for unsupported or out-of-range values
    * @param txType transaction type of the API request
    */
   formatDateTime(dateTime: string, txType: TxType | string): Date

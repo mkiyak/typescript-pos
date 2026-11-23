@@ -34,7 +34,11 @@ export type ThreeDFormData = {
   inputs: Record<string, string>
 }
 
-/** `requestData` is mutable. */
+/**
+ * `requestData` (a structured clone of the mapped request) is
+ * mutable: change it in place or replace it. `order` is a frozen shallow copy, so hooks cannot modify the caller's
+ * order object (writes throw in strict mode).
+ */
 export interface RequestDataPreparedEvent {
   requestData: Record<string, unknown>
   readonly bankName: string

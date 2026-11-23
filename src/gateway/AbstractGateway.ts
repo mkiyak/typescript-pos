@@ -63,6 +63,13 @@ export type SupportedTransactions = Partial<Record<TxType, readonly PaymentModel
  * or change outgoing data; the 3D hash check cannot be disabled.
  */
 export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPosAccount> {
+  /**
+   * Stable gateway class identifier (e.g. 'AssecoPos', matching `GatewayConfig.class`), reported as `gatewayClass`
+   * in hook events. Every concrete gateway must define it; `constructor.name` is not used
+   * because minifiers rename classes.
+   */
+  static readonly GATEWAY_CLASS: string = ''
+
   /** Subclasses declare their supported transactions table. */
   protected static supportedTransactions: SupportedTransactions = {}
 
@@ -101,6 +108,10 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
     protected readonly account: A,
     deps: GatewayDeps<A>,
   ) {
+    if (this.gatewayClass().GATEWAY_CLASS === '') {
+      throw new PosError(`${this.constructor.name} must define a non-empty static GATEWAY_CLASS.`)
+    }
+
     this.requestValueMapper = deps.requestValueMapper
     this.requestValueFormatter = deps.requestValueFormatter
     this.requestDataMapper = deps.requestDataMapper
@@ -167,7 +178,7 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
 
     if (!this.gatewayClass().isSupportedTransaction(txType, paymentModel)) {
       throw new UnsupportedTransactionTypeError(
-        `${this.gatewayName()} does not support transaction type [${txType}] with payment model [${paymentModel}].`,
+        `${this.gatewayClassName()} does not support transaction type [${txType}] with payment model [${paymentModel}].`,
       )
     }
 
@@ -361,14 +372,17 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
     return this.constructor as typeof AbstractGateway
   }
 
-  /** Gateway class name, reported as `gatewayClass` in hook events. */
-  protected gatewayName(): string {
-    return this.constructor.name
+  /** The concrete gateway's GATEWAY_CLASS identifier. */
+  protected gatewayClassName(): string {
+    return this.gatewayClass().GATEWAY_CLASS
   }
 
   /**
-   * Runs `onRequestDataPrepared` hooks on a copy of the request data and returns
-   * the data to send. Hooks may mutate `event.requestData` in place or replace it; changes are logged at debug.
+   * Runs `onRequestDataPrepared` hooks and returns the data to send.
+   * Without hooks the data is returned as is. Otherwise hooks get a structured clone (plus a frozen shallow copy of
+   * the order) and may mutate `event.requestData` in place or replace it; changes are logged at debug.
+   *
+   * @throws PosError when hooks are registered and the request data cannot be structured-cloned
    */
   protected async dispatchRequestDataPrepared(
     requestData: Record<string, unknown>,
@@ -376,17 +390,36 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
     order: PosOrder,
     paymentModel: PaymentModel,
   ): Promise<Record<string, unknown>> {
+    const hooks = this.hooks.onRequestDataPrepared
+    if (hooks === undefined || hooks.length === 0) {
+      return requestData
+    }
+
+    let baseline: Record<string, unknown>
+    let eventData: Record<string, unknown>
+    try {
+      baseline = structuredClone(requestData)
+      eventData = structuredClone(requestData)
+    } catch (e) {
+      throw new PosError(
+        `Request data cannot be cloned for onRequestDataPrepared hooks: ${e instanceof Error ? e.message : String(e)}`,
+        { cause: e },
+      )
+    }
+
     const event: RequestDataPreparedEvent = {
-      requestData: structuredClone(requestData),
+      requestData: eventData,
       bankName: this.account.getBankName(),
       txType,
-      gatewayClass: this.gatewayName(),
-      order,
+      gatewayClass: this.gatewayClassName(),
+      order: Object.freeze({ ...order }),
       paymentModel,
     }
-    await runHooks(this.hooks.onRequestDataPrepared, event)
+    await runHooks(hooks, event)
 
-    if (isDeepStrictEqual(requestData, event.requestData)) {
+    // Compare against a clone (not the original) so that cloning itself, which drops class prototypes,
+    // is not reported as a change.
+    if (isDeepStrictEqual(baseline, event.requestData)) {
       return requestData
     }
 
@@ -444,7 +477,7 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
     const paymentModels = this.getSupported3DPaymentModelsForPaymentTransaction(txType)
     if (!this.gatewayClass().isSupportedTransaction(txType, paymentModel)) {
       throw new UnsupportedTransactionTypeError(
-        `${this.gatewayName()} supports [${paymentModels.join(', ')}] payment model(s) for transaction type [${txType}]. Provided payment model: [${paymentModel}].`,
+        `${this.gatewayClassName()} supports [${paymentModels.join(', ')}] payment model(s) for transaction type [${txType}]. Provided payment model: [${paymentModel}].`,
       )
     }
 
@@ -472,7 +505,7 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
       this.logger.warn(
         'The test_mode gateway setting does not affect request data for this gateway; test and production ' +
           'environments are selected by the endpoint URLs in the config',
-        { gateway: this.gatewayName() },
+        { gateway: this.gatewayClassName() },
       )
     }
   }
