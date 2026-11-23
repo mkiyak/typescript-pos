@@ -24,6 +24,9 @@ describe('maskSensitiveData', () => {
       'store_key',
       'cvv2val',
       'expires',
+      'secretKey',
+      'terminalId',
+      'username',
     ]
     for (const key of keys) {
       const out = maskSensitiveData({ a: { b: [{ [key.toUpperCase()]: 'secretvalue' }] }, [key]: 'x' }) as unknown as {

@@ -1,45 +1,73 @@
+const INSPECT = Symbol.for('nodejs.util.inspect.custom')
+
+/** Credentials live in #private fields and never serialize. */
 export abstract class AbstractPosAccount {
+  readonly #bankName: string
+  readonly #merchantId: string
+  readonly #username: string
+  readonly #password: string
+  readonly #secretKey: string | null
+  readonly #terminalId: string | null
+  readonly #subMerchantId: string | null
+
   constructor(
-    protected readonly bankName: string,
-    protected readonly merchantId: string,
-    protected readonly username: string,
-    protected readonly password: string,
-    protected readonly secretKey: string | null = null,
-    protected readonly terminalId: string | null = null,
-    protected readonly subMerchantId: string | null = null,
-  ) {}
+    bankName: string,
+    merchantId: string,
+    username: string,
+    password: string,
+    secretKey: string | null = null,
+    terminalId: string | null = null,
+    subMerchantId: string | null = null,
+  ) {
+    this.#bankName = bankName
+    this.#merchantId = merchantId
+    this.#username = username
+    this.#password = password
+    this.#secretKey = secretKey
+    this.#terminalId = terminalId
+    this.#subMerchantId = subMerchantId
+  }
 
   getMerchantId(): string {
-    return this.merchantId
+    return this.#merchantId
   }
 
   getUsername(): string {
-    return this.username
+    return this.#username
   }
 
   getPassword(): string {
-    return this.password
+    return this.#password
   }
 
   getSecretKey(): string {
-    if (this.secretKey === null) {
+    if (this.#secretKey === null) {
       throw new Error(`${this.constructor.name}.secretKey is not set.`)
     }
-    return this.secretKey
+    return this.#secretKey
   }
 
   getBankName(): string {
-    return this.bankName
+    return this.#bankName
   }
 
   getSubMerchantId(): string | null {
-    return this.subMerchantId
+    return this.#subMerchantId
   }
 
   getTerminalId(): string {
-    if (this.terminalId === null) {
+    if (this.#terminalId === null) {
       throw new Error(`${this.constructor.name}.terminalId is not set.`)
     }
-    return this.terminalId
+    return this.#terminalId
+  }
+
+  /** Non-secret identifiers only. */
+  toJSON(): { bankName: string; merchantId: string } {
+    return { bankName: this.#bankName, merchantId: this.#merchantId }
+  }
+
+  [INSPECT](): string {
+    return `${this.constructor.name} ${JSON.stringify(this.toJSON())}`
   }
 }

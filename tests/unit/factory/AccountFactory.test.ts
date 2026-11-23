@@ -1,8 +1,10 @@
+import { inspect } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { MissingAccountInfoError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
+import { maskSensitiveData } from '../../../src/util/maskSensitiveData.js'
 
 describe('AccountFactory', () => {
   it('createAssecoPosAccount non-secure', () => {
@@ -77,5 +79,21 @@ describe('AccountFactory', () => {
   it('getTerminalId on Asseco account without terminal throws', () => {
     const a = AccountFactory.createAssecoPosAccount('b', 'm', 'u', 'p')
     expect(() => a.getTerminalId()).toThrow('terminalId is not set')
+  })
+})
+
+describe('account credential leakage', () => {
+  const accounts = [
+    ['Asseco', () => AccountFactory.createAssecoPosAccount('akbank', 'mid', 'USER1', 'PW1', 'SK1')],
+    ['PayFlex', () => AccountFactory.createPayFlexPosAccount('vakifbank', 'mid', 'PW1', 'TERM1')],
+  ] as const
+
+  it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
+    const a = make()
+    const outputs = [JSON.stringify(a), JSON.stringify(maskSensitiveData(a)), inspect(a, { depth: 5 })]
+    for (const out of outputs) {
+      for (const secret of ['PW1', 'SK1', 'USER1', 'TERM1']) expect(out).not.toContain(secret)
+    }
+    expect(JSON.stringify(a)).toContain('mid')
   })
 })
