@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { AbstractResponseValueMapper } from '../../../../src/data-mapper/response/value-mapper/AbstractResponseValueMapper.js'
-import { NotImplementedError } from '../../../../src/errors.js'
-import { CURRENCY, MODEL, PAYMENT_STATUS, TX_TYPE } from '../../../../src/PosInterface.js'
+import { AbstractResponseValueMapper } from '../../../../../src/data-mapper/response/value-mapper/AbstractResponseValueMapper.js'
+import { NotImplementedError } from '../../../../../src/errors.js'
+import { CURRENCY, MODEL, PAYMENT_STATUS, TX_TYPE } from '../../../../../src/PosInterface.js'
 
 class Mapped extends AbstractResponseValueMapper {
   protected override currencyMappings = { '949': CURRENCY.TRY, '840': CURRENCY.USD }

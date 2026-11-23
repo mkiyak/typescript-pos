@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { AbstractResponseDataMapper } from '../../../../src/data-mapper/response/mapper/AbstractResponseDataMapper.js'
-import { BasicResponseValueFormatter } from '../../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
-import { AbstractResponseValueMapper } from '../../../../src/data-mapper/response/value-mapper/AbstractResponseValueMapper.js'
-import { MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../../src/PosInterface.js'
-import type { PosResponse } from '../../../../src/types.js'
+import { AbstractResponseDataMapper } from '../../../../../src/data-mapper/response/mapper/AbstractResponseDataMapper.js'
+import { BasicResponseValueFormatter } from '../../../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
+import { AbstractResponseValueMapper } from '../../../../../src/data-mapper/response/value-mapper/AbstractResponseValueMapper.js'
+import { MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../../../src/PosInterface.js'
+import type { PosResponse } from '../../../../../src/types.js'
 
 class VM extends AbstractResponseValueMapper {}
 

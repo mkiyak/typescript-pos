@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BasicResponseValueFormatter } from '../../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
-import { TX_TYPE } from '../../../../src/PosInterface.js'
+import { BasicResponseValueFormatter } from '../../../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
+import { TX_TYPE } from '../../../../../src/PosInterface.js'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const fmt = (d: Date) =>

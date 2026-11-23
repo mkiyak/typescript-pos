@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { AbstractRequestValueMapper } from '../../../../src/data-mapper/request/value-mapper/AbstractRequestValueMapper.js'
-import { NotImplementedError, UnsupportedTransactionTypeError } from '../../../../src/errors.js'
-import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../../src/PosInterface.js'
+import { AbstractRequestValueMapper } from '../../../../../src/data-mapper/request/value-mapper/AbstractRequestValueMapper.js'
+import { NotImplementedError, UnsupportedTransactionTypeError } from '../../../../../src/errors.js'
+import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../../../src/PosInterface.js'
 
 class MappedValueMapper extends AbstractRequestValueMapper {
   protected override txTypeMappings = {
