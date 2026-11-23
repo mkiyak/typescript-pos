@@ -123,7 +123,14 @@ customer twice. Call `pos.status(order)` first and retry only when the bank has 
 Every error the library throws extends `PosError` (for example `HashMismatchError`, `OrderMismatchError`,
 `MissingAccountInfoError`, `InvalidCardError`, `PosHttpError`).
 
-Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00).
+Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00). Dates sent to the bank (PayFlex
+recurring dates) use the Istanbul calendar day, so a `Date` near midnight in another time zone can map to the
+previous or next day.
+
+PayFlex notes (details in the [PayFlex guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md#good-to-know)):
+cancel and refund send `ClientIp` empty without `order.ip` (pass it); an empty `MdStatus` counts as absent; a status
+`Search` answer with several records is mapped as `declined` with empty fields, so reconcile those from your own
+records.
 
 ## Design
 

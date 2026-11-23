@@ -94,6 +94,19 @@ try {
 ## Good to know
 
 - Amounts are major units (`10.5`). Installments use the `installment` order key.
+- **Istanbul calendar day.** Dates the library formats for the bank (recurring `RecurringEndDate` / `TriggerDate`)
+  use the calendar day in Europe/Istanbul, not your server's time zone. A `Date` close to midnight can therefore map to
+  the previous or next day, for example `2026-03-01T22:30:00Z` is already 2 March in Istanbul, and a midnight in a
+  far-east time zone (UTC+09:00) is still the previous day in Istanbul. Build such dates at Istanbul noon if you mean
+  a specific day.
+- **`ClientIp` on cancel and refund.** `pos.cancel()` and `pos.refund()` send `ClientIp` empty when the order has no
+  `ip`; whether VakıfBank requires it there is not verified. Pass `order.ip` (your server's or the customer's IP).
+  Payments and post-authorization require `ip` and throw `PosError` without it.
+- **`MdStatus: ''` counts as absent.** An empty `MdStatus` in the callback is treated like a missing one, so the
+  strict 3D rule then relies on `Status`, `Eci` and `Cavv`.
+- **Status with several records.** When the `Search` answer of `pos.status()` contains more than one transaction for
+  the order, the response is mapped as `declined` with empty transaction fields. Use your own records (stored
+  `transaction_id`, amounts) or the bank panel to reconcile such orders.
 - `make3DPayPayment`, `make3DHostPayment` and `orderHistory` are not supported by PayFlex V4 and throw.
 - Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00).
 - Bank HTML/WAF pages and non-2xx answers raise `PosHttpError` with a masked snippet instead of a parser crash.

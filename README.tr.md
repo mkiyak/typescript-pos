@@ -126,7 +126,14 @@ yalnızca bankada işlemin kaydı yoksa tekrar deneyin.
 Kütüphanenin fırlattığı her hata `PosError` sınıfından türer (örneğin `HashMismatchError`, `OrderMismatchError`,
 `MissingAccountInfoError`, `InvalidCardError`, `PosHttpError`).
 
-Saat dilimi (offset) içermeyen banka zaman damgaları Türkiye saati (UTC+03:00) olarak yorumlanır.
+Saat dilimi (offset) içermeyen banka zaman damgaları Türkiye saati (UTC+03:00) olarak yorumlanır. Bankaya gönderilen
+tarihler (PayFlex düzenli ödeme tarihleri) İstanbul takvim gününe göre biçimlenir; bu yüzden başka bir saat diliminde
+gece yarısına yakın bir `Date` önceki veya sonraki güne düşebilir.
+
+PayFlex notları (ayrıntılar [PayFlex kılavuzunda](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md#good-to-know)):
+iptal ve iade, `order.ip` verilmezse `ClientIp` alanını boş gönderir (bu alanı verin); boş bir `MdStatus` hiç
+gönderilmemiş sayılır; birden fazla kayıt dönen bir durum sorgusu (`Search`) cevabı `declined` ve boş alanlarla
+eşlenir, bu siparişleri kendi kayıtlarınızla mutabık kılın.
 
 ## Tasarım
 

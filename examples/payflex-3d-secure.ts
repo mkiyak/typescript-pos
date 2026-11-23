@@ -1,5 +1,6 @@
 // PayFlex V4 (VakıfBank, Ziraat) 3D Secure: card data passes through YOUR server (PCI SAQ D).
 // Nothing here runs on import; call the exported functions from your own route handlers.
+import { randomUUID } from 'node:crypto'
 import {
   AccountFactory,
   CARD_TYPE,
@@ -34,19 +35,32 @@ const pos = PosFactory.createPosGateway(account, {
   },
 })
 
+/**
+ * The ACS posts back cross-site, so session cookies may be missing: put an unguessable token in the callback URLs and
+ * map it to the order id on your server (persist the mapping before redirecting).
+ */
+const newCallbackToken = (): string => randomUUID()
+
 const newCard = (number: string, year: string, month: string, cvv: string, holder: string) =>
   CreditCardFactory.create(number, year, month, cvv, holder, CARD_TYPE.VISA)
 
 /** Step 1: enrollment. Returns the ACS form to auto-submit, or throws when the card is not enrolled (status N/U/E). */
-export async function startPayment(orderId: string, amount: number, card: ReturnType<typeof newCard>) {
+export async function startPayment(
+  orderId: string,
+  amount: number,
+  card: ReturnType<typeof newCard>,
+  saveCallbackToken: (token: string, orderId: string) => Promise<void>,
+) {
+  const token = newCallbackToken()
+  await saveCallbackToken(token, orderId) // the callback handler finds the order by this token
   const order: PosOrder = {
     id: orderId,
     amount,
     currency: 'TRY',
     installment: 0,
     ip: '203.0.113.10', // required by PayFlex
-    success_url: 'https://shop.example.com/pos/success', // public HTTPS, no "localhost"
-    fail_url: 'https://shop.example.com/pos/fail',
+    success_url: `https://shop.example.com/pos/success?o=${token}`, // public HTTPS, no "localhost"
+    fail_url: `https://shop.example.com/pos/fail?o=${token}`,
   }
   return pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card)
   // -> { gateway: '<ACS url>', method: 'POST', inputs: { PaReq, TermUrl, MD } }
@@ -55,7 +69,7 @@ export async function startPayment(orderId: string, amount: number, card: Return
 /** Step 2: the bank POSTs the authentication result back; the provision request happens inside `payment`. */
 export async function handleCallback(
   body: Record<string, string | undefined>,
-  order: PosOrder, // loaded server-side by id, never from the callback
+  order: PosOrder, // loaded server-side via the `o` token of the callback URL, never from the callback body
   card: ReturnType<typeof newCard>, // PayFlex needs the card again for the provision
 ): Promise<{ paid: boolean; response?: PosResponse }> {
   try {

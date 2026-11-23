@@ -927,6 +927,20 @@ describe('PayFlexV4PosResponseDataMapper', () => {
     expect(res.order_status).toBe(orderStatus)
   })
 
+  it('mapStatusResponse with several search records is declined with empty transaction fields (documented)', () => {
+    const [, { responseData }] = statusTestDataProvider[1] as [string, { responseData: Data }]
+    const info = (responseData.TransactionSearchResultInfo as Data).TransactionSearchResultInfo as Data
+    const res = integrationMapper().mapStatusResponse({
+      ...responseData,
+      TotalItemCount: 2,
+      TransactionSearchResultInfo: { TransactionSearchResultInfo: [info, { ...info, TransactionId: 'T2' }] },
+    })
+    expect(res.status).toBe('declined')
+    expect(res.transaction_id).toBeNull()
+    expect(res.order_id).toBeNull()
+    expect(res.first_amount).toBeNull()
+  })
+
   it('mapStatusResponse without ResponseInfo is declined, not a TypeError', () => {
     const res = integrationMapper().mapStatusResponse({ Foo: 'bar' })
     expect(res.status).toBe('declined')
