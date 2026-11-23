@@ -60,6 +60,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
+    "typecheck:examples": "tsc --noEmit -p tsconfig.examples.json",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
@@ -67,8 +68,7 @@
     "check": "npm run lint && npm run typecheck && npm run typecheck:examples && npm run test && npm run build",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "prepare": "husky",
-    "typecheck:examples": "tsc --noEmit -p tsconfig.examples.json"
+    "prepare": "husky"
   },
   "dependencies": {
     "fast-xml-parser": "^5.12.1",

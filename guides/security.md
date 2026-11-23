@@ -4,8 +4,12 @@ Report vulnerabilities privately: see [SECURITY.md](../SECURITY.md).
 
 ## What the library does for you
 
-- **The 3D hash is always verified** and cannot be turned off. Comparison is constant time. A missing, empty or
-  non-string hash raises `HashMismatchError`.
+- **3D hash verification cannot be turned off.** Comparison is constant time.
+  - `AssecoPos`: a valid hash is always required; a missing, empty or non-string `HASH` raises `HashMismatchError`.
+  - `PayFlexV4Pos`: a `Hash` that is present is always verified (`HashMismatchError` on mismatch). A callback
+    without `Hash` is rejected only with `require_3d_hash: true`; otherwise (and for declined callbacks, which are
+    mapped without a provision request) the defence is the strict 3D rule, the order-binding guard and the bank's
+    own CAVV / MpiTransactionId checks at provision time.
 - **Order binding.** Asseco 3D Pay / 3D Host callbacks must carry your order id and amount; PayFlex callbacks must carry
   your amount, currency and merchant id (`OrderMismatchError` otherwise).
 - **Strict 3D.** PayFlex accepts only a fully authenticated result (Status `Y`, ECI `02`/`05`, CAVV, `MdStatus` 1).
@@ -19,7 +23,8 @@ Report vulnerabilities privately: see [SECURITY.md](../SECURITY.md).
 
 1. **Callbacks.** Look the order up by id on the server; the bank POSTs cross-site so session cookies may be missing.
    Always call the gateway method for the callback and never trust callback fields directly. Exempt the callback route
-   from CSRF protection (the hash authenticates it) but nothing else.
+   from CSRF protection (Asseco: the hash authenticates it; PayFlex: the hash when present, plus the checks above) but
+   nothing else.
 2. **Persist before redirecting.** Store the order (`id`, `amount`, `currency`) before the customer leaves, and mark
    it paid only from the gateway response, in an idempotent update (callbacks can be replayed or arrive twice).
 3. **Manual review.** Handle `requires_manual_review` and `OrderMismatchError.response` (see the gateway guides): alert,

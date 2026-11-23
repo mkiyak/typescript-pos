@@ -24,9 +24,15 @@ const account = AccountFactory.createPayFlexPosAccount(
   PayFlexPosAccount.MERCHANT_TYPE_STANDARD, // must match your contract (test merchant: MAIN_DEALER)
 )
 
-// `require_3d_hash: true` once your bank signs the callback with `Hash`.
+// Opt-in: set PAYFLEX_REQUIRE_HASH=1 once your bank signs the callback with `Hash`; with it, an unsigned callback
+// is rejected, so leave it off if your bank does not send `Hash`.
 const pos = PosFactory.createPosGateway(account, {
-  banks: { vakifbank: { ...(posProductionConfig.banks.vakifbank as GatewayConfig), require_3d_hash: true } },
+  banks: {
+    vakifbank: {
+      ...(posProductionConfig.banks.vakifbank as GatewayConfig),
+      require_3d_hash: process.env.PAYFLEX_REQUIRE_HASH === '1',
+    },
+  },
 })
 
 const newCard = (number: string, year: string, month: string, cvv: string, holder: string) =>

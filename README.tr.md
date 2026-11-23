@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/mkiyak/typescript-pos/actions/workflows/ci.yml/badge.svg)](https://github.com/mkiyak/typescript-pos/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/typescript-pos.svg)](https://www.npmjs.com/package/typescript-pos)
-[![lisans](https://img.shields.io/github/license/mkiyak/typescript-pos.svg)](./LICENSE)
+[![lisans](https://img.shields.io/github/license/mkiyak/typescript-pos.svg)](https://github.com/mkiyak/typescript-pos/blob/main/LICENSE)
 
 Türk bankalarının sanal POS altyapılarını (3D Secure akışları dahil) tek, durumsuz (stateless) ve async bir arayüz arkasında
 toplayan TypeScript kütüphanesi. Node.js 20 veya üzeri gerekir; ESM ve CommonJS desteklenir, çalışma zamanı bağımlılıkları yalnızca
@@ -64,11 +64,11 @@ const form = await pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AU
 const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, card, callbackBody)
 ```
 
-Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](./examples) altındadır. Adım adım kılavuzlar:
+Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://github.com/mkiyak/typescript-pos/tree/main/examples) altındadır. Adım adım kılavuzlar:
 
-- [Asseco 3D Pay Hosting](./guides/asseco-3d-payment.md)
-- [PayFlex V4 3D Secure](./guides/payflex-3d-payment.md)
-- [Güvenlik ve canlıya çıkış kontrol listesi](./guides/security.md)
+- [Asseco 3D Pay Hosting](https://github.com/mkiyak/typescript-pos/blob/main/guides/asseco-3d-payment.md)
+- [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
+- [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Diğer işlemler: `pos.cancel(order)`, `pos.refund(order)` (`order.order_amount` verilmiş ve `order.amount` ondan
 küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (yalnızca Asseco), 3D Secure'suz ödeme için
@@ -102,7 +102,7 @@ Saat dilimi (offset) içermeyen banka zaman damgaları Türkiye saati (UTC+03:00
 
 1. Durumsuz, async API: her ağ metodu kendi cevabını döner; `isSuccess()` / `getResponse()` durumu yoktur.
 2. Sipariş ve normalize cevap anahtarları snake_case'tir ve her gateway'de aynıdır.
-3. 3D hash doğrulaması kapatılamaz (`disable_3d_hash_check` yoktur).
+3. 3D hash doğrulamasını kapatan bir seçenek yoktur. `AssecoPos` her zaman geçerli hash ister; `PayFlexV4Pos` callback `Hash` taşıyorsa her zaman doğrular, `Hash` eksikse yalnızca `require_3d_hash: true` ile reddeder.
 4. Hassas veri (PAN, CVV, son kullanma, şifreler, store key) logger'a ulaşmadan maskelenir.
 5. Sabit zamanlı hash karşılaştırması; Asseco hash'i bankanın beklediği doğal, büyük/küçük harf duyarsız anahtar sıralamasını birebir kullanır.
 6. Ek Asseco korumaları: dönen sipariş numarası ve tutar siparişle karşılaştırılır (`OrderMismatchError`);
@@ -116,8 +116,8 @@ Saat dilimi (offset) içermeyen banka zaman damgaları Türkiye saati (UTC+03:00
 
 ## Güvenlik
 
-Açık bildirmek için [SECURITY.md](./SECURITY.md), canlıya çıkış kontrol listesi için
-[guides/security.md](./guides/security.md) dosyasına bakın. PCI DSS: PayFlex 3D Secure (MPI) kart verisinin
+Açık bildirmek için [SECURITY.md](https://github.com/mkiyak/typescript-pos/blob/main/SECURITY.md), canlıya çıkış kontrol listesi için
+[guides/security.md](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md) dosyasına bakın. PCI DSS: PayFlex 3D Secure (MPI) kart verisinin
 sunucunuzdan geçmesini gerektirir; bu nedenle SAQ D kapsamına girersiniz. Asseco 3D Pay Hosting kart verisini
 sunucunuzun dışında tutar.
 
@@ -125,10 +125,10 @@ sunucunuzun dışında tutar.
 
 [SemVer](https://semver.org). 1.0 öncesinde kırıcı değişiklik minor, diğer değişiklikler patch sürümü artırır.
 Commit'ler [Conventional Commits](https://www.conventionalcommits.org) kurallarına uyar; sürümler
-[Changesets](https://github.com/changesets/changesets) ile yönetilir (bkz. [CONTRIBUTING.md](./CONTRIBUTING.md)).
+[Changesets](https://github.com/changesets/changesets) ile yönetilir (bkz. [CONTRIBUTING.md](https://github.com/mkiyak/typescript-pos/blob/main/CONTRIBUTING.md)).
 
 ## Lisans
 
-[MIT](./LICENSE)
+[MIT](https://github.com/mkiyak/typescript-pos/blob/main/LICENSE)
 
-English: [README.md](./README.md)
+English: [README.md](https://github.com/mkiyak/typescript-pos/blob/main/README.md)

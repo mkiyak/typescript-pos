@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/mkiyak/typescript-pos/actions/workflows/ci.yml/badge.svg)](https://github.com/mkiyak/typescript-pos/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/typescript-pos.svg)](https://www.npmjs.com/package/typescript-pos)
-[![license](https://img.shields.io/github/license/mkiyak/typescript-pos.svg)](./LICENSE)
+[![license](https://img.shields.io/github/license/mkiyak/typescript-pos.svg)](https://github.com/mkiyak/typescript-pos/blob/main/LICENSE)
 
 A single, stateless, async TypeScript interface to Turkish bank virtual POS (sanal POS) gateways, including 3D Secure flows. Node.js 20 or newer,
 ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
@@ -63,11 +63,11 @@ const form = await pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AU
 const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, card, callbackBody)
 ```
 
-Complete, compile-checked versions with error handling live in [`examples/`](./examples). Step-by-step guides:
+Complete, compile-checked versions with error handling live in [`examples/`](https://github.com/mkiyak/typescript-pos/tree/main/examples). Step-by-step guides:
 
-- [Asseco 3D Pay Hosting](./guides/asseco-3d-payment.md)
-- [PayFlex V4 3D Secure](./guides/payflex-3d-payment.md)
-- [Security and production checklist](./guides/security.md)
+- [Asseco 3D Pay Hosting](https://github.com/mkiyak/typescript-pos/blob/main/guides/asseco-3d-payment.md)
+- [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
+- [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Other operations: `pos.cancel(order)`, `pos.refund(order)` (partial when `order.order_amount` is set and
 `order.amount` is lower), `pos.status(order)`, `pos.orderHistory(order)` (Asseco only), `pos.payment(MODEL.NON_SECURE, ...)`
@@ -100,7 +100,7 @@ Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00).
 
 1. Stateless, async API: each network method returns its own response; no `isSuccess()` / `getResponse()` state.
 2. Order and normalized response keys are snake_case and the same for every gateway.
-3. The 3D hash check cannot be disabled (`disable_3d_hash_check` does not exist).
+3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`.
 4. Sensitive data (PAN, CVV, expiry, passwords, store keys) is masked before it reaches the logger.
 5. Constant-time hash comparison; the Asseco hash uses the exact natural, case-insensitive key ordering the bank expects.
 6. Extra Asseco safeguards: returned order id and amount are compared with the order (`OrderMismatchError`);
@@ -113,7 +113,7 @@ Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00).
 
 ## Security
 
-Read [SECURITY.md](./SECURITY.md) to report vulnerabilities and [guides/security.md](./guides/security.md) for a
+Read [SECURITY.md](https://github.com/mkiyak/typescript-pos/blob/main/SECURITY.md) to report vulnerabilities and [guides/security.md](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md) for a
 production checklist. PCI DSS: PayFlex 3D Secure (MPI) needs card data on your server, so you fall under SAQ D;
 Asseco 3D Pay Hosting keeps card data off your server.
 
@@ -121,10 +121,10 @@ Asseco 3D Pay Hosting keeps card data off your server.
 
 [SemVer](https://semver.org). Before 1.0, a breaking change bumps the minor version and everything else bumps the
 patch version. Commits follow [Conventional Commits](https://www.conventionalcommits.org); releases are managed
-with [Changesets](https://github.com/changesets/changesets) (see [CONTRIBUTING.md](./CONTRIBUTING.md)).
+with [Changesets](https://github.com/changesets/changesets) (see [CONTRIBUTING.md](https://github.com/mkiyak/typescript-pos/blob/main/CONTRIBUTING.md)).
 
 ## License
 
-[MIT](./LICENSE)
+[MIT](https://github.com/mkiyak/typescript-pos/blob/main/LICENSE)
 
-Türkçe: [README.tr.md](./README.tr.md)
+Türkçe: [README.tr.md](https://github.com/mkiyak/typescript-pos/blob/main/README.tr.md)
