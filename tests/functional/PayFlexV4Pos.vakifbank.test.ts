@@ -70,17 +70,21 @@ function createGateway(): PayFlexV4Pos {
 
 const card = () => CreditCardFactory.create('4938410157705591', '29', '12', '453', 'John Doe', CARD_TYPE.VISA)
 
-const newOrder = (): PosOrder => ({
-  id: `TSPOS${randomBytes(6).toString('hex').toUpperCase()}`,
-  amount: 10.01,
-  currency: CURRENCY.TRY,
-  installment: 0,
-  ip: '127.0.0.1',
-  success_url: 'http://localhost/response.php',
-  fail_url: 'http://localhost/response.php',
-})
+/** Public HTTPS callback URLs (the bank WAF rejected `http://localhost/...`). */
+const newOrder = (): PosOrder => {
+  const token = randomBytes(6).toString('hex')
+  return {
+    id: `TSPOS${token.toUpperCase()}`,
+    amount: 10.01,
+    currency: CURRENCY.TRY,
+    installment: 0,
+    ip: '127.0.0.1',
+    success_url: `https://example.com/payflex/success?t=${token}`,
+    fail_url: `https://example.com/payflex/fail?t=${token}`,
+  }
+}
 
-/** Bank codes only (no card data) for the run record. */
+/** Bank codes only (no card data) for the run record; run with `--silent=false` to see them. */
 const summary = (res: PosResponse) => ({
   status: res.status,
   proc_return_code: res.proc_return_code,
@@ -94,9 +98,21 @@ describe.skipIf(!RUN)('PayFlexV4Pos against the VakıfBank test environment', ()
   const pos = createGateway()
 
   it('enrollment returns the ACS form (Status Y)', async () => {
-    const form = await pos.get3DFormData(newOrder(), MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card())
-    if (typeof form === 'string') throw new Error('expected form data')
-    console.info('[functional] enrollment', { gateway: form.gateway, inputs: Object.keys(form.inputs) })
+    let form: Awaited<ReturnType<PayFlexV4Pos['get3DFormData']>>
+    try {
+      form = await pos.get3DFormData(newOrder(), MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card())
+    } catch (e) {
+      console.info('[functional] enrollment failed', {
+        error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      })
+      throw e
+    }
+    // get3DFormData only returns a form for enrollment Status Y; only the ACS host is recorded
+    console.info('[functional] enrollment', {
+      status: 'Y',
+      acs_host: new URL(form.gateway).host,
+      inputs: Object.keys(form.inputs),
+    })
     expect(form.gateway.startsWith('https://')).toBe(true)
     expect(Object.keys(form.inputs).sort()).toStrictEqual(['MD', 'PaReq', 'TermUrl'])
   }, 60_000)
@@ -105,10 +121,10 @@ describe.skipIf(!RUN)('PayFlexV4Pos against the VakıfBank test environment', ()
     const order = newOrder()
     const sale = await pos.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, card())
     console.info('[functional] sale', summary(sale))
-    expect(sale.status, String(sale.error_message)).toBe('approved')
+    expect(sale.status, JSON.stringify(summary(sale))).toBe('approved')
 
     const cancel = await pos.cancel({ transaction_id: sale.transaction_id as string, ip: '127.0.0.1' })
     console.info('[functional] cancel', summary(cancel))
-    expect(cancel.status, String(cancel.error_message)).toBe('approved')
+    expect(cancel.status, JSON.stringify(summary(cancel))).toBe('approved')
   }, 120_000)
 })
