@@ -4,7 +4,7 @@ Thanks for helping out! Development requires Node.js 22 or newer. Before opening
 
 ```sh
 npm install
-npm run check   # lint + typecheck + test + build
+npm run check   # lint + typecheck + test + build + package lint (publint, attw)
 ```
 
 ## Commits

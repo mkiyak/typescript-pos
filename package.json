@@ -62,10 +62,11 @@
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc --noEmit -p tsconfig.examples.json",
     "lint": "biome check .",
+    "lint:package": "publint --strict && attw --pack .",
     "format": "biome format --write .",
     "test": "vitest run",
     "test:functional": "FUNCTIONAL_TESTS=1 vitest run tests/functional",
-    "check": "npm run lint && npm run typecheck && npm run typecheck:examples && npm run test && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run typecheck:examples && npm run test && npm run build && npm run lint:package",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "prepare": "husky"
@@ -75,6 +76,7 @@
     "iconv-lite": "^0.7.3"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "^2.6.8",
     "@changesets/cli": "^3.0.3",
     "@commitlint/cli": "^21.2.4",
@@ -82,6 +84,7 @@
     "@types/node": "^22.20.5",
     "@vitest/coverage-v8": "^5.1.1",
     "husky": "^9.1.7",
+    "publint": "^0.3.25",
     "tsup": "^9.0.0",
     "typescript": "^5.9.3",
     "vitest": "^5.1.1"
