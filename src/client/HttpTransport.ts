@@ -41,7 +41,14 @@ export class HttpTransport {
       let bytes: Uint8Array
       let text: string
       try {
-        res = await this.fetchImpl(url, { method: 'POST', body: body as string, headers, signal: controller.signal })
+        // redirect: 'error' — a 307/308 would resend the body (card data, credentials) to another host
+        res = await this.fetchImpl(url, {
+          method: 'POST',
+          body: body as string,
+          headers,
+          signal: controller.signal,
+          redirect: 'error',
+        })
         bytes = new Uint8Array(await res.arrayBuffer())
         text = new TextDecoder().decode(bytes)
       } catch (e) {

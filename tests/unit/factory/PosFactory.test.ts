@@ -87,6 +87,37 @@ describe('PosFactory.createPosGateway', () => {
     expect(() => PosFactory.createPosGateway(payFlexAccount(), bad)).toThrow(PosError)
   })
 
+  it.each([
+    ['asseco', 'payment_api', 'http://entegrasyon.asseco-see.com.tr/fim/api'],
+    ['asseco', 'gateway_3d', 'http://entegrasyon.asseco-see.com.tr/fim/est3Dgate'],
+    ['asseco', 'gateway_3d_host', 'ftp://example.com/host'],
+    ['vakifbank', 'query_api', 'HTTP://pay.example.com/Search'],
+    ['vakifbank', 'gateway_3d', 'not a url'],
+  ] as const)('rejects a non-https %s %s endpoint', (bank, key, url) => {
+    const bankConfig = config.banks[bank] as GatewayConfig
+    const cfg: PosConfig = {
+      banks: { [bank]: { ...bankConfig, gateway_endpoints: { ...bankConfig.gateway_endpoints, [key]: url } } },
+    }
+    const account = bank === 'asseco' ? assecoAccount() : payFlexAccount()
+    const create = () => PosFactory.createPosGateway(account, cfg)
+    expect(create).toThrow(PosError)
+    expect(create).toThrow(`Endpoint [${key}]`)
+    expect(create).toThrow('must be an https: URL')
+  })
+
+  it('accepts https endpoints in any letter case', () => {
+    const bankConfig = config.banks.asseco as GatewayConfig
+    const cfg: PosConfig = {
+      banks: {
+        asseco: {
+          ...bankConfig,
+          gateway_endpoints: { ...bankConfig.gateway_endpoints, payment_api: 'HTTPS://example.com/api' },
+        },
+      },
+    }
+    expect(PosFactory.createPosGateway(assecoAccount(), cfg)).toBeInstanceOf(AssecoPos)
+  })
+
   it('options.testMode overrides the config test_mode', () => {
     const cfg: PosConfig = { banks: { asseco: { ...assecoCfg, test_mode: false } } }
     expect(PosFactory.createPosGateway(assecoAccount(), cfg, { testMode: true }).isTestMode()).toBe(true)

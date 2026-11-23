@@ -465,6 +465,13 @@ describe('AssecoPosRequestDataMapper required order fields', () => {
   it('keeps PHP (string) semantics for optional fields', () => {
     const data = mapper.create3DPaymentRequestData(account, { id: 'o1', amount: 1 }, TX_TYPE.PAY_AUTH, {})
     expect(data.IPAddress).toBe('')
+    // never the literal "undefined" / "null" for a missing customer IP
+    for (const ip of [undefined, null]) {
+      const order = { id: 'o1', amount: 1, ip } as unknown as PosOrder
+      expect(mapper.create3DPaymentRequestData(account, order, TX_TYPE.PAY_AUTH, {}).IPAddress).toBe('')
+      const card = CreditCardFactory.create('4444555566667777', '25', '12', '123')
+      expect(mapper.createNonSecurePaymentRequestData(account, order, TX_TYPE.PAY_AUTH, card).IPAddress).toBe('')
+    }
     expect(mapper.createNonSecurePostAuthPaymentRequestData(account, { id: 'o1' }).Total).toBeNull()
     expect(mapper.createRefundRequestData(account, { id: 'o1' }, TX_TYPE.REFUND)).not.toHaveProperty('Total')
   })

@@ -1,3 +1,6 @@
+import { once } from 'node:events'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { PosHttpError } from '../../../src/errors.js'
@@ -20,6 +23,44 @@ describe('HttpTransport', () => {
     expect(seen?.url).toBe('https://bank.test/api')
     expect(seen?.init?.method).toBe('POST')
     expect(seen?.init?.body).toBe('a=1')
+  })
+
+  it('refuses to follow redirects (the body would be resent elsewhere)', async () => {
+    let redirectedBody = ''
+    const server = createServer((req, res) => {
+      if (req.url === '/api') {
+        res.writeHead(307, { Location: '/elsewhere' }).end()
+        return
+      }
+      req.on('data', (c: Buffer) => {
+        redirectedBody += c.toString()
+      })
+      req.on('end', () => res.writeHead(200).end('<ok/>'))
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    try {
+      const { port } = server.address() as AddressInfo
+      const err = await new HttpTransport()
+        .post(`http://127.0.0.1:${port}/api`, 'Pan=4355084355084358', {})
+        .catch((e) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect(redirectedBody).toBe('')
+    } finally {
+      server.close()
+    }
+  })
+
+  it('passes redirect: error to an injected fetch and rejects a 3xx it returns', async () => {
+    let seen: RequestInit | undefined
+    const f = (async (_url: unknown, init?: RequestInit) => {
+      seen = init
+      return new Response(null, { status: 308, headers: { Location: 'https://evil.test' } })
+    }) as unknown as typeof fetch
+    const err = await new HttpTransport({ fetch: f }).post('https://bank.test/api', '', {}).catch((e) => e)
+    expect(seen?.redirect).toBe('error')
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect(err.status).toBe(308)
   })
 
   it('throws PosHttpError with status on 500', async () => {

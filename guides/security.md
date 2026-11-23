@@ -19,6 +19,8 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
   the order, `OrderMismatchError.paymentMayHaveCompleted` is `true`.
 - **Masking.** Everything handed to your logger, error snippets and `OrderMismatchError.response.all` goes through
   `maskSensitiveData()` (PAN, CVV, expiry, passwords, store keys).
+- **HTTPS only.** `PosFactory` rejects bank endpoints that are not `https:` URLs, and HTTP redirects are never
+  followed (a 307/308 would resend card data and credentials to another host); both raise `PosError`/`PosHttpError`.
 - **No network on import**, two runtime dependencies, global `fetch`.
 
 ## What you must do

@@ -27,7 +27,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
     const requestData: Record<string, unknown> = {
       ...this.getRequestAccountData(account),
       Type: this.valueMapper.mapTxType(txType),
-      IPAddress: String(o.ip),
+      IPAddress: String(o.ip ?? ''),
       OrderId: String(required(o, 'id')),
       Total: this.valueFormatter.formatAmount(required(o, 'amount')),
       Currency: this.valueMapper.mapCurrency(o.currency),
@@ -57,7 +57,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
     const requestData: Record<string, unknown> = {
       ...this.getRequestAccountData(account),
       Type: this.valueMapper.mapTxType(txType),
-      IPAddress: String(o.ip),
+      IPAddress: String(o.ip ?? ''),
       OrderId: String(required(o, 'id')),
       Total: String(this.valueFormatter.formatAmount(required(o, 'amount'))),
       Currency: String(this.valueMapper.mapCurrency(o.currency)),

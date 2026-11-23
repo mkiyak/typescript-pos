@@ -51,7 +51,8 @@ export type PosFactoryOptions = {
 export const PosFactory = {
   /**
    * @throws GatewayClassNotConfiguredError when the account's bank is not in the config or its class is unknown
-   * @throws PosError when the account type does not fit the gateway or a required endpoint is missing
+   * @throws PosError when the account type does not fit the gateway, or a required endpoint is missing or is not an
+   *   `https:` URL
    */
   createPosGateway(account: AbstractPosAccount, config: PosConfig, options: PosFactoryOptions = {}): AbstractGateway {
     const bankName = account.getBankName()
@@ -61,6 +62,8 @@ export const PosFactory = {
     const bankConfig = config.banks[bankName] as GatewayConfig
     const gatewayConfig: GatewayConfig =
       options.testMode === undefined ? bankConfig : { ...bankConfig, test_mode: options.testMode }
+
+    assertHttpsEndpoints(gatewayConfig)
 
     const logger = createSafeLogger(options.logger ?? noopLogger)
     const hooks = options.hooks ?? {}
@@ -157,6 +160,25 @@ function createPayFlexV4Pos(
     logger,
     hooks,
   })
+}
+
+/** Card data, credentials and 3D forms must never travel over plain HTTP: every configured endpoint is `https:`. */
+function assertHttpsEndpoints(config: GatewayConfig): void {
+  const endpoints: Record<string, unknown> = config.gateway_endpoints ?? {}
+  for (const [key, url] of Object.entries(endpoints)) {
+    if (url === undefined || url === null || url === '') {
+      continue
+    }
+    let protocol: string | undefined
+    try {
+      protocol = typeof url === 'string' ? new URL(url).protocol : undefined
+    } catch {
+      protocol = undefined
+    }
+    if (protocol !== 'https:') {
+      throw new PosError(`Endpoint [${key}] of ${config.name} (${config.class}) must be an https: URL.`)
+    }
+  }
 }
 
 function requiredEndpoint(config: GatewayConfig, key: 'payment_api' | 'gateway_3d' | 'query_api'): string {
