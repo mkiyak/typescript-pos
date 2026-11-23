@@ -932,8 +932,7 @@ describe('PayFlexV4Pos (end to end)', () => {
     }
 
     it.each([
-      ['major units with a dot', '100.00'],
-      ['major units, one decimal', '100.0'],
+      ['major units with a dot and two decimals', '100.00'],
       ['minor units without a dot', '10000'],
     ])('a matching amount in %s provisions', async (_name, purchAmount) => {
       const { res, sent } = await provisions({ PurchAmount: purchAmount })
@@ -955,6 +954,17 @@ describe('PayFlexV4Pos (end to end)', () => {
       ['amount', 'a non-numeric amount', { PurchAmount: 'abc' }, defaultOrder],
       ['amount', 'a negative amount', { PurchAmount: '-100.00' }, defaultOrder],
       ['amount', 'an order without amount', {}, { ...defaultOrder, amount: undefined }],
+      // The §15 hash signs PurchAmount without its dot, so '1.00', '100' and '10.0' carry the same valid hash:
+      // only the signed digits (two implied decimals) may be read, never a one- or three-decimal value.
+      [
+        'amount',
+        "'10.0' (signed digits 100 = 1.00) against 10",
+        { PurchAmount: '10.0' },
+        { ...defaultOrder, amount: 10 },
+      ],
+      ['amount', "'100.0' (signed digits 1000 = 10.00) against 100", { PurchAmount: '100.0' }, defaultOrder],
+      ['amount', "'1.5' against 1.5", { PurchAmount: '1.5' }, { ...defaultOrder, amount: 1.5 }],
+      ['amount', "'1.000' against 1", { PurchAmount: '1.000' }, { ...defaultOrder, amount: 1 }],
       ['currency', 'another currency', { PurchCurrency: '840' }, defaultOrder],
       ['currency', 'a missing currency', { PurchCurrency: undefined }, defaultOrder],
       ['currency', 'an order in another currency', {}, { ...defaultOrder, currency: CURRENCY.USD }],
@@ -983,8 +993,8 @@ describe('PayFlexV4Pos (end to end)', () => {
       expect(sent).toHaveLength(1)
     })
 
-    it('a sub-branch account is bound to the main MerchantId it sends in the enrollment request', async () => {
-      const subAccount = AccountFactory.createPayFlexPosAccount(
+    const subAccount = () =>
+      AccountFactory.createPayFlexPosAccount(
         'vakifbank',
         '000000000111111',
         PASSWORD,
@@ -992,20 +1002,54 @@ describe('PayFlexV4Pos (end to end)', () => {
         PayFlexPosAccount.MERCHANT_TYPE_SUB_DEALER,
         '000000000222222',
       )
+
+    // VakifBank 2026 guide §15: for dealers the callback MerchantId is the sub-dealer number
+    it.each([
+      ['the main merchant id', '000000000111111'],
+      ['the sub-dealer number', '000000000222222'],
+    ])('a sub-branch account accepts %s', async (_name, merchantId) => {
       const sent: Sent[] = []
       const pos = realGateway(
         recordingFetch(sent, () => provisionApproved),
         config,
-        subAccount,
+        subAccount(),
       )
-      const res = await pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, { ...callback })
+      const data = { ...callback, MerchantId: merchantId }
+      const res = await pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, {
+        ...data,
+        Hash: sign(data),
+      })
       expect(res.status).toBe('approved')
       expect(sent).toHaveLength(1)
+    })
 
+    it('a sub-branch account rejects any third merchant id without an HTTP call', async () => {
       const fetchSpy = vi.fn(unexpectedNetwork)
-      const other = realGateway(fetchSpy as unknown as typeof fetch, config, subAccount)
+      const pos = realGateway(fetchSpy as unknown as typeof fetch, config, subAccount())
+      const err = await pos
+        .payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, {
+          ...callback,
+          MerchantId: '000000000333333',
+        })
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      expect((err as OrderMismatchError).field).toBe('merchant_id')
+      expect(fetchSpy).toHaveBeenCalledTimes(0)
+    })
+
+    it('a non sub-branch account rejects a sub-dealer number without an HTTP call', async () => {
+      const mainDealer = AccountFactory.createPayFlexPosAccount(
+        'vakifbank',
+        '000000000111111',
+        PASSWORD,
+        'VP999999',
+        PayFlexPosAccount.MERCHANT_TYPE_MAIN_DEALER,
+        '000000000222222',
+      )
+      const fetchSpy = vi.fn(unexpectedNetwork)
+      const pos = realGateway(fetchSpy as unknown as typeof fetch, config, mainDealer)
       await expect(
-        other.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, {
+        pos.payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, {
           ...callback,
           MerchantId: '000000000222222',
         }),

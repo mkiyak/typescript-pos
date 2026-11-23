@@ -44,6 +44,9 @@ export type GatewayConfig = {
   /**
    * PayFlex V4: reject a 3D callback that carries no `Hash` (`HashMismatchError`). Default false, because not every
    * VakifBank merchant receives a signed callback yet; enable it when yours does.
+   *
+   * Without a signed callback (`require_3d_hash: false` and no `Hash`), the order-binding guard compares
+   * browser-supplied values and only stops naive replays; enable `require_3d_hash` once your bank sends `Hash`.
    */
   require_3d_hash?: boolean
 }

@@ -25,11 +25,11 @@ type Raw = Record<string, unknown>
 /** Largest difference between the callback amount and the order amount still treated as equal. */
 const AMOUNT_TOLERANCE = 0.005
 
-/** Callback `PurchAmount` in major units with a dot, e.g. `100.00`. */
-const MAJOR_UNIT_AMOUNT = /^\d+\.\d{1,2}$/
-
-/** Callback `PurchAmount` in minor units without a dot, e.g. `101` for 1.01. */
-const MINOR_UNIT_AMOUNT = /^\d+$/
+/**
+ * Callback `PurchAmount`: digits with two implied decimals, optionally written with a dot before the last two
+ * (`100.00` or `10000` for 100.00; `101` for 1.01).
+ */
+const CALLBACK_AMOUNT = /^\d+(\.\d{2})?$/
 
 /** A plain decimal order amount (no hex, exponent or Infinity, which `Number()` would accept). */
 const DECIMAL = /^\s*[+-]?(\d+(\.\d*)?|\.\d+)\s*$/
@@ -47,15 +47,14 @@ function record(data: unknown, key: string): Raw {
 }
 
 /**
- * The callback `PurchAmount` as a number. The bank's formats are `100.00` (major units; the DOC-STD §15 hash drops
- * the dot) and `10000` (minor units); anything else is NaN.
+ * The callback `PurchAmount` as a number, read from the digits the DOC-STD §15 hash signs (the value without its
+ * dot) with two implied decimals. `1.00`, `100` and `10.0` share one valid hash, so only the two-decimal and the
+ * dotless forms are accepted; `10.0`, `1.5` or `1.000` are NaN instead of being read as another amount.
  */
 function parseCallbackAmount(value: unknown): number {
-  if (typeof value !== 'string') return Number.NaN
-  if (MAJOR_UNIT_AMOUNT.test(value)) return Number(value)
-  if (MINOR_UNIT_AMOUNT.test(value)) return Number(value) / 100
+  if (typeof value !== 'string' || !CALLBACK_AMOUNT.test(value)) return Number.NaN
 
-  return Number.NaN
+  return Number(value.replace('.', '')) / 100
 }
 
 /** A finite order amount from a number or a plain decimal string; NaN otherwise. */
@@ -237,9 +236,12 @@ export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
   }
 
   /**
-   * Binds a verified callback to this payment (fail closed: missing values never match). The enrollment request
-   * sends `MerchantId` = the account merchant id (sub branches add a separate `SubMerchantId`), which the bank
-   * echoes back.
+   * Binds a verified callback to this payment (fail closed: missing values never match). `MerchantId` must be
+   * the account merchant id; for sub-dealer accounts the bank may send the sub-dealer number instead (VakifBank
+   * 2026 guide §15), so that is accepted too.
+   *
+   * Without a signed callback (`require_3d_hash` false and no `Hash`) these values come from the browser and the
+   * guard only stops naive replays.
    */
   private assertCallbackMatchesOrder(callback: GatewayResponseData, order: PosOrder): void {
     const own = (key: string): unknown => (Object.hasOwn(callback, key) ? callback[key] : undefined)
@@ -256,9 +258,14 @@ export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
       this.fail('currency', expectedCurrency, asText(own('PurchCurrency')))
     }
 
-    const expectedMerchant = this.account.getMerchantId()
-    if (own('MerchantId') !== expectedMerchant) {
-      this.fail('merchant_id', expectedMerchant, asText(own('MerchantId')))
+    const merchantIds = [this.account.getMerchantId()]
+    const subMerchantId = this.account.getSubMerchantId()
+    if (this.account.isSubBranch() && subMerchantId !== null && subMerchantId !== '') {
+      merchantIds.push(subMerchantId)
+    }
+    const merchantId = own('MerchantId')
+    if (typeof merchantId !== 'string' || !merchantIds.includes(merchantId)) {
+      this.fail('merchant_id', merchantIds.join(' | '), asText(merchantId))
     }
   }
 
