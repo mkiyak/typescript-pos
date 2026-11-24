@@ -71,6 +71,7 @@ describe('public index', () => {
         'AbstractPosQuery',
         'AbstractMappedPosQuery',
         'AssecoPosQuery',
+        'GarantiPosQuery',
         'PayFlexV4PosQuery',
         'PayFlexCPV4PosQuery',
       ]),
@@ -120,6 +121,8 @@ describe('public index', () => {
     expect(mod.PosQueryFactory.createPosQuery(cp, mod.posTestConfig)).toBeInstanceOf(mod.PayFlexCPV4PosQuery)
     const asseco = mod.AccountFactory.createAssecoPosAccount('asseco', 'c', 'u', 'p', 'k')
     expect(mod.PosQueryFactory.createPosQuery(asseco, mod.posTestConfig)).toBeInstanceOf(mod.AssecoPosQuery)
+    const garanti = mod.AccountFactory.createGarantiPosAccount('garanti', 'm', 'u', 'p', 't')
+    expect(mod.PosQueryFactory.createPosQuery(garanti, mod.posTestConfig)).toBeInstanceOf(mod.GarantiPosQuery)
   })
 
   it('exports the query types', () => {

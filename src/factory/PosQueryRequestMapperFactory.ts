@@ -1,5 +1,6 @@
 import type { CryptInterface } from '../crypt/CryptInterface.js'
 import { AssecoPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/AssecoPosQueryRequestDataMapper.js'
+import { GarantiPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/GarantiPosQueryRequestDataMapper.js'
 import { PayFlexCPV4PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayFlexCPV4PosQueryRequestDataMapper.js'
 import { PayFlexV4PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayFlexV4PosQueryRequestDataMapper.js'
 import type { QueryRequestDataMapperInterface } from '../data-mapper/pos-query/request/QueryRequestDataMapperInterface.js'
@@ -11,6 +12,7 @@ import type { Lang } from '../PosInterface.js'
 /** The first registered mapper whose `supports()` accepts the gateway class wins. */
 const REQUEST_MAPPERS = [
   AssecoPosQueryRequestDataMapper,
+  GarantiPosQueryRequestDataMapper,
   PayFlexCPV4PosQueryRequestDataMapper,
   PayFlexV4PosQueryRequestDataMapper,
 ]

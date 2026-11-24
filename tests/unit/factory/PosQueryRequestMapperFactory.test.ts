@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { CryptInterface } from '../../../src/crypt/CryptInterface.js'
 import { AssecoPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/AssecoPosQueryRequestDataMapper.js'
+import { GarantiPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/GarantiPosQueryRequestDataMapper.js'
 import { PayFlexCPV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayFlexCPV4PosQueryRequestDataMapper.js'
 import { PayFlexV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayFlexV4PosQueryRequestDataMapper.js'
 import { AssecoPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/AssecoPosRequestValueFormatter.js'
+import { GarantiPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/GarantiPosRequestValueFormatter.js'
 import { PayFlexCPV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexCPV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
 import { AssecoPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/AssecoPosRequestValueMapper.js'
+import { GarantiPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/GarantiPosRequestValueMapper.js'
 import { PayFlexCPV4PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayFlexCPV4PosRequestValueMapper.js'
 import { PayFlexV4PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
 import { GatewayClassNotConfiguredError } from '../../../src/errors.js'
@@ -17,6 +20,7 @@ const crypt = {} as CryptInterface
 
 const rows = [
   ['AssecoPos', AssecoPosQueryRequestDataMapper, AssecoPosRequestValueMapper, AssecoPosRequestValueFormatter],
+  ['GarantiPos', GarantiPosQueryRequestDataMapper, GarantiPosRequestValueMapper, GarantiPosRequestValueFormatter],
   [
     'PayFlexCPV4Pos',
     PayFlexCPV4PosQueryRequestDataMapper,

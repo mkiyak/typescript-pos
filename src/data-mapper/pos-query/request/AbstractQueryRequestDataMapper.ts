@@ -68,7 +68,7 @@ export abstract class AbstractQueryRequestDataMapper<A extends AbstractPosAccoun
    */
   protected mergeAccountData(
     requestData: Record<string, unknown>,
-    accountData: Record<string, string>,
+    accountData: Record<string, unknown>,
   ): Record<string, unknown> {
     const result: Record<string, unknown> = {}
     for (const key of Object.keys(requestData)) {

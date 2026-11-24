@@ -1,20 +1,25 @@
 import { HttpTransport } from '../client/HttpTransport.js'
 import { AssecoPosCrypt } from '../crypt/AssecoPosCrypt.js'
 import type { CryptInterface } from '../crypt/CryptInterface.js'
+import { GarantiPosCrypt } from '../crypt/GarantiPosCrypt.js'
 import { PayFlexCPV4PosCrypt } from '../crypt/PayFlexCPV4PosCrypt.js'
 import { PayFlexV4PosCrypt } from '../crypt/PayFlexV4PosCrypt.js'
 import { AssecoPosRequestValueFormatter } from '../data-mapper/request/value-formatter/AssecoPosRequestValueFormatter.js'
+import { GarantiPosRequestValueFormatter } from '../data-mapper/request/value-formatter/GarantiPosRequestValueFormatter.js'
 import { PayFlexCPV4PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayFlexCPV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
 import type { RequestValueFormatterInterface } from '../data-mapper/request/value-formatter/RequestValueFormatterInterface.js'
 import { AssecoPosRequestValueMapper } from '../data-mapper/request/value-mapper/AssecoPosRequestValueMapper.js'
+import { GarantiPosRequestValueMapper } from '../data-mapper/request/value-mapper/GarantiPosRequestValueMapper.js'
 import { PayFlexCPV4PosRequestValueMapper } from '../data-mapper/request/value-mapper/PayFlexCPV4PosRequestValueMapper.js'
 import { PayFlexV4PosRequestValueMapper } from '../data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
 import type { RequestValueMapperInterface } from '../data-mapper/request/value-mapper/RequestValueMapperInterface.js'
 import { AssecoPosResponseValueFormatter } from '../data-mapper/response/value-formatter/AssecoPosResponseValueFormatter.js'
 import { BasicResponseValueFormatter } from '../data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
+import { GarantiPosResponseValueFormatter } from '../data-mapper/response/value-formatter/GarantiPosResponseValueFormatter.js'
 import type { ResponseValueFormatterInterface } from '../data-mapper/response/value-formatter/ResponseValueFormatterInterface.js'
 import { AssecoPosResponseValueMapper } from '../data-mapper/response/value-mapper/AssecoPosResponseValueMapper.js'
+import { GarantiPosResponseValueMapper } from '../data-mapper/response/value-mapper/GarantiPosResponseValueMapper.js'
 import { PayFlexCPV4PosResponseValueMapper } from '../data-mapper/response/value-mapper/PayFlexCPV4PosResponseValueMapper.js'
 import { PayFlexV4PosResponseValueMapper } from '../data-mapper/response/value-mapper/PayFlexV4PosResponseValueMapper.js'
 import type { ResponseValueMapperInterface } from '../data-mapper/response/value-mapper/ResponseValueMapperInterface.js'
@@ -23,10 +28,12 @@ import type { GatewayConfig } from '../gateway/AbstractGateway.js'
 import { createSafeLogger, noopLogger } from '../logger.js'
 import type { AbstractPosAccount } from '../model/account/AbstractPosAccount.js'
 import { AssecoPosAccount } from '../model/account/AssecoPosAccount.js'
+import { GarantiPosAccount } from '../model/account/GarantiPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import { LANG } from '../PosInterface.js'
 import type { AbstractPosQuery, PosQueryDeps } from '../pos-query/AbstractPosQuery.js'
 import { AssecoPosQuery } from '../pos-query/AssecoPosQuery.js'
+import { GarantiPosQuery } from '../pos-query/GarantiPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../pos-query/PayFlexV4PosQuery.js'
 import type { PosConfig, PosFactoryOptions } from './PosFactory.js'
@@ -39,7 +46,7 @@ export type PosQueryFactoryOptions = PosFactoryOptions & {
   allowedApiOrigins?: readonly string[]
 }
 
-const QUERY_CLASSES = [AssecoPosQuery, PayFlexCPV4PosQuery, PayFlexV4PosQuery]
+const QUERY_CLASSES = [AssecoPosQuery, GarantiPosQuery, PayFlexCPV4PosQuery, PayFlexV4PosQuery]
 
 /** Builds the query service of a bank: the same config, account and options as `PosFactory`, a different service. */
 export const PosQueryFactory = {
@@ -99,6 +106,17 @@ export const PosQueryFactory = {
         ;({ requestValueMapper, requestValueFormatter, crypt } = buildAsseco(logger))
         responseValueFormatter = new AssecoPosResponseValueFormatter()
         responseValueMapper = new AssecoPosResponseValueMapper()
+        break
+      }
+      case 'GarantiPos': {
+        if (!(account instanceof GarantiPosAccount)) {
+          throw new PosError(`Bank [${bankName}] is configured for GarantiPos and needs a GarantiPosAccount.`)
+        }
+        requestValueMapper = new GarantiPosRequestValueMapper()
+        requestValueFormatter = new GarantiPosRequestValueFormatter()
+        crypt = new GarantiPosCrypt(logger)
+        responseValueFormatter = new GarantiPosResponseValueFormatter()
+        responseValueMapper = new GarantiPosResponseValueMapper()
         break
       }
       case 'PayFlexV4Pos': {

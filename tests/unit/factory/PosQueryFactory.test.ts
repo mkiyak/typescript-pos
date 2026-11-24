@@ -5,8 +5,11 @@ import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import type { PosConfig } from '../../../src/factory/PosFactory.js'
 import { PosQueryFactory } from '../../../src/factory/PosQueryFactory.js'
 import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
+import type { PosLogger } from '../../../src/logger.js'
+import { AbstractMappedPosQuery } from '../../../src/pos-query/AbstractMappedPosQuery.js'
 import { AbstractPosQuery } from '../../../src/pos-query/AbstractPosQuery.js'
 import { AssecoPosQuery } from '../../../src/pos-query/AssecoPosQuery.js'
+import { GarantiPosQuery } from '../../../src/pos-query/GarantiPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../../../src/pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../../../src/pos-query/PayFlexV4PosQuery.js'
 
@@ -62,6 +65,7 @@ describe('PosQueryFactory', () => {
 
   it('getPosQueryClassForGateway returns the registered class or null', () => {
     expect(PosQueryFactory.getPosQueryClassForGateway('AssecoPos')).toBe(AssecoPosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('GarantiPos')).toBe(GarantiPosQuery)
     expect(PosQueryFactory.getPosQueryClassForGateway('PayFlexV4Pos')).toBe(PayFlexV4PosQuery)
     expect(PosQueryFactory.getPosQueryClassForGateway('PayFlexCPV4Pos')).toBe(PayFlexCPV4PosQuery)
     expect(PosQueryFactory.getPosQueryClassForGateway('stdClass')).toBeNull()
@@ -105,6 +109,106 @@ describe('PosQueryFactory', () => {
 
     await expect(q.customQuery({}, 'https://evil.example/')).rejects.toBeInstanceOf(PosError)
     expect(fake).toHaveBeenCalledTimes(1)
+  })
+})
+
+const garantiAccount = () =>
+  AccountFactory.createGarantiPosAccount('garanti', '7000679', 'PROVAUT', '123qweASD/', '30691298')
+
+describe('PosQueryFactory with GarantiPos', () => {
+  it('creates a GarantiPosQuery in test mode from the shipped test config', () => {
+    const q = PosQueryFactory.createPosQuery(garantiAccount(), posTestConfig)
+    expect(q).toBeInstanceOf(GarantiPosQuery)
+    expect(q).toBeInstanceOf(AbstractMappedPosQuery)
+    expect(q.isTestMode()).toBe(true)
+  })
+
+  it('rejects an AssecoPosAccount for the garanti bank', () => {
+    expect(() => PosQueryFactory.createPosQuery(assecoAccount('garanti'), posTestConfig)).toThrow(PosError)
+  })
+
+  // addition: end to end through the real mappers, client and crypt with a fake fetch
+  function e2e(answer: string, logger?: PosLogger) {
+    const calls: Array<{ url: string; body: string }> = []
+    const fake = (async (url: string | URL | Request, init?: RequestInit) => {
+      const body = init?.body
+      calls.push({
+        url: String(url),
+        body: typeof body === 'string' ? body : Buffer.from(body as Uint8Array).toString('utf8'),
+      })
+      return new Response(answer, { status: 200 })
+    }) as typeof fetch
+    const q = PosQueryFactory.createPosQuery(garantiAccount(), posTestConfig, { fetch: fake, logger })
+    return { q, calls }
+  }
+
+  const binAnswer =
+    '<?xml version="1.0" encoding="UTF-8"?><GVPSResponse><Transaction><Response><Code>00</Code><ErrorMsg></ErrorMsg></Response></Transaction>' +
+    '<BINInqResult><BINList><BIN><BINNum>415956</BINNum><BankCode>62</BankCode><BankName>T. GARANTİ BANKASI A.Ş.</BankName>' +
+    '<Organization>VISA</Organization><CardType>C</CardType><Group>Garanti</Group><Product>GOLD</Product></BIN></BINList></BINInqResult></GVPSResponse>'
+
+  it('getBinList posts a signed bininq request and maps one BIN', async () => {
+    const { q, calls } = e2e(binAnswer)
+    const result = await q.getBinList({ ip: '127.0.0.1', bin: '415956' })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(posTestConfig.banks.garanti.gateway_endpoints.payment_api)
+    const body = calls[0]?.body ?? ''
+    expect(body).toContain('<GVPSRequest>')
+    expect(body).toContain('<Type>bininq</Type>')
+    expect(body).toContain('<BINNum>415956</BINNum>')
+    expect(body).toContain('<Version>v0.1</Version>')
+    expect(body).toContain('<Mode>TEST</Mode>')
+    expect(body).toMatch(/<HashData>[0-9A-F]{128}<\/HashData>/)
+    expect(result.status).toBe('approved')
+    expect(result.bin_list).toEqual([
+      {
+        bin: '415956',
+        bank_code: '62',
+        bank_name: 'T. GARANTİ BANKASI A.Ş.',
+        card_type: 'visa',
+        card_class: 'credit',
+        card_family: null,
+      },
+    ])
+  })
+
+  it('history posts the Türkiye wall-clock dates', async () => {
+    const { q, calls } = e2e(
+      '<GVPSResponse><Transaction><Response><Code>00</Code></Response></Transaction></GVPSResponse>',
+    )
+    const result = await q.history({
+      ip: '127.0.0.1',
+      start_date: new Date('2024-06-03T00:00:00+03:00'),
+      end_date: new Date('2024-06-04T00:00:00+03:00'),
+    })
+    const body = calls[0]?.body ?? ''
+    expect(body).toContain('<StartDate>03/06/2024 00:00</StartDate>')
+    expect(body).toContain('<EndDate>04/06/2024 00:00</EndDate>')
+    expect(body).toContain('<Type>orderlistinq</Type>')
+    expect(result.status).toBe('approved')
+  })
+
+  it('customQuery adds the terminal and a signature', async () => {
+    const { q, calls } = e2e(
+      '<GVPSResponse><Transaction><Response><Code>00</Code></Response></Transaction></GVPSResponse>',
+    )
+    const result = await q.customQuery({ Order: { OrderID: 'O1' }, Transaction: { Type: 'orderinq', Amount: '100' } })
+    const body = calls[0]?.body ?? ''
+    expect(body).toContain('<ProvUserID>PROVAUT</ProvUserID>')
+    expect(body).toMatch(/<HashData>[0-9A-F]{128}<\/HashData>/)
+    expect(result).toHaveProperty('Transaction')
+  })
+
+  it('never logs the provisioning password', async () => {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    const logger = { debug: record, info: record, warning: record, error: record } as unknown as PosLogger
+    const { q } = e2e(binAnswer, logger)
+    await q.getBinList({ ip: '127.0.0.1' })
+    await q.customQuery({ Order: { OrderID: 'O1' }, Transaction: { Type: 'orderinq', Amount: '100' } })
+    expect(lines.length).toBeGreaterThan(0)
+    expect(JSON.stringify(lines)).not.toContain('123qweASD/')
   })
 })
 
