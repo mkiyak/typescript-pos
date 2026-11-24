@@ -3,6 +3,7 @@ import { freezeConfig, type ShippedPosConfig } from './freezeConfig.js'
 /** Bank keys of `posProductionConfig`. */
 export type PosProductionBank =
   | 'akbank'
+  | 'akbank-pos'
   | 'finansbank'
   | 'garanti'
   | 'halkbank'
@@ -15,7 +16,7 @@ export type PosProductionBank =
   | 'ziraat-asseco'
 
 /**
- * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos and GarantiPos banks (the VakifBank
+ * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos and AkbankPos banks (the VakifBank
  * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default.
  *
  * Deeply frozen: spread an entry into a new object to change it
@@ -23,6 +24,15 @@ export type PosProductionBank =
  */
 export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeConfig({
   banks: {
+    'akbank-pos': {
+      name: 'AKBANK T.A.S. Akbank Pos',
+      class: 'AkbankPos',
+      gateway_endpoints: {
+        payment_api: 'https://api.akbank.com/api/v1/payment/virtualpos',
+        gateway_3d: 'https://virtualpospaymentgateway.akbank.com/securepay',
+        gateway_3d_host: 'https://virtualpospaymentgateway.akbank.com/payhosting',
+      },
+    },
     akbank: {
       name: 'AKBANK T.A.S. Asseco',
       class: 'AssecoPos',

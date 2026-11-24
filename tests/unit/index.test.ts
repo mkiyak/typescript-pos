@@ -56,7 +56,9 @@ describe('public index', () => {
         'PayFlexV4Pos',
         'PayFlexCPV4Pos',
         'GarantiPos',
+        'AkbankPos',
         'AssecoPosAccount',
+        'AkbankPosAccount',
         'GarantiPosAccount',
         'CARD_CLASS',
         'PayFlexPosAccount',
@@ -92,6 +94,12 @@ describe('public index', () => {
     const account = mod.AccountFactory.createGarantiPosAccount('garanti', 'm', 'u', 'p', 't')
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.GarantiPos)
     expect(account).toBeInstanceOf(mod.GarantiPosAccount)
+  })
+
+  it('PosFactory creates the Akbank gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createAkbankPosAccount('akbank-pos', 'm', 't', 'k')
+    expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.AkbankPos)
+    expect(account).toBeInstanceOf(mod.AkbankPosAccount)
   })
 
   it('exports the types the public API refers to', () => {

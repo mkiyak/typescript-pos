@@ -47,12 +47,14 @@ export {
   type GatewayDeps,
   type SupportedTransactions,
 } from './gateway/AbstractGateway.js'
+export { AkbankPos } from './gateway/AkbankPos.js'
 export { AssecoPos } from './gateway/AssecoPos.js'
 export { GarantiPos } from './gateway/GarantiPos.js'
 export { PayFlexCPV4Pos } from './gateway/PayFlexCPV4Pos.js'
 export { PayFlexV4Pos } from './gateway/PayFlexV4Pos.js'
 export { noopLogger, type PosLogger } from './logger.js'
 export { AbstractPosAccount } from './model/account/AbstractPosAccount.js'
+export { AkbankPosAccount } from './model/account/AkbankPosAccount.js'
 export { AssecoPosAccount } from './model/account/AssecoPosAccount.js'
 export { GarantiPosAccount } from './model/account/GarantiPosAccount.js'
 export { PayFlexPosAccount } from './model/account/PayFlexPosAccount.js'

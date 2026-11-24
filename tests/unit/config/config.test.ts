@@ -4,6 +4,7 @@ import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { PosFactory } from '../../../src/factory/PosFactory.js'
 import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
+import { AkbankPos } from '../../../src/gateway/AkbankPos.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
@@ -11,6 +12,7 @@ import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 
 const accountFor = (gatewayClass: string, key: string) => {
   if (gatewayClass === 'AssecoPos') return AccountFactory.createAssecoPosAccount(key, 'c', 'u', 'p', 'k')
+  if (gatewayClass === 'AkbankPos') return AccountFactory.createAkbankPosAccount(key, 'm', 't', 'k')
   if (gatewayClass === 'GarantiPos') return AccountFactory.createGarantiPosAccount(key, 'm', 'u', 'p', 't', 'k')
   return AccountFactory.createPayFlexPosAccount(key, 'm', 'p', 't')
 }
@@ -20,18 +22,18 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos and GarantiPos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos and AkbankPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
-      expect(['AssecoPos', 'PayFlexV4Pos', 'PayFlexCPV4Pos', 'GarantiPos']).toContain(bank.class)
+      expect(['AssecoPos', 'PayFlexV4Pos', 'PayFlexCPV4Pos', 'GarantiPos', 'AkbankPos']).toContain(bank.class)
     }
   })
 
   it.each(entries)('%s builds a gateway with a matching account type', (key, bank) => {
     const account = accountFor(bank.class, key)
     const gateway = PosFactory.createPosGateway(account, cfg)
-    const expected = { AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos }[
-      bank.class as 'AssecoPos' | 'PayFlexV4Pos' | 'PayFlexCPV4Pos' | 'GarantiPos'
+    const expected = { AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos }[
+      bank.class as 'AssecoPos' | 'PayFlexV4Pos' | 'PayFlexCPV4Pos' | 'GarantiPos' | 'AkbankPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -170,5 +172,33 @@ describe('Garanti endpoints', () => {
         gateway_3d: 'https://sanalposprovtest.garantibbva.com.tr/servlet/gt3dengine',
       },
     })
+  })
+})
+
+describe('Akbank POS endpoints', () => {
+  it('production uses the live API and payment gateway hosts', () => {
+    expect(posProductionConfig.banks['akbank-pos']).toStrictEqual({
+      name: 'AKBANK T.A.S. Akbank Pos',
+      class: 'AkbankPos',
+      gateway_endpoints: {
+        payment_api: 'https://api.akbank.com/api/v1/payment/virtualpos',
+        gateway_3d: 'https://virtualpospaymentgateway.akbank.com/securepay',
+        gateway_3d_host: 'https://virtualpospaymentgateway.akbank.com/payhosting',
+      },
+    })
+    expect(Object.isFrozen(posProductionConfig.banks['akbank-pos'])).toBe(true)
+  })
+
+  it('test uses the pre-production hosts', () => {
+    expect(posTestConfig.banks['akbank-pos']).toStrictEqual({
+      name: 'AKBANK T.A.S. Akbank Pos',
+      class: 'AkbankPos',
+      gateway_endpoints: {
+        payment_api: 'https://apipre.akbank.com/api/v1/payment/virtualpos',
+        gateway_3d: 'https://virtualpospaymentgatewaypre.akbank.com/securepay',
+        gateway_3d_host: 'https://virtualpospaymentgatewaypre.akbank.com/payhosting',
+      },
+    })
+    expect(Object.isFrozen(posTestConfig.banks['akbank-pos'].gateway_endpoints)).toBe(true)
   })
 })

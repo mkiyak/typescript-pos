@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
@@ -5,6 +6,7 @@ import { GatewayClassNotConfiguredError, PosError } from '../../../src/errors.js
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { type PosConfig, PosFactory } from '../../../src/factory/PosFactory.js'
 import type { AbstractGateway, GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
+import { AkbankPos } from '../../../src/gateway/AkbankPos.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
@@ -18,6 +20,8 @@ const payFlexAccount = (bank = 'vakifbank') =>
 
 const garantiAccount = (bank = 'garanti') =>
   AccountFactory.createGarantiPosAccount(bank, '7000679', 'PROVAUT', '123qweASD/', '30691297', '12345678')
+
+const akbankAccount = (bank = 'akbank-pos') => AccountFactory.createAkbankPosAccount(bank, 'm', 't', 'k')
 
 const config: PosConfig = {
   banks: {
@@ -79,6 +83,70 @@ describe('PosFactory.createPosGateway', () => {
     expect(gateway.getAccount()).toBe(account)
     expect(gateway.getCardTypeMapping()).toStrictEqual({}) // GarantiPos has no card type mapping
     expect(gateway.isTestMode()).toBe(true)
+  })
+
+  it('creates an AkbankPos gateway from the shipped test config', () => {
+    const account = akbankAccount()
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(AkbankPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(gateway.getCardTypeMapping()).toStrictEqual({})
+    expect(gateway.getCurrencies().length).toBeGreaterThan(0)
+  })
+
+  it('creates an AkbankPos gateway with only the required parameters', () => {
+    const cfg: PosConfig = {
+      banks: {
+        'akbank-pos': {
+          name: 'Akbank',
+          class: 'AkbankPos',
+          gateway_endpoints: {
+            payment_api: 'https://apipre.akbank.com/api/v1/payment/virtualpos',
+            gateway_3d: 'https://virtualpospaymentgatewaypre.akbank.com/securepay',
+            gateway_3d_host: 'https://virtualpospaymentgatewaypre.akbank.com/payhosting',
+          },
+        },
+      },
+    }
+    expect(PosFactory.createPosGateway(akbankAccount(), cfg)).toBeInstanceOf(AkbankPos)
+  })
+
+  // deviation: A22 the missing endpoint is a PosError
+  it('rejects an AkbankPos config without endpoints', () => {
+    const cfg: PosConfig = {
+      banks: { 'akbank-pos': { name: 'Akbank', class: 'AkbankPos', gateway_endpoints: {} as never } },
+    }
+    expect(() => PosFactory.createPosGateway(akbankAccount(), cfg)).toThrow(PosError)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-Akbank account for AkbankPos', () => {
+    expect(() => PosFactory.createPosGateway(assecoAccount('akbank-pos'), posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(assecoAccount('akbank-pos'), posTestConfig)).toThrow(/AkbankPosAccount/)
+  })
+
+  // addition: a request built through the factory is signed with the account's secret key
+  it('signs an AkbankPos cancel request end to end', async () => {
+    const sent: { url: string; body: string; hash: string | null }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      sent.push({
+        url: String(url),
+        body: String(init?.body),
+        hash: new Headers(init?.headers).get('auth-hash'),
+      })
+      return new Response('{"responseCode":"VPS-0000","responseMessage":"ok"}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as unknown as typeof fetch
+    const gateway = PosFactory.createPosGateway(akbankAccount(), posTestConfig, { fetch: fetchImpl })
+    await gateway.cancel({ id: 'o' })
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.url).toBe('https://apipre.akbank.com/api/v1/payment/virtualpos/transaction/process')
+    const expected = createHmac('sha512', Buffer.from('k', 'utf8'))
+      .update(sent[0]?.body ?? '', 'utf8')
+      .digest('base64')
+    expect(sent[0]?.hash).toBe(expected)
   })
 
   // addition: the account type must fit the gateway
@@ -241,6 +309,7 @@ describe('PosFactory.createPosGateway', () => {
       AssecoPos: (bank: string) => assecoAccount(bank),
       PayFlexV4Pos: (bank: string) => payFlexAccount(bank),
       PayFlexCPV4Pos: (bank: string) => payFlexAccount(bank),
+      AkbankPos: (bank: string) => AccountFactory.createAkbankPosAccount(bank, 'm', 't', 'k'),
       GarantiPos: (bank: string) => AccountFactory.createGarantiPosAccount(bank, 'm', 'u', 'p', 't', 'k'),
     } as const
     const entries = Object.entries(posTestConfig.banks)

@@ -1,10 +1,10 @@
 import { freezeConfig, type ShippedPosConfig } from './freezeConfig.js'
 
 /** Bank keys of `posTestConfig`. */
-export type PosTestBank = 'asseco' | 'garanti' | 'vakifbank' | 'vakifbank-cp' | 'ziraat-vpos'
+export type PosTestBank = 'akbank-pos' | 'asseco' | 'garanti' | 'vakifbank' | 'vakifbank-cp' | 'ziraat-vpos'
 
 /**
- * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos and GarantiPos banks (the VakifBank test API
+ * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos and AkbankPos banks (the VakifBank test API
  * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it; for the
  * Asseco and PayFlex gateways the environment is selected by the endpoint URLs. The `garanti` entry sets `test_mode: true`
  * because the Garanti test environment needs `Mode TEST` in every request.
@@ -14,6 +14,15 @@ export type PosTestBank = 'asseco' | 'garanti' | 'vakifbank' | 'vakifbank-cp' | 
  */
 export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
   banks: {
+    'akbank-pos': {
+      name: 'AKBANK T.A.S. Akbank Pos',
+      class: 'AkbankPos',
+      gateway_endpoints: {
+        payment_api: 'https://apipre.akbank.com/api/v1/payment/virtualpos',
+        gateway_3d: 'https://virtualpospaymentgatewaypre.akbank.com/securepay',
+        gateway_3d_host: 'https://virtualpospaymentgatewaypre.akbank.com/payhosting',
+      },
+    },
     asseco: {
       name: 'Asseco/Payten',
       class: 'AssecoPos',
