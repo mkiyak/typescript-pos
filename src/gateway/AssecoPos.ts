@@ -4,13 +4,13 @@ import type { CreditCard } from '../model/card/CreditCard.js'
 import { FORM_FORMAT, type FormFormat, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
 import { ownValue } from '../util/ownValue.js'
+import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
 
 /** Largest difference between the callback amount and the order amount still treated as equal. */
 const AMOUNT_TOLERANCE = 0.005
 
 /** A plain decimal number (no hex, exponent, Infinity or empty string, which `Number()` would accept). */
-const DECIMAL = /^\s*[+-]?(\d+(\.\d*)?|\.\d+)\s*$/
 
 /** Callback `storetype` values (compared case-insensitively) accepted by each payment method. */
 const STORE_TYPES_3D = ['3d'] as const
@@ -194,8 +194,8 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
       throw new OrderMismatchError('order_id', expectedId, actualId, response)
     }
 
-    const callbackAmount = parseAmount(callback.amount)
-    const orderAmount = parseAmount(order.amount)
+    const callbackAmount = parseOrderAmount(callback.amount)
+    const orderAmount = parseOrderAmount(order.amount)
     // NaN (missing or non-numeric on either side) never matches
     if (!(Math.abs(callbackAmount - orderAmount) < AMOUNT_TOLERANCE)) {
       const expectedAmount = asText(order.amount)
@@ -208,15 +208,6 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
       throw new OrderMismatchError('amount', expectedAmount, actualAmount, response)
     }
   }
-}
-
-/** A finite amount from a number or a plain decimal string; NaN otherwise. */
-function parseAmount(value: unknown): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : Number.NaN
-  }
-
-  return typeof value === 'string' && DECIMAL.test(value) ? Number(value) : Number.NaN
 }
 
 function asText(value: unknown): string {

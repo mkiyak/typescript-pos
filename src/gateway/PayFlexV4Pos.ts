@@ -18,6 +18,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
+import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
 
 type Raw = Record<string, unknown>
@@ -32,7 +33,6 @@ const AMOUNT_TOLERANCE = 0.005
 const CALLBACK_AMOUNT = /^\d+(\.\d{2})?$/
 
 /** A plain decimal order amount (no hex, exponent or Infinity, which `Number()` would accept). */
-const DECIMAL = /^\s*[+-]?(\d+(\.\d*)?|\.\d+)\s*$/
 
 /** A nested record of a decoded bank response, or an empty one. */
 function record(data: unknown, key: string): Raw {
@@ -55,13 +55,6 @@ function parseCallbackAmount(value: unknown): number {
   if (typeof value !== 'string' || !CALLBACK_AMOUNT.test(value)) return Number.NaN
 
   return Number(value.replace('.', '')) / 100
-}
-
-/** A finite order amount from a number or a plain decimal string; NaN otherwise. */
-function parseOrderAmount(value: unknown): number {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NaN
-
-  return typeof value === 'string' && DECIMAL.test(value) ? Number(value) : Number.NaN
 }
 
 function asText(value: unknown): string {

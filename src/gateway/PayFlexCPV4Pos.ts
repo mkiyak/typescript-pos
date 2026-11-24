@@ -20,6 +20,7 @@ import {
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
 import { numberFormat2 } from '../util/numberFormat2.js'
+import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { AbstractGateway, type GatewayConfig, type GatewayDeps, type SupportedTransactions } from './AbstractGateway.js'
 
 type Raw = Record<string, unknown>
@@ -38,7 +39,6 @@ const NO_IDS_MESSAGE =
   'Callback carries no TransactionId or PaymentToken; the result cannot be confirmed with the bank.'
 
 /** A plain decimal order amount (no hex, exponent or Infinity, which `Number()` would accept). */
-const DECIMAL = /^\s*[+-]?(\d+(\.\d*)?|\.\d+)\s*$/
 
 const ALTERNATIVE =
   'use a PayFlexV4Pos gateway (bank "vakifbank") with transaction_id = the common payment TransactionId'
@@ -94,14 +94,8 @@ function answerCents(v: unknown): bigint | null {
  * null when the amount is not a finite number or a plain decimal string.
  */
 function orderCents(v: unknown): bigint | null {
-  let amount: number
-  if (typeof v === 'number') {
-    amount = v
-  } else if (typeof v === 'string' && DECIMAL.test(v)) {
-    amount = Number(v)
-  } else {
-    return null
-  }
+  const amount = parseOrderAmount(v)
+  if (Number.isNaN(amount)) return null
 
   try {
     return BigInt(numberFormat2(amount).replace('.', ''))
