@@ -42,7 +42,7 @@ const pos = PosFactory.createPosGateway(account, posTestConfig) // or posProduct
   created, so nothing is ever signed or sent with a missing value. A blank sub-merchant id means no sub-merchant.
 - Every request carries an `auth-hash` header, the HMAC of the exact request body with the secret key. Requests also
   carry the current Türkiye time and the bank rejects them when it is off, so keep the server clock correct (NTP).
-- `success_url` and `fail_url` are required for the 3D form, and the card page needs the customer's `ip`. Banks and their
+- `success_url` and `fail_url` are required for the 3D form. Banks and their
   firewalls usually need public HTTPS URLs without `localhost`.
 
 ## Flow
@@ -75,11 +75,13 @@ concatenation of its values, so ids with a single shape keep it unambiguous wher
   callback whose decisive fields are malformed throws `HashMismatchError`, and so does a wrong hash. Comparisons are
   constant time. A callback value that is not a plain string (an object or an array) is rejected with `PosError`
   before anything else.
-- **The callback is bound to the order.** Merchant safe id, terminal safe id and order id must equal your account and
-  `order.id`; a mismatch throws `OrderMismatchError` (`field` names the value). For 3D Secure all checks run before the
-  provision request, and the request always uses your own order id, amount, currency and installment, never values from
-  the callback. Declined callbacks are not bound to an order by the library: load the order from the customer's
-  session, never from a field of the callback.
+- **The callback is bound to the order.** A mismatch throws `OrderMismatchError` (`field` names the value).
+  - 3D Pay and 3D Host: the order id of every callback, a decline included, must equal `order.id`; the merchant and
+    terminal safe ids must equal your account's for an approved callback.
+  - 3D Secure: for a 3D-successful callback the order id, merchant and terminal safe ids are checked before the
+    provision request, which always uses your own order id, amount, currency and installment, never values from the
+    callback. A 3D Secure callback without 3D success is mapped as declined without these checks.
+  - In every model, load the order from the customer's session, never from a field of the callback.
 - **3D Pay and 3D Host approvals are confirmed with the bank.** The callback carries no amount, so before `approved` is
   returned the library sends one signed order-history request and requires an approved, completed transaction of the
   requested type for your order amount and currency. If the bank does not confirm it, the call throws

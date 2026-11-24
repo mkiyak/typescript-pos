@@ -17,7 +17,7 @@ ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
 | `PayFlexV4Pos` | VakıfBank (port 8443), Ziraat (PayFlex)                                                       | Unit-tested. VakıfBank public TEST environment, verified live on 2026-11-23: 3D enrollment (Status `Y`), non-3D Sale (`0000`) and Cancel (`0000`). |
 | `PayFlexCPV4Pos` | VakıfBank (Common Payment hosted page, port 8443) | Unit-tested. |
 | `GarantiPos` | Garanti BBVA | Unit-tested; hashes and amount format differential-tested against PHP. |
-| `AkbankPos` | Akbank (virtual POS API) | Unit-tested; signatures and amount format differential-tested against PHP. |
+| `AkbankPos` | Akbank (virtual POS API) | Unit-tested; request signature, 3D hashes and amount format differential-tested against PHP (0 mismatches in 1000 random sets each). |
 
 ## Install
 
@@ -162,7 +162,7 @@ with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.c
 3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `GarantiPos` always verifies a signed callback and accepts an unsigned one only as a decline (`require_3d_hash: true` rejects it too); `AkbankPos` always requires a valid hash for 3D Pay, 3D Host and successful 3D Secure callbacks, and confirms approved 3D Pay/Host results with the bank; `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`.
 4. Sensitive data (PAN, CVV, expiry, passwords, store keys) is masked before it reaches the logger.
 5. Constant-time hash comparison; the Asseco hash uses the exact natural, case-insensitive key ordering the bank expects.
-6. Extra Asseco and Garanti safeguards: the returned order id, amount and payment model (Garanti: also terminal and currency) are compared with the order
+6. Extra Asseco, Garanti and Akbank safeguards: the returned order id, amount and payment model (Garanti: also terminal and currency) are compared with the order
    (`OrderMismatchError`, with `paymentMayHaveCompleted` when the bank approved); an authorized-but-3D-failed
    response is declined and flagged `requires_manual_review`.
 7. Extra PayFlex safeguards: strict 3D rule (Status `Y`, ECI `02`/`05`, CAVV, `MdStatus` 1 when present), callback

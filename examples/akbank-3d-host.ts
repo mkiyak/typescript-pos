@@ -3,6 +3,7 @@
 import {
   AccountFactory,
   HashMismatchError,
+  MissingAccountInfoError,
   MODEL,
   OrderMismatchError,
   PosFactory,
@@ -15,7 +16,7 @@ import {
 function env(name: string): string {
   const value = process.env[name]
   if (value === undefined || value.trim() === '') {
-    throw new Error(`Missing environment variable ${name}`)
+    throw new MissingAccountInfoError(`Missing environment variable ${name}`)
   }
   return value
 }
