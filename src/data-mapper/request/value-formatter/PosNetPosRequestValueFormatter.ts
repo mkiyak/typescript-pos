@@ -7,7 +7,6 @@ import type { RequestValueFormatterInterface } from './RequestValueFormatterInte
 /** The bank's order number field is 20 characters wide; lookups and reversals use 24 (prefix included). */
 const ORDER_ID_LENGTH = 20
 const ORDER_ID_TOTAL_LENGTH = 24
-const ORDER_ID_3D_PREFIX = 'TDSC'
 
 /**
  * Only characters that are safe in the raw form body and the signed strings: the id is posted unescaped and signed
@@ -18,6 +17,9 @@ const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,20}$/
 const LOOKUP_TX_TYPES: readonly TxType[] = [TX_TYPE.STATUS, TX_TYPE.REFUND, TX_TYPE.REFUND_PARTIAL, TX_TYPE.CANCEL]
 
 export class PosNetPosRequestValueFormatter implements RequestValueFormatterInterface {
+  /** The bank keeps its own 3D payments under this prefix; the sibling JSON API uses another one. */
+  protected readonly threeDPrefix: string = 'TDSC'
+
   static supports(gatewayClass: string): boolean {
     return gatewayClass === 'PosNetPos'
   }
@@ -59,7 +61,7 @@ export class PosNetPosRequestValueFormatter implements RequestValueFormatterInte
     if (txType !== null && LOOKUP_TX_TYPES.includes(txType)) {
       padLength = ORDER_ID_TOTAL_LENGTH
       if (orderPaymentModel === MODEL.THREE_D_SECURE) {
-        prefix = ORDER_ID_3D_PREFIX
+        prefix = this.threeDPrefix
       }
     }
 
