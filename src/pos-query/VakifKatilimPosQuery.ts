@@ -1,3 +1,5 @@
+import type { PosQueryHistoryResponse } from '../data-mapper/pos-query/response/QueryResponseDataMapperInterface.js'
+import { redactRawHashPassword } from '../gateway/boaCallback.js'
 import { VakifKatilimPos } from '../gateway/VakifKatilimPos.js'
 import type { BoaPosAccount } from '../model/account/BoaPosAccount.js'
 import { AbstractMappedPosQuery } from './AbstractMappedPosQuery.js'
@@ -13,5 +15,18 @@ export class VakifKatilimPosQuery extends AbstractMappedPosQuery<BoaPosAccount> 
   protected static override supportedQueries: Partial<Record<QueryType, boolean>> = {
     custom_query: true,
     history: true,
+  }
+
+  /** The bank may echo the hashed API password, the merchant's signing secret: it never reaches the caller. */
+  override async customQuery(
+    requestData: Record<string, unknown>,
+    apiUrl?: string | null,
+  ): Promise<Record<string, unknown>> {
+    return redactRawHashPassword(await super.customQuery(requestData, apiUrl))
+  }
+
+  override async history(data: Record<string, unknown>): Promise<PosQueryHistoryResponse> {
+    const result = await super.history(data)
+    return Object.hasOwn(result, 'all') ? { ...result, all: redactRawHashPassword(result.all) } : result
   }
 }

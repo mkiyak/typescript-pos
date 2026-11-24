@@ -1,3 +1,4 @@
+import { ORDER_ID_PATTERN } from '../data-mapper/request/mapper/boaOrderFields.js'
 import { TX_DECLINED } from '../data-mapper/response/mapper/ResponseDataMapperInterface.js'
 import { type OrderMismatchField, PosError } from '../errors.js'
 import type { PaymentModel, TxType } from '../PosInterface.js'
@@ -11,9 +12,6 @@ import type { PosOrder, PosResponse } from '../types.js'
 
 /** The response code of an authenticated card and of an approved payment. */
 export const SUCCESS_CODE = '00'
-
-/** Order ids are plain ASCII so that the signed bytes are unambiguous. */
-const ORDER_ID = /^[A-Za-z0-9_-]{1,64}$/
 
 /** The bank's own order id: a positive whole number without leading zeros. */
 export const BANK_ORDER_ID = /^[1-9]\d{0,18}$/
@@ -99,11 +97,11 @@ export function echo(value: unknown): string {
   return asText(value).slice(0, MAX_ECHOED_LENGTH)
 }
 
-/** The order id every binding compares with: letters, digits, `_` and `-`, at most 64 characters. */
+/** The order id every binding compares with: letters, digits, `_` and `-`, at most 64 characters, first a letter or digit. */
 export function boaOrderId(order: PosOrder): string {
   const id: unknown = order.id
   const text = typeof id === 'string' || (typeof id === 'number' && Number.isFinite(id)) ? String(id) : ''
-  if (!ORDER_ID.test(text)) {
+  if (!ORDER_ID_PATTERN.test(text)) {
     throw new PosError('The order id may only hold letters, digits, underscores and hyphens (at most 64).')
   }
 
@@ -150,6 +148,11 @@ export function redactHashPassword(response: PosResponse): PosResponse {
   }
 
   return result
+}
+
+/** A bank answer kept as is, except that every echoed `HashPassword` value is replaced. */
+export function redactRawHashPassword<T>(raw: T): T {
+  return withoutHashPassword(raw) as T
 }
 
 /**

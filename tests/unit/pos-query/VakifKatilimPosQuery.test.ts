@@ -141,4 +141,16 @@ describe('VakifKatilimPosQuery', () => {
     await expect(call(q)).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
     expect(stub.request).not.toHaveBeenCalled()
   })
+  // addition: the echoed hashed API password is the merchant's signing secret and must not reach the caller
+  it('redacts an echoed HashPassword in custom query and history results', async () => {
+    const { q, stub, responseMapper } = setup()
+    stub.request.mockResolvedValueOnce({ HashPassword: 'secret', Nested: { hashpassword: 'secret2' }, Ok: 'x' })
+    const custom = await q.customQuery({ a: 1 })
+    expect(custom).toEqual({ HashPassword: '***', Nested: { hashpassword: '***' }, Ok: 'x' })
+
+    responseMapper.mapHistoryResponse.mockReturnValueOnce({ status: 'approved', all: { HashPassword: 'secret' } })
+    const history = await q.history({})
+    expect(history.all).toEqual({ HashPassword: '***' })
+    expect(JSON.stringify(history)).not.toContain('secret')
+  })
 })
