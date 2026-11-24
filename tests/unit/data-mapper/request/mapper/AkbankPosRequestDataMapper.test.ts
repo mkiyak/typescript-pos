@@ -662,6 +662,44 @@ describe('AkbankPosRequestDataMapper', () => {
       expect(JSON.stringify(body)).not.toContain('undefined')
     })
 
+    // addition: F7 recurring options are validated and the validated values are sent
+    it.each([
+      [{ frequency: {}, frequencyType: 'MONTH', installment: 4 }],
+      [{ frequency: [1], frequencyType: 'MONTH', installment: 4 }],
+      [{ frequency: 1, frequencyType: 'MONTH', installment: { n: 4 } }],
+      [{ frequency: 0, frequencyType: 'MONTH', installment: 4 }],
+      [{ frequency: 1, frequencyType: 'MONTH', installment: -2 }],
+      [{ frequency: 1.5, frequencyType: 'MONTH', installment: 4 }],
+      [{ frequency: 'x', frequencyType: 'MONTH', installment: 4 }],
+      [{ frequency: 1, frequencyType: 'MONTH', installment: '4 ' }],
+    ])('rejects the recurring options %j', (recurring) => {
+      expect(() =>
+        mapper.createNonSecurePaymentRequestData(
+          account,
+          { id: 'A', amount: 1, ip: '1.1.1.1', recurring } as unknown as PosOrder,
+          TX_TYPE.PAY_AUTH,
+          card,
+        ),
+      ).toThrow(PosError)
+    })
+
+    // addition: F7
+    it('sends digit strings of the recurring options as numbers', () => {
+      const body = mapper.createNonSecurePaymentRequestData(
+        account,
+        { id: 'A', amount: 1, ip: '1.1.1.1', recurring: { frequency: '2', frequencyType: 'MONTH', installment: '12' } },
+        TX_TYPE.PAY_AUTH,
+        card,
+      )
+      expect(body.recurring).toStrictEqual({ frequencyInterval: 2, frequencyCycle: 'M', numberOfPayments: 12 })
+    })
+
+    // addition: F7 an empty recurring_id counts as unset
+    it('order history by order id when recurring_id is empty', () => {
+      const body = mapper.createOrderHistoryRequestData(account, { id: 'A', recurring_id: '' })
+      expect(body.order).toStrictEqual({ orderId: 'A' })
+    })
+
     // addition: A12 (the Türkiye wall clock, UTC+03:00)
     it('stamps the request with the +03:00 wall clock', () => {
       const body = mapper.createOrderHistoryRequestData(account, { id: 'A' })

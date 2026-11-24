@@ -186,4 +186,12 @@ describe('maskSensitiveData', () => {
     expect(form).toContain('expiredDate=***')
     expect(form).toContain('cvv=***')
   })
+
+  // addition: F6 a string body echoing the request header
+  it('masks an auth-hash value inside a string body', () => {
+    const body = maskSensitiveData('{"auth-hash":"c2VjcmV0U2lnbmF0dXJl","other":"x"}')
+    expect(body).toContain('"auth-hash":"***"')
+    expect(body).not.toContain('c2VjcmV0U2lnbmF0dXJl')
+    expect(body).toContain('"other":"x"')
+  })
 })

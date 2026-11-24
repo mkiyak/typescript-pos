@@ -175,9 +175,10 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       txnCode: this.valueMapper.mapTxType(TX_TYPE.ORDER_HISTORY, MODEL.NON_SECURE),
       requestDateTime: this.now(),
       randomNumber: this.crypt.generateRandomString(),
-      order: isSet(order.recurring_id)
-        ? { orderTrackId: String(order.recurring_id) }
-        : { orderId: String(required(order, 'id')) },
+      order:
+        isSet(order.recurring_id) && order.recurring_id !== ''
+          ? { orderTrackId: String(order.recurring_id) }
+          : { orderId: String(required(order, 'id')) },
     }
   }
 
@@ -256,14 +257,29 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
 
   private createRecurringData(recurring: Record<string, unknown>): Record<string, unknown> {
     const what = 'Recurring'
-    // The values are validated here and sent as given (numbers stay numbers).
-    requiredString(recurring, 'frequency', what)
-    requiredString(recurring, 'installment', what)
+    const frequencyInterval = positiveInteger(recurring, 'frequency', what)
+    const numberOfPayments = positiveInteger(recurring, 'installment', what)
 
     return {
-      frequencyInterval: recurring.frequency,
+      frequencyInterval,
       frequencyCycle: this.valueMapper.mapRecurringFrequency(requiredString(recurring, 'frequencyType', what)),
-      numberOfPayments: recurring.installment,
+      numberOfPayments,
     }
   }
+}
+
+/** A recurring option that must be a positive whole number (given as a number or as digits); sent as a number. */
+function positiveInteger(data: Record<string, unknown>, key: string, what: string): number {
+  const value = data[key]
+  const number =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^[1-9]\d*$/.test(value)
+        ? Number(value)
+        : Number.NaN
+  if (!Number.isSafeInteger(number) || number < 1) {
+    throw new PosError(`${what} field "${key}" must be a positive whole number`)
+  }
+
+  return number
 }
