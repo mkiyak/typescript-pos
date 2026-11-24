@@ -43,6 +43,7 @@ const SENSITIVE_KEYS = new Set([
   'cardno',
   'enckey',
   'mac',
+  'payerauthenticationcode',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -80,6 +81,7 @@ const SENSITIVE_TAGS = [
   'CardNo',
   'encKey',
   'mac',
+  'PayerAuthenticationCode',
 ]
 const XML_PATTERN = new RegExp(`(<(${SENSITIVE_TAGS.join('|')})(?:\\s[^>]*)?>)[^<]*(</\\2\\s*>)`, 'gi')
 const QUERY_PATTERN = new RegExp(`(?<![A-Za-z0-9_])(${SENSITIVE_TAGS.join('|')})=[^&\\s"']*`, 'gi')

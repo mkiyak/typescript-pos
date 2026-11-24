@@ -272,4 +272,38 @@ describe('maskSensitiveData', () => {
     expect(out).toContain('Hash=abc')
     expect(out).not.toContain('4155650100416111')
   })
+
+  // addition: F26
+  it('masks the CAVV and the InterPos card fields in objects', () => {
+    const out = maskSensitiveData({
+      PayerAuthenticationCode: 'AAABBJkZUQAAAAAAAAAAAAAAAAA=',
+      UserPass: '3',
+      Pan: '5555444433332222',
+      Expiry: '1221',
+      Cvv2: '122',
+    })
+    for (const value of Object.values(out)) expect(value).toBe('***')
+  })
+
+  // addition: F26
+  it('masks InterPos form fields and keeps the identifiers and the hash readable', () => {
+    const out = maskSensitiveData(
+      'ShopCode=3123&UserCode=InterTestApi&UserPass=3&Pan=5555444433332222&Expiry=1221&Cvv2=122&PayerAuthenticationCode=AAAB%3D&Hash=abc',
+    )
+    for (const name of ['UserPass', 'Pan', 'Expiry', 'Cvv2', 'PayerAuthenticationCode']) {
+      expect(out).toContain(`${name}=***`)
+    }
+    expect(out).toContain('ShopCode=3123')
+    expect(out).toContain('UserCode=InterTestApi')
+    expect(out).toContain('Hash=abc')
+    expect(out).not.toContain('5555444433332222')
+    expect(out).not.toContain('AAAB')
+  })
+
+  // addition: F26
+  it('never shows a full card number in a ;; separated bank body', () => {
+    const out = maskSensitiveData('OrderId=1;;Pan=5400615555550430;;ProcReturnCode=00;;Cardno=5400615555550430')
+    expect(out).not.toMatch(/\d{16}/)
+    expect(maskSensitiveData('OrderId=1;;Pan=540061******0430;;ProcReturnCode=00')).not.toMatch(/\d{16}/)
+  })
 })

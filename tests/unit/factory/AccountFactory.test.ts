@@ -5,6 +5,7 @@ import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { AkbankPosAccount } from '../../../src/model/account/AkbankPosAccount.js'
 import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js'
 import { GarantiPosAccount } from '../../../src/model/account/GarantiPosAccount.js'
+import { InterPosAccount } from '../../../src/model/account/InterPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../../../src/model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../../../src/model/account/PosNetPosAccount.js'
@@ -273,6 +274,48 @@ describe('AccountFactory PayFor', () => {
   })
 })
 
+describe('AccountFactory InterPos', () => {
+  it('testCreateInterPosAccountNonSecure', () => {
+    const a = AccountFactory.createInterPosAccount('denizbank', 'shop-code', 'user-code', 'user-pass')
+    expect(a).toBeInstanceOf(InterPosAccount)
+    expect(a.getBankName()).toBe('denizbank')
+    expect(a.getMerchantId()).toBe('shop-code')
+    expect(a.getUsername()).toBe('user-code')
+    expect(a.getPassword()).toBe('user-pass')
+    // addition: F1 (no merchant pass means 3D is unavailable)
+    expect(() => a.getSecretKey()).toThrow(MissingAccountInfoError)
+  })
+
+  it('testCreateInterPosAccount3DSecure', () => {
+    const a = AccountFactory.createInterPosAccount('denizbank', 'shop-code', 'user-code', 'user-pass', 'merchant-pass')
+    expect(a).toBeInstanceOf(InterPosAccount)
+    expect(a.getBankName()).toBe('denizbank')
+    expect(a.getMerchantId()).toBe('shop-code')
+    expect(a.getUsername()).toBe('user-code')
+    expect(a.getPassword()).toBe('user-pass')
+    expect(a.getSecretKey()).toBe('merchant-pass')
+  })
+
+  // addition: F1
+  it.each([
+    ['shopCode', ['', 'u', 'p']],
+    ['shopCode', ['  ', 'u', 'p']],
+    ['userCode', ['s', '', 'p']],
+    ['userCode', ['s', '  ', 'p']],
+    ['userPass', ['s', 'u', '']],
+    ['userPass', ['s', 'u', '  ']],
+  ] as const)('rejects a blank %s', (_n, [s, u, p]) => {
+    expect(() => AccountFactory.createInterPosAccount('denizbank', s, u, p)).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: F1
+  it.each(['', ' '])('rejects a blank merchantPass %j', (pass) => {
+    expect(() => AccountFactory.createInterPosAccount('denizbank', 's', 'u', 'p', pass)).toThrow(
+      MissingAccountInfoError,
+    )
+  })
+})
+
 describe('account credential leakage', () => {
   const accounts = [
     ['Asseco', () => AccountFactory.createAssecoPosAccount('akbank', 'mid', 'USER1', 'PW1', 'SK1')],
@@ -298,6 +341,8 @@ describe('account credential leakage', () => {
       'PayFor',
       () => AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'mid', 'USER1', 'UcBN0', '12345678'),
     ],
+    // addition: F1
+    ['InterPos', () => AccountFactory.createInterPosAccount('denizbank', 'mid', 'USER1', 'user-pass', 'merchant-pass')],
   ] as const
 
   it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
@@ -316,6 +361,8 @@ describe('account credential leakage', () => {
         '27426457',
         'UcBN0',
         '12345678',
+        'user-pass',
+        'merchant-pass',
       ])
         expect(out).not.toContain(secret)
     }
