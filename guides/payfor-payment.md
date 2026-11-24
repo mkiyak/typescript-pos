@@ -86,7 +86,9 @@ itself.
   the bank holds an approved payment of the order. Its result (returned or in `error.response`) carries none of the
   callback's values: the order id is your order's, and the authorization code, time, host reference, masked card
   number, amount, currency and installment count come from the bank's record (otherwise `null`); only `all` keeps the
-  raw callback, which you must treat as untrusted. `require_3d_hash: true` in the bank's config also rejects unsigned
+  raw callback, which you must treat as untrusted. The decline reasons of an unsigned declined callback
+  (`proc_return_code`, `error_code`, `error_message`, `md_status`, `md_error_message`) come from the callback itself
+  and are informational only. `require_3d_hash: true` in the bank's config also rejects unsigned
   decline callbacks.
 - **The callback is bound to the order.** The order id, amount, currency, transaction type, installment count and
   model echoed in the callback must match the order, and the merchant and institution codes your account; a mismatch

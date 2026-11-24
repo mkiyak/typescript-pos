@@ -50,6 +50,18 @@ const VOID_OR_REFUND_FIELDS = ['VoidDate', 'VoidTime', 'RefundedAmount'] as cons
 /** Status record flags of a cancellation or a full refund; on an open payment they read `false`. */
 const VOID_OR_REFUND_FLAGS = ['IsVoided', 'IsRefunded'] as const
 
+/** Informational decline fields an unsigned declined callback may keep, as bounded plain text. */
+const DECLINE_REASON_FIELDS = [
+  'proc_return_code',
+  'error_code',
+  'error_message',
+  'md_status',
+  'md_error_message',
+] as const
+
+/** The longest decline reason kept from an unsigned callback. */
+const MAX_DECLINE_REASON_LENGTH = 256
+
 /** Callback key names and values are attacker controlled; only this much of one is echoed in errors and logs. */
 const MAX_ECHOED_LENGTH = 64
 
@@ -146,7 +158,10 @@ type HostedModel = typeof MODEL.THREE_D_PAY | typeof MODEL.THREE_D_HOST
  *   (see below). The result of an unsigned callback, returned or attached to an error, carries none of its values:
  *   the order id is the order's, and the authorization code, time, host reference, masked card number, amount,
  *   currency and installment count come from the bank's status record when it was read (otherwise null); codes,
- *   messages, batch number, ECI and transaction id are null. Only `all` keeps the raw (untrusted) callback.
+ *   messages, batch number, ECI and transaction id are null. Only `all` keeps the raw (untrusted) callback. The
+ *   exception is a decline decided without the bank's record: its decline reasons (return and error codes, error
+ *   message, 3D status and 3D error message) come from the callback itself as plain text of at most 256 characters
+ *   and are informational only.
  * - The signed values have no separators, so after the hash verifies the fields that keep the boundaries fixed must be
  *   well formed, otherwise `HashMismatchError('3D callback fields are malformed')`: `ResponseRnd` is `PF` and digits;
  *   a successful 3D Secure authentication (`3DStatus` 1) carries no authorization code and a return code of one
@@ -395,7 +410,7 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
     }
 
     if (response.status !== TX_APPROVED) {
-      return signed ? response : this.unsignedResult(response, order, txType, paymentModel, null)
+      return signed ? response : this.unsignedResult(response, order, txType, paymentModel, null, true)
     }
 
     if (ownText(callback, '3DStatus') !== THREE_D_SUCCESS) {
@@ -429,7 +444,9 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
    * dropped (null) and replaced by the order's id, the requested transaction type and payment model and, when the
    * bank's status record of the order was read, the record's authorization code, time, host reference, masked card
    * number, amount, currency and installment count. Only the decided `status`, `requires_manual_review` and the raw
-   * data (`all`, untrusted) are kept.
+   * data (`all`, untrusted) are kept. A declined result that no bank record was read for may keep the callback's
+   * decline reasons (`keepDeclineReasons`): they grant nothing, and a merchant needs them for a genuine decline, so
+   * they stay as informational plain text of bounded length (anything but a string becomes null).
    */
   private unsignedResult(
     response: PosResponse,
@@ -437,10 +454,18 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
     txType: TxType,
     paymentModel: PaymentModel,
     record: PosResponse | null,
+    keepDeclineReasons = false,
   ): PosResponse {
     const result: PosResponse = { ...response }
     for (const key of Object.keys(result)) {
       if (key !== 'status' && key !== 'requires_manual_review' && key !== 'all') result[key] = null
+    }
+    if (keepDeclineReasons && record === null && response.status === TX_DECLINED) {
+      for (const key of DECLINE_REASON_FIELDS) {
+        if (!Object.hasOwn(response, key)) continue
+        const reason: unknown = response[key]
+        result[key] = typeof reason === 'string' ? reason.slice(0, MAX_DECLINE_REASON_LENGTH) : null
+      }
     }
     const fromRecord = (key: string): unknown => (record === null ? null : (record[key] ?? null))
 
@@ -482,7 +507,7 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
           e.field,
           e.expected,
           e.actual,
-          this.unsignedResult(response, order, txType, paymentModel, null),
+          this.unsignedResult(response, order, txType, paymentModel, null, true),
         )
       }
       const record = await this.bankRecord(order)

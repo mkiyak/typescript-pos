@@ -805,6 +805,36 @@ describe('PayForPos (mocked collaborators)', () => {
         expectNoRequest()
       })
 
+      // addition: the decline reasons of an unsigned declined callback are kept as plain, bounded text
+      it('an unsigned decline keeps string reasons cut to 256 characters and nulls other shapes', async () => {
+        const callback: Data = { ...success(), ProcReturnCode: '05' }
+        delete callback.ResponseHash
+        responseMapper[mapperMethod].mockReturnValue({
+          status: 'declined',
+          order_id: 'FORGED',
+          proc_return_code: '05',
+          error_code: { code: '05' },
+          error_message: 'x'.repeat(1000),
+          md_status: ['1'],
+          md_error_message: 'Not authenticated',
+          auth_code: 'S86797',
+          batch_num: '4320',
+        })
+
+        const result = (await pos.payment(paymentModel, order, TX_TYPE.PAY_AUTH, null, cb(callback))) as Data
+
+        expect(result.status).toBe('declined')
+        expect(result.order_id).toBe(order.id)
+        expect(result.proc_return_code).toBe('05')
+        expect(result.error_code).toBeNull()
+        expect(result.error_message).toBe('x'.repeat(256))
+        expect(result.md_status).toBeNull()
+        expect(result.md_error_message).toBe('Not authenticated')
+        expect(result.auth_code).toBeNull()
+        expect(result.batch_num).toBeNull()
+        expectNoRequest()
+      })
+
       // addition: the status response decides; a declined status is an order_status mismatch
       it('a status answer that does not confirm the payment is OrderMismatchError', async () => {
         crypt.check3DHash.mockReturnValue(true)
@@ -1392,6 +1422,26 @@ describe('PayForPos (end to end) 3D Pay and 3D Host', () => {
       expect(sent).toHaveLength(0)
     })
 
+    // addition: a genuine unsigned decline keeps its reason (informational only), nothing else of the callback
+    it('maps an unsigned QNB decline declined with its reason and no request', async () => {
+      const callback = authFail()
+      delete callback.ResponseHash
+      const { sent, promise } = run(callback, {
+        ...order,
+        id: callback.OrderId,
+        installment: Number(callback.InstallmentCount),
+      })
+      const res = (await promise) as Data
+      expect(res.status).toBe('declined')
+      expect(res.order_id).toBe(callback.OrderId)
+      expect(res.proc_return_code).toBe(callback.ProcReturnCode)
+      expect(res.error_message).toBe(callback.ErrMsg)
+      expect(res.md_status).toBe(callback['3DStatus'])
+      expect(res.auth_code).toBeNull()
+      expect(res.ref_ret_num).toBeNull()
+      expect(sent).toHaveLength(0)
+    })
+
     it('rejects an unsigned approved callback on the QNB account', async () => {
       const callback = success()
       delete callback.ResponseHash
@@ -1745,12 +1795,19 @@ describe('PayForPos (end to end) Ziraat Katılım', () => {
       expect(sent).toHaveLength(1)
     })
 
-    it('an unsigned declined result carries no callback values and sends nothing', async () => {
+    it('an unsigned declined result keeps only its decline reasons and sends nothing', async () => {
       const { sent, promise } = run(unsigned({ ...forged, ProcReturnCode: '05' }))
       const res = (await promise) as Data
       expect(res.status).toBe('declined')
-      expectNoCallbackValues(res)
+      // the decline reasons are the callback's own text, informational only
+      expect(res.proc_return_code).toBe('05')
+      expect(res.error_message).toBe('<b>forged</b>')
+      expect(res.md_status).toBe('1')
+      const { proc_return_code: _p, error_code: _c, error_message: _m, md_status: _s, ...rest } = res
+      expectNoCallbackValues({ ...rest, error_message: null, md_status: null })
       expect(res.auth_code).toBeNull()
+      expect(res.ref_ret_num).toBeNull()
+      expect(res.masked_number).toBeNull()
       expect(sent).toHaveLength(0)
     })
 
