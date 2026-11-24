@@ -20,6 +20,10 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
   echoed order id, amount, currency, transaction type, installment count and model are bound to your order
   (`OrderMismatchError`), and every approved 3D result is confirmed with a status request before it is returned. A
   Ziraat Katılım callback without a signature never approves a payment by itself.
+- **InterPos (`InterPos`).** The callback is verified over the bank's fixed field list for every model and can never be
+  switched off; the signed order id, amount and currency are bound to your order (`OrderMismatchError`), and every
+  approved 3D Pay / 3D Host result is confirmed with a status request before it is returned. An unsigned callback can
+  only become a decline.
 - **POSNET (`PosNetPos`).** The 3D result is decrypted by the bank and its MAC is verified before any money moves;
   the bank-resolved order id, amount, currency and installment count must equal your order's (`OrderMismatchError`,
   nothing charged). The check cannot be disabled.
