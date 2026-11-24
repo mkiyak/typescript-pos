@@ -82,10 +82,12 @@ export abstract class AbstractPosQuery<A extends AbstractPosAccount = AbstractPo
   }
 
   static supports(gatewayClass: string): boolean {
+    // biome-ignore lint/complexity/noThisInStatic: late static binding, reads the subclass table
     return this.GATEWAY_CLASS !== '' && gatewayClass === this.GATEWAY_CLASS
   }
 
   static isSupportedQuery(queryType: string): boolean {
+    // biome-ignore lint/complexity/noThisInStatic: late static binding, reads the subclass table
     return Object.hasOwn(this.supportedQueries, queryType) && this.supportedQueries[queryType as QueryType] === true
   }
 
