@@ -1,6 +1,6 @@
 {
   "name": "typescript-pos",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Turkish bank virtual POS (sanal POS) gateways for Node.js, written in TypeScript",
   "author": "Mehmet Kıyak (https://github.com/mkiyak)",
   "license": "MIT",
