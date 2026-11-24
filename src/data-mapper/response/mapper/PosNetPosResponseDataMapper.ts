@@ -91,6 +91,13 @@ export class PosNetPosResponseDataMapper extends AbstractResponseDataMapper {
       defaultResponse.error_code = text(raw, 'respCode')
       defaultResponse.error_message = text(raw, 'respText')
       defaultResponse['3d_all'] = raw
+      // A provision the bank approved without a usable 3D answer must be checked and voided by the merchant.
+      if (
+        rawPaymentResponseData !== null &&
+        this.mapProvisionOf3D(rawPaymentResponseData, txType, MODEL.THREE_D_SECURE).status === TX_APPROVED
+      ) {
+        defaultResponse.requires_manual_review = true
+      }
 
       return defaultResponse
     }

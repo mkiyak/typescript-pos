@@ -239,6 +239,27 @@ describe('PosNetPosResponseDataMapper', () => {
       expect(actual.transaction_security).toBe('Half 3D Secure')
     })
 
+    // addition: half 3D results are approved when the provision is approved
+    // deviation: strict 3D approval accepts exactly mdStatus 1 to 4
+    it.each(['2', '3', '4'])('mdStatus %s with approved provision is approved', (mdStatus) => {
+      const raw = {
+        approved: '1',
+        oosResolveMerchantDataResponse: { ...resolveOk.oosResolveMerchantDataResponse, mdStatus },
+      }
+      const actual: Data = realMapper().map3DPaymentData(
+        raw,
+        { approved: '1', respCode: '', instInfo: { inst1: '00' } },
+        'pay',
+        {
+          id: '1',
+        },
+      )
+
+      expect(actual.status).toBe('approved')
+      expect(actual.transaction_security).toBe('Half 3D Secure')
+      expect(actual).not.toHaveProperty('requires_manual_review')
+    })
+
     // addition: an approved provision without instalment info does not throw
     it('approved provision without instInfo has installment_count 0', () => {
       const actual: Data = realMapper().mapPaymentResponse(
@@ -284,6 +305,7 @@ describe('PosNetPosResponseDataMapper', () => {
     })
 
     // addition: an approved flag without any transaction record is not an approved status
+    // deviation: strict status approval, the answer must carry a transaction record
     it('mapStatusResponse without transactions is declined', () => {
       const actual: Data = realMapper().mapStatusResponse({ approved: '1' })
 
@@ -317,6 +339,7 @@ describe('PosNetPosResponseDataMapper', () => {
     })
 
     // addition: non-scalar bank values never turn into "[object Object]"
+    // deviation: scalar-only text, objects and lists read as missing instead of being stringified
     it('non-scalar bank values read as missing', () => {
       const actual: Data = realMapper().mapPaymentResponse(
         { approved: '1', respCode: '', respText: { a: 1 }, authCode: ['x'], hostlogkey: { b: 2 } },
@@ -342,7 +365,38 @@ describe('PosNetPosResponseDataMapper', () => {
       expect(actual.requires_manual_review).toBe(true)
     })
 
-    // addition: the 3D leg must be approved by the bank as well
+    // addition: an approved provision is not enough when the bank did not approve the resolve answer
+    // deviation: strict 3D approval, resolve approved must be 1 and the provision approval is flagged for review
+    it('resolve approved 0 with valid mdStatus and approved provision is declined and flagged', () => {
+      const raw = {
+        approved: '0',
+        respCode: 'E1',
+        oosResolveMerchantDataResponse: resolveOk.oosResolveMerchantDataResponse,
+      }
+      const actual: Data = realMapper().map3DPaymentData(raw, { approved: '1', respCode: '' }, 'pay', { id: '1' })
+
+      expect(actual.status).toBe('declined')
+      expect(actual.requires_manual_review).toBe(true)
+    })
+
+    // addition: a missing or invalid resolve block with an approved provision is flagged for review
+    it.each([{}, { oosResolveMerchantDataResponse: '' }, { oosResolveMerchantDataResponse: 'x' }])(
+      'no resolve block (%j) with approved provision is declined and flagged',
+      (raw) => {
+        const actual: Data = realMapper().map3DPaymentData(raw, { approved: '1', respCode: '' }, 'pay', { id: '1' })
+
+        expect(actual.status).toBe('declined')
+        expect(actual.requires_manual_review).toBe(true)
+      },
+    )
+
+    it('no resolve block with a declined provision is not flagged', () => {
+      const actual: Data = realMapper().map3DPaymentData({}, { approved: '0', respCode: 'E1' }, 'pay', { id: '1' })
+
+      expect(actual.status).toBe('declined')
+      expect(actual).not.toHaveProperty('requires_manual_review')
+    })
+
     it('resolve answer with approved 0 is declined', () => {
       const raw = {
         approved: '0',
