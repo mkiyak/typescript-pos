@@ -32,6 +32,7 @@ replaces the other.
 | `PayFlexV4PosQuery` | yes | no | no | no | no |
 | `PayFlexCPV4PosQuery` | yes | no | no | no | no |
 | `GarantiPosQuery` | yes | yes | no | no | yes |
+| `AkbankPosQuery` | yes | yes | no | no | no |
 
 A query the bank class does not offer rejects with `UnsupportedTransactionTypeError`; it never throws synchronously.
 Check first when the choice is dynamic:
@@ -54,6 +55,7 @@ the bank's field names back.
 | `PayFlexV4Pos` | `MerchantId`, `Password`, `TerminalNo` | `VposRequest` XML in the `prmstr` form field | `payment_api` |
 | `PayFlexCPV4Pos` | `HostMerchantId`, `MerchantId`, `Password` | JSON | `payment_api` + `/GetVposTransaction` |
 | `GarantiPos` | `Mode`, `Version`, `Terminal` and `Terminal.HashData` (each only when missing) | `GVPSRequest` XML | `payment_api` |
+| `AkbankPos` | `terminal`, `version`, `requestDateTime`, `randomNumber` (each only when missing) | JSON, signed with the `auth-hash` header | `payment_api` + `/transaction/process` unless `apiUrl` is given |
 
 For a sub-dealer account `MerchantId` is the sub-merchant id, otherwise `'1'`.
 
@@ -89,6 +91,21 @@ const bins = await query.getBinList({ ip: '203.0.113.10', bin: '424242', card_cl
 
 A declined answer has `status: 'declined'`, an empty list and the bank's message in `error_message`. The raw decoded
 answer is always in `all`.
+
+## Akbank: `history`
+
+```ts
+const query = PosQueryFactory.createPosQuery(akbankAccount, posProductionConfig)
+
+// By batch number, or by a date range of at most one day (Türkiye time)
+const byBatch = await query.history({ batch_num: 12 })
+const byDate = await query.history({ start_date: new Date('2026-11-14T00:00:00+03:00'), end_date: new Date('2026-11-14T23:59:59+03:00') })
+// byDate.status, byDate.trans_count, byDate.transactions[]: order_id, ref_ret_num, auth_code, order_status,
+// transaction_type, currency, installment_count, first_amount, masked_number, batch_num, transaction_time, ...
+```
+
+A declined answer has `status: 'declined'`, an empty list and the bank's message in `error_message`. The raw decoded
+answer is always in `all`. See the [Akbank guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/akbank-pos-payment.md).
 
 ## Custom URLs are restricted
 

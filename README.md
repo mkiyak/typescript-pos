@@ -17,6 +17,7 @@ ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
 | `PayFlexV4Pos` | VakıfBank (port 8443), Ziraat (PayFlex)                                                       | Unit-tested. VakıfBank public TEST environment, verified live on 2026-11-23: 3D enrollment (Status `Y`), non-3D Sale (`0000`) and Cancel (`0000`). |
 | `PayFlexCPV4Pos` | VakıfBank (Common Payment hosted page, port 8443) | Unit-tested. |
 | `GarantiPos` | Garanti BBVA | Unit-tested; hashes and amount format differential-tested against PHP. |
+| `AkbankPos` | Akbank (virtual POS API) | Unit-tested; signatures and amount format differential-tested against PHP. |
 
 ## Install
 
@@ -71,11 +72,12 @@ Complete, compile-checked versions with error handling live in [`examples/`](htt
 - [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
 - [VakıfBank Common Payment (3D Host / 3D Pay)](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-cp-payment.md)
 - [Garanti BBVA 3D payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/garanti-3d-payment.md)
+- [Akbank virtual POS payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/akbank-pos-payment.md)
 - [Queries (custom bank requests)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
 - [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Other operations: `pos.cancel(order)`, `pos.refund(order)` (partial when `order.order_amount` is set and
-`order.amount` is lower), `pos.status(order)`, `pos.orderHistory(order)` (Asseco and Garanti), `pos.payment(MODEL.NON_SECURE, ...)`
+`order.amount` is lower), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti and Akbank), `pos.payment(MODEL.NON_SECURE, ...)`
 for payments without 3D Secure, and `TX_TYPE.PAY_PRE_AUTH` / `TX_TYPE.PAY_POST_AUTH` for pre- and post-authorization.
 
 ### Test vs production configuration
@@ -149,7 +151,7 @@ const query = PosQueryFactory.createPosQuery(account, posProductionConfig)
 const answer = await query.customQuery({ TransactionId: transactionId }) // decoded, not normalized
 ```
 
-Custom URLs must be `https:` on a configured bank origin (or one you list in `allowedApiOrigins`). `GarantiPos` also supports `history` and `getBinList`. For Asseco, PayFlex V4 and
+Custom URLs must be `https:` on a configured bank origin (or one you list in `allowedApiOrigins`). `GarantiPos` also supports `history` and `getBinList`, `AkbankPos` supports `history`. For Asseco, PayFlex V4 and
 VakıfBank Common Payment only `customQuery` is offered; the other queries reject
 with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md).
 
@@ -157,7 +159,7 @@ with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.c
 
 1. Stateless, async API: each network method returns its own response; no `isSuccess()` / `getResponse()` state.
 2. Order and normalized response keys are snake_case and the same for every gateway.
-3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `GarantiPos` always verifies a signed callback and accepts an unsigned one only as a decline (`require_3d_hash: true` rejects it too); `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`.
+3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `GarantiPos` always verifies a signed callback and accepts an unsigned one only as a decline (`require_3d_hash: true` rejects it too); `AkbankPos` always requires a valid hash for 3D Pay, 3D Host and successful 3D Secure callbacks, and confirms approved 3D Pay/Host results with the bank; `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`.
 4. Sensitive data (PAN, CVV, expiry, passwords, store keys) is masked before it reaches the logger.
 5. Constant-time hash comparison; the Asseco hash uses the exact natural, case-insensitive key ordering the bank expects.
 6. Extra Asseco and Garanti safeguards: the returned order id, amount and payment model (Garanti: also terminal and currency) are compared with the order

@@ -18,6 +18,7 @@ toplayan TypeScript kütüphanesi. Node.js 22 veya üzeri gerekir; ESM ve Common
 | `PayFlexV4Pos` | VakıfBank (8443 portu), Ziraat (PayFlex)                                                          | Birim testli. VakıfBank herkese açık TEST ortamında 2026-11-23'te canlı doğrulandı: 3D kayıt kontrolü (Status `Y`), 3D'siz Satış (`0000`) ve İptal (`0000`). |
 | `PayFlexCPV4Pos` | VakıfBank (Güvenli Ortak Ödeme, port 8443) | Birim testli. |
 | `GarantiPos` | Garanti BBVA | Birim testli; hash'ler ve tutar biçimi PHP'ye karşı diferansiyel test edildi. |
+| `AkbankPos` | Akbank (sanal POS API) | Birim testli; imzalar ve tutar biçimi PHP'ye karşı diferansiyel test edildi. |
 
 ## Kurulum
 
@@ -72,11 +73,12 @@ Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://g
 - [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
 - [VakıfBank Ortak Ödeme (3D Host / 3D Pay)](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-cp-payment.md)
 - [Garanti BBVA 3D ödeme](https://github.com/mkiyak/typescript-pos/blob/main/guides/garanti-3d-payment.md)
+- [Akbank sanal POS ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/akbank-pos-payment.md)
 - [Sorgular (özel banka istekleri)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
 - [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Diğer işlemler: `pos.cancel(order)`, `pos.refund(order)` (`order.order_amount` verilmiş ve `order.amount` ondan
-küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (Asseco ve Garanti), 3D Secure'suz ödeme için
+küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti ve Akbank), 3D Secure'suz ödeme için
 `pos.payment(MODEL.NON_SECURE, ...)` ve ön/son provizyon için `TX_TYPE.PAY_PRE_AUTH` / `TX_TYPE.PAY_POST_AUTH`.
 
 ### Test ve canlı yapılandırma
@@ -153,14 +155,14 @@ const answer = await query.customQuery({ TransactionId: transactionId }) // çö
 ```
 
 Özel URL'ler `https:` olmalı ve yapılandırılmış bir banka origin'inde (ya da `allowedApiOrigins` ile verdiğiniz bir origin'de)
-olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList` sunar. Asseco, PayFlex V4 ve VakıfBank Ortak Ödeme'de yalnız
+olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos` ise `history` sunar. Asseco, PayFlex V4 ve VakıfBank Ortak Ödeme'de yalnız
 `customQuery` vardır; diğer sorgular `UnsupportedTransactionTypeError` ile reddedilir. Ayrıntı için [sorgular kılavuzuna](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md) bakın.
 
 ## Tasarım
 
 1. Durumsuz, async API: her ağ metodu kendi cevabını döner; `isSuccess()` / `getResponse()` durumu yoktur.
 2. Sipariş ve normalize cevap anahtarları snake_case'tir ve her gateway'de aynıdır.
-3. 3D hash doğrulamasını kapatan bir seçenek yoktur. `AssecoPos` her zaman geçerli hash ister; `GarantiPos` imzalı callback'i her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder (`require_3d_hash: true` onu da reddeder); `PayFlexV4Pos` callback `Hash` taşıyorsa her zaman doğrular, `Hash` eksikse yalnızca `require_3d_hash: true` ile reddeder.
+3. 3D hash doğrulamasını kapatan bir seçenek yoktur. `AssecoPos` her zaman geçerli hash ister; `GarantiPos` imzalı callback'i her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder (`require_3d_hash: true` onu da reddeder); `AkbankPos` 3D Pay, 3D Host ve başarılı 3D Secure callback'lerinde her zaman geçerli hash ister, onaylanan 3D Pay/Host sonuçlarını bankayla doğrular; `PayFlexV4Pos` callback `Hash` taşıyorsa her zaman doğrular, `Hash` eksikse yalnızca `require_3d_hash: true` ile reddeder.
 4. Hassas veri (PAN, CVV, son kullanma, şifreler, store key) logger'a ulaşmadan maskelenir.
 5. Sabit zamanlı hash karşılaştırması; Asseco hash'i bankanın beklediği doğal, büyük/küçük harf duyarsız anahtar sıralamasını birebir kullanır.
 6. Ek Asseco ve Garanti korumaları: dönen sipariş numarası, tutar ve ödeme modeli (Garanti'de ayrıca terminal ve para birimi) siparişle karşılaştırılır
