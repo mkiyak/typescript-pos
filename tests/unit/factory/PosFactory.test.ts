@@ -9,6 +9,7 @@ import type { AbstractGateway, GatewayConfig } from '../../../src/gateway/Abstra
 import { AkbankPos } from '../../../src/gateway/AkbankPos.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
+import { InterPos } from '../../../src/gateway/InterPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
@@ -194,6 +195,42 @@ describe('PosFactory.createPosGateway', () => {
     expect(calls[0]?.url).toBe('https://payfortestziraatkatilim.cordisnetwork.com/Mpi/XMLGate.aspx')
     expect(calls[0]?.body).toContain('<Lang>TR</Lang>')
     expect(calls[0]?.body).toContain('<MbrId>12</MbrId>')
+  })
+
+  it('creates the denizbank InterPos gateway from the shipped test config', () => {
+    const account = AccountFactory.createInterPosAccount('denizbank', 's', 'u', 'p', 'k')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(InterPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(Object.keys(gateway.getCardTypeMapping())).toHaveLength(4)
+    expect(gateway.getCurrencies()).toHaveLength(6)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-InterPos account for an InterPos bank', () => {
+    const wrong = AccountFactory.createPayForPosAccount('denizbank', 'm', 'u', 'p', 'k')
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
+      'Bank [denizbank] is configured for InterPos and needs an InterPosAccount.',
+    )
+  })
+
+  // addition: the InterPos client posts the order inquiry form to the configured endpoint
+  it('sends an InterPos status to the Denizbank test endpoint', async () => {
+    const calls: { url: string; body: string }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), body: String(init?.body) })
+      return new Response('OrderId=2020110828BC;;ProcReturnCode=81;;ErrorMessage=x', { status: 200 })
+    }) as unknown as typeof fetch
+    const account = AccountFactory.createInterPosAccount('denizbank', 's', 'u', 'p', 'k')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    const result = await gateway.status({ id: '2020110828BC' } as never)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe('https://test.inter-vpos.com.tr/mpi/Default.aspx')
+    expect(calls[0]?.body).toBe(
+      'UserCode=u&UserPass=p&ShopCode=s&orgOrderId=2020110828BC&TxnType=StatusHistory&SecureType=NonSecure&Lang=tr',
+    )
+    expect(result.status).toBe('declined')
   })
 
   it('creates an AkbankPos gateway from the shipped test config', () => {
@@ -425,6 +462,7 @@ describe('PosFactory.createPosGateway', () => {
       PosNetPos: (bank: string) => AccountFactory.createPosNetPosAccount(bank, 'm', 't', 'p', 'k'),
       PosNetV1Pos: (bank: string) => AccountFactory.createPosNetPosAccount(bank, 'm', 't', 'p', 'k'),
       PayForPos: (bank: string) => AccountFactory.createPayForPosAccount(bank, 'm', 'u', 'p', 'k'),
+      InterPos: (bank: string) => AccountFactory.createInterPosAccount(bank, 's', 'u', 'p', 'k'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

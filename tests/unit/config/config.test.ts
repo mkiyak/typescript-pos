@@ -7,6 +7,7 @@ import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import { AkbankPos } from '../../../src/gateway/AkbankPos.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
+import { InterPos } from '../../../src/gateway/InterPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
@@ -17,6 +18,7 @@ const accountFor = (gatewayClass: string, key: string) => {
   if (gatewayClass === 'AssecoPos') return AccountFactory.createAssecoPosAccount(key, 'c', 'u', 'p', 'k')
   if (gatewayClass === 'AkbankPos') return AccountFactory.createAkbankPosAccount(key, 'm', 't', 'k')
   if (gatewayClass === 'GarantiPos') return AccountFactory.createGarantiPosAccount(key, 'm', 'u', 'p', 't', 'k')
+  if (gatewayClass === 'InterPos') return AccountFactory.createInterPosAccount(key, 's', 'u', 'p', 'k')
   if (gatewayClass === 'PayForPos') return AccountFactory.createPayForPosAccount(key, 'm', 'u', 'p', 'k')
   if (gatewayClass === 'PosNetPos' || gatewayClass === 'PosNetV1Pos')
     return AccountFactory.createPosNetPosAccount(key, 'm', 't', 'p', 'k')
@@ -28,7 +30,7 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos and PayForPos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos and InterPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
       expect([
@@ -40,6 +42,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         'PosNetPos',
         'PosNetV1Pos',
         'PayForPos',
+        'InterPos',
       ]).toContain(bank.class)
     }
   })
@@ -56,6 +59,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
       PosNetPos,
       PosNetV1Pos,
       PayForPos,
+      InterPos,
     }[
       bank.class as
         | 'AssecoPos'
@@ -66,6 +70,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         | 'PosNetPos'
         | 'PosNetV1Pos'
         | 'PayForPos'
+        | 'InterPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -329,6 +334,37 @@ describe('PayFor endpoints', () => {
         expect(Object.isFrozen(cfg.banks[key])).toBe(true)
         expect(Object.isFrozen(cfg.banks[key].gateway_endpoints)).toBe(true)
         expect(cfg.banks[key]).not.toHaveProperty('disable_3d_hash_check')
+      }
+    }
+  })
+})
+
+// addition: shipped InterPos entry (no hash-check switch, no language or test-mode override)
+describe('InterPos endpoints', () => {
+  const entry = (base: string) => ({
+    name: 'DenizBank-InterPos',
+    class: 'InterPos',
+    gateway_endpoints: {
+      payment_api: `${base}/mpi/Default.aspx`,
+      gateway_3d: `${base}/mpi/Default.aspx`,
+      gateway_3d_host: `${base}/mpi/3DHost.aspx`,
+    },
+  })
+
+  it('production uses the live host', () => {
+    expect(posProductionConfig.banks.denizbank).toStrictEqual(entry('https://inter-vpos.com.tr'))
+  })
+
+  it('test uses the test host', () => {
+    expect(posTestConfig.banks.denizbank).toStrictEqual(entry('https://test.inter-vpos.com.tr'))
+  })
+
+  it('both entries are deeply frozen and carry no lang, test_mode or hash-check switch', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      expect(Object.isFrozen(cfg.banks.denizbank)).toBe(true)
+      expect(Object.isFrozen(cfg.banks.denizbank.gateway_endpoints)).toBe(true)
+      for (const key of ['lang', 'test_mode', 'disable_3d_hash_check']) {
+        expect(cfg.banks.denizbank).not.toHaveProperty(key)
       }
     }
   })

@@ -5,6 +5,7 @@ export type PosTestBank =
   | 'akbank-pos'
   | 'albaraka'
   | 'asseco'
+  | 'denizbank'
   | 'garanti'
   | 'vakifbank'
   | 'vakifbank-cp'
@@ -14,7 +15,7 @@ export type PosTestBank =
   | 'ziraat-vpos'
 
 /**
- * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos and PayForPos banks (the VakifBank test API
+ * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos and InterPos banks (the VakifBank test API
  * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it (not AkbankPos: its entry sets neither `test_mode` nor `lang`, the language comes from `order.lang`); for the
  * Asseco and PayFlex gateways the environment is selected by the endpoint URLs. The `garanti` entry sets `test_mode: true`
  * because the Garanti test environment needs `Mode TEST` in every request.
@@ -47,6 +48,15 @@ export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
       gateway_endpoints: {
         payment_api: 'https://entegrasyon.asseco-see.com.tr/fim/api',
         gateway_3d: 'https://entegrasyon.asseco-see.com.tr/fim/est3Dgate',
+      },
+    },
+    denizbank: {
+      name: 'DenizBank-InterPos',
+      class: 'InterPos',
+      gateway_endpoints: {
+        payment_api: 'https://test.inter-vpos.com.tr/mpi/Default.aspx',
+        gateway_3d: 'https://test.inter-vpos.com.tr/mpi/Default.aspx',
+        gateway_3d_host: 'https://test.inter-vpos.com.tr/mpi/3DHost.aspx',
       },
     },
     garanti: {

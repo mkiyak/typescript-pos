@@ -61,6 +61,8 @@ describe('public index', () => {
         'PosNetV1Pos',
         'PayForPos',
         'PayForPosAccount',
+        'InterPos',
+        'InterPosAccount',
         'PosNetPosAccount',
         'AssecoPosAccount',
         'AkbankPosAccount',
@@ -119,6 +121,13 @@ describe('public index', () => {
     const account = mod.AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'm', 'u', 'p', 'k')
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.PayForPos)
     expect(account).toBeInstanceOf(mod.PayForPosAccount)
+  })
+
+  // addition: the InterPos gateway is reachable from the public entry point
+  it('PosFactory creates the InterPos gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createInterPosAccount('denizbank', 's', 'u', 'p', 'k')
+    expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.InterPos)
+    expect(account).toBeInstanceOf(mod.InterPosAccount)
   })
 
   it('PosFactory creates the Akbank gateway from the shipped test config', () => {

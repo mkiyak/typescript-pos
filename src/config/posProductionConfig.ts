@@ -6,6 +6,7 @@ export type PosProductionBank =
   | 'akbank-pos'
   | 'albaraka'
   | 'finansbank'
+  | 'denizbank'
   | 'garanti'
   | 'halkbank'
   | 'teb'
@@ -20,7 +21,7 @@ export type PosProductionBank =
   | 'ziraat-katilim-payfor'
 
 /**
- * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos and PayForPos banks (the VakifBank
+ * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos and InterPos banks (the VakifBank
  * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default. The `akbank-pos` entry sets no `lang` or
  * `test_mode`: AkbankPos takes the language from `order.lang` and the environment from the endpoint URLs.
  *
@@ -61,6 +62,15 @@ export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeCo
       gateway_endpoints: {
         payment_api: 'https://www.fbwebpos.com/fim/api',
         gateway_3d: 'https://www.fbwebpos.com/fim/est3dgate',
+      },
+    },
+    denizbank: {
+      name: 'DenizBank-InterPos',
+      class: 'InterPos',
+      gateway_endpoints: {
+        payment_api: 'https://inter-vpos.com.tr/mpi/Default.aspx',
+        gateway_3d: 'https://inter-vpos.com.tr/mpi/Default.aspx',
+        gateway_3d_host: 'https://inter-vpos.com.tr/mpi/3DHost.aspx',
       },
     },
     garanti: {
