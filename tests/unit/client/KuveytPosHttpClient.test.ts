@@ -96,7 +96,10 @@ describe('KuveytPosHttpClient', () => {
 
   it('request', async () => {
     const sent: Sent[] = []
-    const c = createClient(fakeFetch(sent, '<response><result>success</result></response>'))
+    // deviation: ruling (final fix wave) the answer to a provision must carry a response code
+    const c = createClient(
+      fakeFetch(sent, '<response><ResponseCode>00</ResponseCode><result>success</result></response>'),
+    )
     const actual = await c.request(
       TX_TYPE.PAY_AUTH,
       MODEL.THREE_D_SECURE,
@@ -105,7 +108,7 @@ describe('KuveytPosHttpClient', () => {
       `${API_URL}/ThreeDModelProvisionGate`,
     )
 
-    expect(actual).toStrictEqual({ result: 'success' })
+    expect(actual).toStrictEqual({ ResponseCode: '00', result: 'success' })
     expect(sent[0]?.url).toBe(`${API_URL}/ThreeDModelProvisionGate`)
     expect(latin1(sent[0])).toBe(
       '<?xml version="1.0" encoding="ISO-8859-1"?>\n<KuveytTurkVPosMessage><request-data>x</request-data></KuveytTurkVPosMessage>\n',
@@ -140,7 +143,7 @@ describe('KuveytPosHttpClient', () => {
   // addition: B18, Latin-1 letters are single bytes, other letters numeric references
   it('posts the request as ISO-8859-1 bytes', async () => {
     const sent: Sent[] = []
-    const c = createClient(fakeFetch(sent, '<r><a>1</a></r>'))
+    const c = createClient(fakeFetch(sent, '<r><ResponseCode>00</ResponseCode></r>'))
     await c.request(
       TX_TYPE.PAY_AUTH,
       MODEL.THREE_D_SECURE,
@@ -169,18 +172,58 @@ describe('KuveytPosHttpClient', () => {
   // addition: the bank's Turkish answer in a declared charset is read correctly
   it('decodes an answer in the charset it declares', async () => {
     const xml = Buffer.concat([
-      Buffer.from('<?xml version="1.0" encoding="ISO-8859-9"?><r><m>'),
+      Buffer.from('<?xml version="1.0" encoding="ISO-8859-9"?><r><ResponseCode>05</ResponseCode><m>'),
       Buffer.from([0xde, 0x69, 0x66, 0x72, 0x65]),
       Buffer.from('</m></r>'),
     ])
     const c = createClient(fakeFetch([], new Uint8Array(xml)))
-    expect(await c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({ m: 'Şifre' })
+    expect(await c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({
+      ResponseCode: '05',
+      m: 'Şifre',
+    })
   })
 
-  // addition: 204 is an empty answer, a redirect is refused
-  it('answers 204 with an empty record', async () => {
-    const c = createClient(fakeFetch([], '', 204))
-    expect(await c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({})
+  // addition: ruling (final fix wave), a payment answer that carries no response code is an unknown outcome naming
+  // the request URL; a redirect is refused
+  it.each([
+    ['204', '', 204, 'Bank answered the payment request without any data; its outcome is unknown'],
+    ['an empty root', '<r/>', 200, 'Bank answered the payment request without any data; its outcome is unknown'],
+    [
+      'a root with text only',
+      '<r>00</r>',
+      200,
+      'Bank answered the payment request without a response code; its outcome is unknown',
+    ],
+    [
+      'an empty ResponseCode',
+      '<r><ResponseCode/></r>',
+      200,
+      'Bank answered the payment request without a response code; its outcome is unknown',
+    ],
+    [
+      'a nil ResponseCode',
+      '<r><ResponseCode xsi:nil="true"/></r>',
+      200,
+      'Bank answered the payment request without a response code; its outcome is unknown',
+    ],
+  ] as Array<[string, string, number, string]>)(
+    'a payment answered with %s is PosHttpError',
+    async (_n, body, status, message) => {
+      for (const model of [MODEL.NON_SECURE, MODEL.THREE_D_SECURE]) {
+        const c = createClient(fakeFetch([], body, status))
+        const err = await c.request(TX_TYPE.PAY_AUTH, model, { a: 1 }, { id: '1' }).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect((err as PosHttpError).message).toBe(message)
+        expect((err as PosHttpError).url).toBe(c.getApiUrl(TX_TYPE.PAY_AUTH, model))
+      }
+    },
+  )
+
+  it('a payment answer with a repeated ResponseCode is left to the gateway', async () => {
+    const c = createClient(fakeFetch([], '<r><ResponseCode>00</ResponseCode><ResponseCode>00</ResponseCode></r>'))
+    expect(await c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({
+      ResponseCode: ['00', '00'],
+    })
   })
 
   it('does not follow a redirect', async () => {

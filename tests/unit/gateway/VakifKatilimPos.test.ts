@@ -790,6 +790,7 @@ describe('VakifKatilimPos (mocked collaborators)', () => {
         MerchantOrderId: '123',
         OrderStatus: '1',
         LastOrderStatus: '1',
+        TransactionStatus: '1',
         FEC: '0949',
         FirstAmount: '10.01',
         CancelAmount: '0.00',
@@ -1024,6 +1025,10 @@ type BankOptions = {
   provision?: (fields: Data) => Answer
   /** The status answer, from the posted status fields. */
   status?: (fields: Data) => Answer
+  /** The answer to a sale, pre-authorization or close, from the path and the posted fields. */
+  sale?: (path: string, fields: Data) => Answer
+  /** The answer to a cancel or refund. */
+  reversal?: () => Answer
 }
 
 const esc = (text: string): string =>
@@ -1160,11 +1165,11 @@ function bankFetch(options: BankOptions = {}) {
       case 'Non3DPayGate':
       case 'PreAuthorizaten':
       case 'PreAuthorizatenClose':
-        reply = answerXml({ ...SALE_ANSWER, MerchantOrderId: fields.MerchantOrderId })
+        reply = options.sale?.(path, fields) ?? answerXml({ ...SALE_ANSWER, MerchantOrderId: fields.MerchantOrderId })
         break
       case 'SaleReversal':
       case 'PreAuthorizationReversal':
-        reply = answerXml(CANCEL_ANSWER)
+        reply = options.reversal?.() ?? answerXml(CANCEL_ANSWER)
         break
       case 'DrawBack':
       case 'PreAuthorizationDrawBack':
@@ -1225,6 +1230,10 @@ const MALFORMED = new HashMismatchError('3D callback fields are malformed')
 const NO_HASH = new HashMismatchError('3D callback has no HashData')
 const HASH_MISMATCH = new HashMismatchError('3D callback hash mismatch')
 const BAD_MD = new PosError('3D callback authentication values are malformed')
+const NO_DATA = 'Bank answered the payment request without any data; its outcome is unknown'
+const NO_CODE = 'Bank answered the payment request without a response code; its outcome is unknown'
+const NIL = { '@xsi:nil': 'true' }
+const TEXT_ROOT = '<VPosTransactionResponseContract>00</VPosTransactionResponseContract>'
 
 describe('VakifKatilimPos (end to end) 3D Secure', () => {
   const run = (
@@ -1351,14 +1360,31 @@ describe('VakifKatilimPos (end to end) 3D Secure', () => {
 
   // addition: ruling (final fix wave), once the provision was sent an empty or ambiguous answer is no decline
   it.each([
-    ['HTTP 204', () => new Response(null, { status: 204 })],
-    ['a root element without fields', () => answerXml({ ...NS })],
-  ])('a provision answered with %s is PosHttpError', async (_n, answer) => {
-    const { sent, promise } = run(vs1(), vs1Order(), { provision: answer })
+    ['HTTP 204', () => new Response(null, { status: 204 }), NO_DATA],
+    ['a root element without fields', () => answerXml({ ...NS }), NO_DATA],
+    ['no ResponseCode', (f: Data) => answerXml(provisionFor(f, { ResponseCode: undefined })), NO_CODE],
+    ['an empty ResponseCode', (f: Data) => answerXml(provisionFor(f, { ResponseCode: '' })), NO_CODE],
+    ['a nil ResponseCode', (f: Data) => answerXml(provisionFor(f, { ResponseCode: NIL })), NO_CODE],
+    ['a root that holds only text', () => TEXT_ROOT, NO_CODE],
+  ])('a provision answered with %s is PosHttpError naming the request URL', async (_n, answer, message) => {
+    const { sent, promise } = run(vs1(), vs1Order(), { provision: answer as (f: Data) => Answer })
     const err = await promise.catch((e: unknown) => e)
     expect(err).toBeInstanceOf(PosHttpError)
-    expect((err as Error).message).toBe('Bank answered the provision without any data; its outcome is unknown')
+    expect((err as PosHttpError).message).toBe(message)
+    expect((err as PosHttpError).url).toBe(`${PAYMENT_API}/ThreeDModelProvisionGate`)
     expect(sent).toHaveLength(1)
+  })
+
+  // addition: an order value the bank answer is compared with is validated before any request
+  it.each([
+    ['currency usd', { currency: 'usd' }],
+    ['currency XYZ', { currency: 'XYZ' }],
+    ['currency 840', { currency: 840 }],
+    ['installment 100', { installment: 100 }],
+  ])('an order with %s is PosError before the provision', async (_n, over) => {
+    const { sent, promise } = run(vs1(), vs1Order(over as PosOrder))
+    await expect(promise).rejects.toThrow(PosError)
+    expect(sent).toHaveLength(0)
   })
 
   it.each([
@@ -1602,7 +1628,50 @@ describe('VakifKatilimPos (end to end) 3D Host', () => {
     expect(err.response?.auth_code).toBeNull()
     expect(err.response?.ref_ret_num).toBeNull()
     expect(err.response?.transaction_id).toBeNull()
+    expect(err.response?.remote_order_id).toBeNull()
     expect(sent).toHaveLength(1)
+  })
+
+  // addition: the attached result never carries the callback's bank order id, even a signed one
+  it('a forged OrderId never reaches the result attached to a failed confirmation', async () => {
+    const { promise } = run(vs3({ OrderId: '424242' }), hostOrder(), { status: () => answerXml(NON_RESULT) })
+    const err = await mismatch(promise)
+    expect(err.response?.remote_order_id).toBeNull()
+    // only the raw callback (`all`, untrusted) still shows it
+    expect(JSON.stringify({ ...err.response, all: null, '3d_all': null })).not.toContain('424242')
+  })
+
+  // addition: ruling, the record must show a successful transaction that was not a non-secure sale
+  it.each([
+    ['TransactionStatus 2', { TransactionStatus: '2' }],
+    ['TransactionStatus 0', { TransactionStatus: '0' }],
+    ['no TransactionStatus', { TransactionStatus: undefined }],
+    ['TransactionSecurity 5', { TransactionSecurity: '5' }],
+    ['TransactionSecurity twice', { TransactionSecurity: ['3', '5'] }],
+  ])('a status record with %s is OrderMismatchError order_status', async (_n, over) => {
+    const { promise } = run(vs3(), hostOrder(), { status: status(orderRecord(VS3_ORDER_ID, over)) })
+    const err = await mismatch(promise)
+    expect([err.field, err.paymentMayHaveCompleted]).toStrictEqual(['order_status', true])
+  })
+
+  it.each([
+    ['TransactionSecurity 3', { TransactionSecurity: '3' }],
+    ['no TransactionSecurity', { TransactionSecurity: undefined }],
+  ])('a status record with %s confirms', async (_n, over) => {
+    const res = (await run(vs3(), hostOrder(), { status: status(orderRecord(VS3_ORDER_ID, over)) }).promise) as Data
+    expect(res.status).toBe('approved')
+  })
+
+  // addition: an order value the record is compared with is validated before the status request
+  it.each([
+    ['currency usd', { currency: 'usd' }],
+    ['currency XYZ', { currency: 'XYZ' }],
+    ['installment 100', { installment: 100 }],
+    ['installment abc', { installment: 'abc' }],
+  ])('an order with %s is PosError before the status request', async (_n, over) => {
+    const { sent, promise } = run(vs3(), hostOrder(over as PosOrder))
+    await expect(promise).rejects.toThrow(PosError)
+    expect(sent).toHaveLength(0)
   })
 
   // addition: V8 a stated installment count must be the record's; one installment is a single payment
@@ -1881,6 +1950,68 @@ describe('VakifKatilimPos (end to end) non-3D transactions and routes', () => {
       TX_TYPE.PAY_POST_AUTH,
     )
     expect(sent.map((s) => s.path)).toStrictEqual(['PreAuthorizaten', 'PreAuthorizatenClose'])
+  })
+
+  // addition: ruling (final fix wave), a money-moving answer that does not say what happened is an unknown outcome
+  type MoneyCall = [name: string, path: string, call: (p: VakifKatilimPos) => Promise<unknown>]
+  const card = (p: VakifKatilimPos) =>
+    CreditCardFactory.createForGateway(p, '4155650100416111', '25', '1', '123', 'John Doe', CARD_TYPE.VISA)
+  const moneyCalls: MoneyCall[] = [
+    ['sale', 'Non3DPayGate', (p) => p.payment(MODEL.NON_SECURE, { id: 'N1', amount: 1 }, TX_TYPE.PAY_AUTH, card(p))],
+    [
+      'pre-auth',
+      'PreAuthorizaten',
+      (p) => p.payment(MODEL.NON_SECURE, { id: 'N1', amount: 1 }, TX_TYPE.PAY_PRE_AUTH, card(p)),
+    ],
+    [
+      'post-auth',
+      'PreAuthorizatenClose',
+      (p) => p.payment(MODEL.NON_SECURE, { id: 'N1', remote_order_id: '4480', ip: '127.0.0.1' }, TX_TYPE.PAY_POST_AUTH),
+    ],
+  ]
+  const unclear: Array<[string, (f: Data) => Answer, string]> = [
+    ['HTTP 204', () => new Response(null, { status: 204 }), NO_DATA],
+    [
+      'no ResponseCode',
+      (f) => answerXml({ ...SALE_ANSWER, MerchantOrderId: f.MerchantOrderId, ResponseCode: undefined }),
+      NO_CODE,
+    ],
+    ['a root that holds only text', () => TEXT_ROOT, NO_CODE],
+  ]
+  for (const [kind, path, call] of moneyCalls) {
+    it.each(unclear)(
+      `a ${kind} answered with %s is PosHttpError naming the request URL`,
+      async (_n, answer, message) => {
+        const { sent, fetchImpl } = bankFetch({ sale: (_p, f) => answer(f) })
+        const err = await call(realGateway(fetchImpl)).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([
+          message,
+          `${PAYMENT_API}/${path}`,
+        ])
+        expect(sent).toHaveLength(1)
+      },
+    )
+
+    it(`a ${kind} answer with ResponseCode 00 twice is OrderMismatchError order_status, flagged`, async () => {
+      const { fetchImpl } = bankFetch({
+        sale: (_p, f) => answerXml({ ...SALE_ANSWER, MerchantOrderId: f.MerchantOrderId, ResponseCode: ['00', '00'] }),
+      })
+      const err = await mismatch(call(realGateway(fetchImpl)))
+      expect([err.field, err.paymentMayHaveCompleted, err.response?.requires_manual_review]).toStrictEqual([
+        'order_status',
+        true,
+        true,
+      ])
+      expect((err.response as Data).all.VPosMessage.HashPassword).toBe('***')
+    })
+  }
+
+  // addition: a cancel moves no new money: its unclear answer stays a decline
+  it('a cancel answered with HTTP 204 is declined', async () => {
+    const { fetchImpl } = bankFetch({ reversal: () => new Response(null, { status: 204 }) })
+    const res = (await realGateway(fetchImpl).cancel(reversal())) as Data
+    expect(res.status).toBe('declined')
   })
 
   it('cancel and refund follow the order transaction type', async () => {

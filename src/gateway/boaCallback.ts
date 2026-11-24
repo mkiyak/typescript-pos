@@ -186,16 +186,14 @@ export function unsignedDeclineResult(
 }
 
 /**
- * Whether the answer to a provision says nothing usable about its outcome: `empty` when it carries no field at all
- * (an empty body), `ambiguous` when its response code is not one plain value (a repeated element or one with
- * children). The provision was sent, so neither is a decline: the payment may have been booked.
+ * Whether the answer to a request that can move money has a response code that is not one plain value (a repeated
+ * element, or one with children or attributes): it may hide a booking, so it is never read as a decline. An answer
+ * without any response code never gets here: the HTTP client refuses it as an unknown outcome.
  */
-export function unknownProvisionOutcome(provision: Record<string, unknown>): 'empty' | 'ambiguous' | null {
-  if (Object.keys(provision).every((key) => key.startsWith('@'))) return 'empty'
-  const code = own(provision, 'ResponseCode')
-  if (code !== undefined && !isNil(code) && typeof code !== 'string') return 'ambiguous'
+export function hasAmbiguousResponseCode(answer: Record<string, unknown>): boolean {
+  const code = own(answer, 'ResponseCode')
 
-  return null
+  return code !== undefined && !isNil(code) && typeof code !== 'string'
 }
 
 /**

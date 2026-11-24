@@ -9,6 +9,7 @@ import { XmlEncoder } from '../serializer/XmlEncoder.js'
 import type { PosOrder } from '../types.js'
 import { ownValue } from '../util/ownValue.js'
 import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
+import { assertPaymentAnswerHasCode } from './boaPaymentAnswer.js'
 import type { HttpTransport, HttpTransportResponse } from './HttpTransport.js'
 
 /** Gateway path of each transaction type and payment model. */
@@ -62,6 +63,24 @@ export class KuveytPosHttpClient extends AbstractHttpClient {
     }
 
     return `${this.endpoint}/${path}`
+  }
+
+  /**
+   * The answer to the provision or a sale must carry a response code: one that does not says nothing about the
+   * money and is an unknown outcome (`PosHttpError` naming the request URL), never a decline.
+   */
+  override async request(
+    txType: ClientTxType,
+    paymentModel: PaymentModel,
+    requestData: Record<string, unknown>,
+    order: PosOrder,
+    url?: string | null,
+  ): Promise<Record<string, unknown>> {
+    const target = url ?? this.getApiUrl(txType, paymentModel)
+    const answer = await super.request(txType, paymentModel, requestData, order, target)
+    assertPaymentAnswerHasCode(txType, answer, target)
+
+    return answer
   }
 
   private pathOf(txType: ClientTxType, paymentModel: PaymentModel): string | undefined {

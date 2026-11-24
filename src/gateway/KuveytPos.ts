@@ -4,7 +4,6 @@ import {
   OrderMismatchError,
   type OrderMismatchField,
   PosError,
-  PosHttpError,
   UnsupportedFormFormatError,
   UnsupportedPaymentModelError,
   UnsupportedTransactionTypeError,
@@ -31,6 +30,7 @@ import {
   BANK_ORDER_ID,
   boaOrderId,
   echo,
+  hasAmbiguousResponseCode,
   INSTALLMENT_TEXT,
   isCurrencyCode,
   isRecord,
@@ -42,7 +42,6 @@ import {
   redactHashPassword,
   SUCCESS_CODE,
   textOf,
-  unknownProvisionOutcome,
   unsignedDeclineResult,
 } from './boaCallback.js'
 
@@ -98,9 +97,11 @@ const TEXT_FIELDS = ['ResponseCode', 'MerchantOrderId', 'OrderId', 'HashData', '
  *   the mapper reads: it must name this order id (also inside its message, when present), the order's amount in
  *   kuruş and the order's currency, and it must map as approved; otherwise `OrderMismatchError` with the result
  *   attached and flagged for manual review. An approval reports the 3D model, and its card mask comes from the
- *   bank's answer only. Once the provision was sent, an answer without any data is a `PosHttpError` and an answer
- *   whose response code is not one plain value (repeated, or with children) an `OrderMismatchError` on
- *   `order_status` flagged for manual review: neither tells whether the payment was booked.
+ *   bank's answer only.
+ * - After a request that can move money (the provision, a sale), an answer without a response code (empty, missing,
+ *   nil, text only) is a `PosHttpError` from the HTTP client naming the request URL, and an answer whose response
+ *   code is not one plain value (repeated, or with children) an `OrderMismatchError` on `order_status` with the
+ *   mapped answer flagged for manual review: neither tells whether the money moved.
  * - Every result has the hashed password the bank echoes (`HashPassword`) replaced in `all` and `3d_all`.
  */
 export class KuveytPos extends AbstractGateway<BoaPosAccount> {
@@ -244,8 +245,25 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
     return html
   }
 
+  /** The sale: an answer whose response code is ambiguous is an unknown outcome, not a decline. */
   override async makeRegularPayment(order: PosOrder, card: CreditCard, txType: TxType): Promise<PosResponse> {
-    return redactHashPassword(await super.makeRegularPayment(order, card, txType))
+    const paymentModel = MODEL.NON_SECURE
+    this.logger.debug('making payment', { model: paymentModel, tx_type: txType })
+    if (txType !== TX_TYPE.PAY_AUTH && txType !== TX_TYPE.PAY_PRE_AUTH) {
+      throw new UnsupportedTransactionTypeError(`Invalid transaction type "${txType}" provided`)
+    }
+
+    const requestData = await this.dispatchRequestDataPrepared(
+      this.requestDataMapper.createNonSecurePaymentRequestData(this.account, order, txType, card),
+      txType,
+      order,
+      paymentModel,
+    )
+    const answer = await this.sendRequest(txType, paymentModel, requestData, order)
+    const response = redactHashPassword(this.responseDataMapper.mapPaymentResponse(answer, txType, order))
+    this.assertClearOutcome(answer, response, order.id)
+
+    return response
   }
 
   /** @throws UnsupportedPaymentModelError this bank has no pre-authorization */
@@ -415,14 +433,7 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
     orderId: string,
   ): PosResponse {
     const evidence: PosResponse = { ...response, requires_manual_review: true }
-    const unknown = unknownProvisionOutcome(provision)
-    if (unknown === 'empty') {
-      this.logger.error('3D provision answer has no data', { order_id: echo(orderId) })
-      throw new PosHttpError('Bank answered the provision without any data; its outcome is unknown', { url: '' })
-    }
-    if (unknown === 'ambiguous') {
-      this.fail('order_status', SUCCESS_CODE, 'ambiguous response code', orderId, evidence)
-    }
+    this.assertClearOutcome(provision, response, orderId)
 
     const booked = textOf(provision, 'ResponseCode') === SUCCESS_CODE
     if (response.status === TX_APPROVED && !booked) {
@@ -454,6 +465,20 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
       ...response,
       payment_model: MODEL.THREE_D_SECURE,
       masked_number: typeof cardNumber === 'string' && cardNumber !== '' ? cardNumber : null,
+    }
+  }
+
+  /**
+   * A money-moving answer whose response code is not one plain value says nothing certain about the money: the
+   * mapped answer is attached and flagged for manual review.
+   */
+  private assertClearOutcome(answer: Record<string, unknown>, response: PosResponse, orderId: unknown): void {
+    if (hasAmbiguousResponseCode(answer)) {
+      this.logger.error('bank answer has an ambiguous response code', { order_id: echo(orderId) })
+      throw new OrderMismatchError('order_status', SUCCESS_CODE, 'ambiguous response code', {
+        ...response,
+        requires_manual_review: true,
+      })
     }
   }
 

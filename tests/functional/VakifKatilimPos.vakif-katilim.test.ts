@@ -137,6 +137,13 @@ describe.skipIf(!RUN)('VakifKatilimPos against the Vakıf Katılım test merchan
     console.info('[functional] pre-auth', summary(pre))
     expect(pre.status, JSON.stringify(summary(pre))).toBe('approved')
 
+    // the record of an open pre-authorization (OrderStatus, TransactionSecurity …) shows what a 3D Host confirmation
+    // must never accept as a completed sale
+    const preStatus = await pos.status({ id: order.id })
+    console.info('[functional] pre-auth status', summary(preStatus))
+    const preRecords = orderRecords(preStatus)
+    console.info('[functional] pre-auth status record shape', preRecords.shape, JSON.stringify(preRecords.records))
+
     const post = await pos.payment(
       MODEL.NON_SECURE,
       { id: order.id, remote_order_id: pre.remote_order_id as string, ip: '127.0.0.1' },

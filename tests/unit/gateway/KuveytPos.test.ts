@@ -840,14 +840,10 @@ describe('KuveytPos (mocked collaborators)', () => {
     },
   )
 
-  // addition: ruling (final fix wave) supersedes the earlier `['00']` and `{}` rows above: once the provision was
-  // sent, an answer without data or with a response code that is not one plain value is an unknown outcome
-  it('a provision answer {} is PosHttpError, a list ResponseCode is OrderMismatchError order_status', async () => {
-    approvePath({}, { status: 'approved' })
-    await expect(
-      pos.make3DPayment(cb({ AuthenticationResponse: authResponse(tdv2()) }), tdv2Order(), 'pay'),
-    ).rejects.toThrow(PosHttpError)
-
+  // addition: ruling (final fix wave) supersedes the earlier `['00']` row above: once the provision was sent, a
+  // response code that is not one plain value is an unknown outcome (an answer without any code is refused by the
+  // HTTP client, see the end-to-end tests)
+  it('a list ResponseCode is OrderMismatchError order_status', async () => {
     approvePath({ ResponseCode: ['00'] }, { status: 'declined' })
     const err = await mismatch(
       pos.make3DPayment(cb({ AuthenticationResponse: authResponse(tdv2()) }), tdv2Order(), 'pay'),
@@ -1181,6 +1177,8 @@ const NO_HASH = new HashMismatchError('3D callback has no HashData')
 const HASH_MISMATCH = new HashMismatchError('3D callback hash mismatch')
 const BAD_MD = new PosError('3D callback authentication values are malformed')
 const BAD_XML = new PosError('3D callback AuthenticationResponse is not valid XML')
+const NO_DATA = 'Bank answered the payment request without any data; its outcome is unknown'
+const NO_CODE = 'Bank answered the payment request without a response code; its outcome is unknown'
 
 describe('KuveytPos (end to end) 3D Secure', () => {
   const run = (
@@ -1648,13 +1646,22 @@ describe('KuveytPos (end to end) 3D Secure', () => {
   // addition: ruling (final fix wave), after the provision was sent an empty answer is an unknown outcome, not a
   // decline
   it.each([
-    ['HTTP 204', () => new Response(null, { status: 204 })],
-    ['a root element without fields', () => provisionXml({ ...NS })],
-  ])('a provision answered with %s is PosHttpError', async (_n, answer) => {
-    const { sent, promise } = run(tdv2(), tdv2Order(), { provision: answer })
+    ['HTTP 204', () => new Response(null, { status: 204 }), NO_DATA],
+    ['a root element without fields', () => provisionXml({ ...NS }), NO_DATA],
+    ['no ResponseCode', (f: Data) => provisionXml(provisionFor(f, { ResponseCode: undefined })), NO_CODE],
+    ['an empty ResponseCode', (f: Data) => provisionXml(provisionFor(f, { ResponseCode: '' })), NO_CODE],
+    ['a nil ResponseCode', (f: Data) => provisionXml(provisionFor(f, { ResponseCode: NIL })), NO_CODE],
+    [
+      'a root that holds only text',
+      () => '<VPosTransactionResponseContract>00</VPosTransactionResponseContract>',
+      NO_CODE,
+    ],
+  ])('a provision answered with %s is PosHttpError naming the request URL', async (_n, answer, message) => {
+    const { sent, promise } = run(tdv2(), tdv2Order(), { provision: answer as (f: Data) => Answer })
     const err = await promise.catch((e: unknown) => e)
     expect(err).toBeInstanceOf(PosHttpError)
-    expect((err as PosHttpError).message).toBe('Bank answered the provision without any data; its outcome is unknown')
+    expect((err as PosHttpError).message).toBe(message)
+    expect((err as PosHttpError).url).toBe(`${PAYMENT_API}/ThreeDModelProvisionGate`)
     expect(sent).toHaveLength(1)
   })
 
@@ -1820,6 +1827,46 @@ describe('KuveytPos (end to end) non-3D and SOAP transactions', () => {
   })
 
   // addition: K6 status over SOAP
+  // addition: ruling (final fix wave), a sale answer that does not say what happened is an unknown outcome
+  it.each([
+    ['HTTP 204', () => new Response(null, { status: 204 }), NO_DATA],
+    [
+      'no ResponseCode',
+      (f: Data) => provisionXml({ ...SALE_ANSWER, MerchantOrderId: f.MerchantOrderId, ResponseCode: undefined }),
+      NO_CODE,
+    ],
+    [
+      'a root that holds only text',
+      () => '<VPosTransactionResponseContract>x</VPosTransactionResponseContract>',
+      NO_CODE,
+    ],
+  ])('a non-secure sale answered with %s is PosHttpError naming the request URL', async (_n, answer, message) => {
+    const { sent, fetchImpl } = bankFetch({ sale: answer as (f: Data) => Answer })
+    const p = realGateway(fetchImpl)
+    const card = CreditCardFactory.createForGateway(p, '4155650100416111', '25', '1', '123', 'John Doe', CARD_TYPE.VISA)
+    const err = await p.payment(MODEL.NON_SECURE, { id: 'N1', amount: 1.01 }, TX_TYPE.PAY_AUTH, card).catch((e) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([
+      message,
+      `${PAYMENT_API}/Non3DPayGate`,
+    ])
+    expect(sent).toHaveLength(1)
+  })
+
+  it('a non-secure sale answer with ResponseCode 00 twice is OrderMismatchError order_status, flagged', async () => {
+    const { fetchImpl } = bankFetch({
+      sale: (f) => provisionXml({ ...SALE_ANSWER, MerchantOrderId: f.MerchantOrderId, ResponseCode: ['00', '00'] }),
+    })
+    const p = realGateway(fetchImpl)
+    const card = CreditCardFactory.createForGateway(p, '4155650100416111', '25', '1', '123', 'John Doe', CARD_TYPE.VISA)
+    const err = await mismatch(p.payment(MODEL.NON_SECURE, { id: 'N1', amount: 1.01 }, TX_TYPE.PAY_AUTH, card))
+    expect([err.field, err.paymentMayHaveCompleted, err.response?.requires_manual_review]).toStrictEqual([
+      'order_status',
+      true,
+      true,
+    ])
+  })
+
   it('status posts GetMerchantOrderDetail and maps the record approved', async () => {
     const { sent, fetchImpl } = bankFetch()
     const res = (await realGateway(fetchImpl).status({ id: '2023070849CD' })) as Data

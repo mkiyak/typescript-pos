@@ -4,7 +4,6 @@ import {
   OrderMismatchError,
   type OrderMismatchField,
   PosError,
-  PosHttpError,
   UnsupportedFormFormatError,
   UnsupportedPaymentModelError,
   UnsupportedTransactionTypeError,
@@ -13,6 +12,7 @@ import type { BoaPosAccount } from '../model/account/BoaPosAccount.js'
 import type { CreditCard } from '../model/card/CreditCard.js'
 import {
   CURRENCY,
+  type Currency,
   FORM_FORMAT,
   type FormFormat,
   MODEL,
@@ -31,6 +31,7 @@ import {
   BANK_ORDER_ID,
   boaOrderId,
   echo,
+  hasAmbiguousResponseCode,
   INSTALLMENT_TEXT,
   isCurrencyCode,
   isRecord,
@@ -44,7 +45,6 @@ import {
   redactHashPassword,
   SUCCESS_CODE,
   textOf,
-  unknownProvisionOutcome,
   unsignedDeclineResult,
 } from './boaCallback.js'
 
@@ -62,6 +62,26 @@ const PROVISION_NUMBER = /^[\x21-\x7E]{1,32}$/
 
 /** The message fields of a provision answer that state a currency. */
 const PROVISION_CURRENCY_KEYS = ['CurrencyCode', 'FECCurrencyCode'] as const
+
+/** A transaction the bank reports as successful. */
+const TRANSACTION_SUCCESSFUL = '1'
+
+/** The security level of a sale without 3D. */
+const NON_SECURE_SECURITY = '5'
+
+/** The order values a bank answer is compared with. */
+type OrderExpectations = {
+  /** The amount in kuruş as text. */
+  kurus: string
+  /** The amount with two decimals as the bank's order records write it. */
+  amountText: string
+  /** The order currency (`TRY`, …). */
+  currencyCode: Currency
+  /** The bank's numeric code of the order currency. */
+  currency: string
+  /** The stated installment count (0 for a single payment), or null when the order states none. */
+  installment: number | null
+}
 
 /** What a confirming status answer yields: its raw record and the first mismatch (null when it confirms). */
 type Confirmation = { record: Record<string, unknown>; failure: Mismatch | null }
@@ -99,18 +119,24 @@ type Confirmation = { record: Record<string, unknown>; failure: Mismatch | null 
  *   booking: an answer mapped approved must carry response code `00`, otherwise `PosError`. An answer with response
  *   code `00` is a booking whatever the mapper reads: it must name this order id (also inside its message, when
  *   present), the order's amount in kuruş and, when it states one, the order's currency, and it must map as
- *   approved; otherwise `OrderMismatchError` with the result attached and flagged for manual review. Once the
- *   provision was sent, an answer without any data is a `PosHttpError` and an answer whose response code is not one
- *   plain value an `OrderMismatchError` on `order_status`, flagged: neither tells whether the payment was booked.
+ *   approved; otherwise `OrderMismatchError` with the result attached and flagged for manual review. The order's
+ *   amount, currency and installment are validated before the provision is sent.
+ * - After a request that can move money (the provision, a sale, a pre-authorization, its close), an answer without a
+ *   response code (empty, missing, nil, text only) is a `PosHttpError` from the HTTP client naming the request URL,
+ *   and an answer whose response code is not one plain value an `OrderMismatchError` on `order_status` with the
+ *   mapped answer flagged for manual review: neither tells whether the money moved. Cancel, refund and status
+ *   answers are mapped as they come.
  * - 3D Host: the form the browser posts to the bank is unsigned, so the payer can change its amount and currency,
  *   and it carries `HashPassword`, so the payer can also sign any callback. A 3D Host callback therefore proves
  *   nothing by itself: every approval is confirmed with exactly one signed status request for the order id, and only
  *   the bank's record decides. The answer must hold exactly one order record (several records for one order id mean
- *   it was reversed); the record must name this order id, report response code `00` and a completed sale (initial
- *   and current order status `1`), the order's amount and currency, no cancelled or refunded amount, and an
- *   authorization code; when the order states an installment count, the record's must match. Any other answer is an
- *   `OrderMismatchError` with the result flagged for manual review (the attached result carries the order id and no
- *   unsigned callback reference); transport errors of the status request propagate. A confirmed result takes its
+ *   it was reversed); the record must name this order id, report response code `00`, a successful transaction
+ *   (transaction status `1`) that was not a non-secure sale (security level `5`), a completed sale (initial and
+ *   current order status `1`), the order's amount and currency, no cancelled or refunded amount, and an
+ *   authorization code; when the order states an installment count, the record's must match. The order's amount,
+ *   currency and installment are validated before the status request. Any other answer is an `OrderMismatchError`
+ *   with the result flagged for manual review (the attached result carries the order id and no unsigned callback
+ *   reference or bank order id); transport errors of the status request propagate. A confirmed result takes its
  *   authorization code, references, bank order id, amount and currency from the record, never from the callback.
  * - Every result has the hashed password the bank echoes (`HashPassword`) replaced in `all` and `3d_all`.
  */
@@ -139,7 +165,7 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
    *   fields are malformed
    * @throws OrderMismatchError when the callback does not belong to the order (nothing is sent), or when the bank's
    *   booking does not belong to the order or cannot be read (result attached, flagged for manual review)
-   * @throws PosHttpError when the provision request fails or its answer has no data
+   * @throws PosHttpError when the provision request fails or its answer carries no response code
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -159,8 +185,8 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
     const orderId = boaOrderId(order)
     this.assertSignedFieldsBound(callback, orderId)
     this.assertSessionValue(callback, orderId)
-    // An amount the bank cannot be sent fails here, before any request.
-    const expectedKurus = this.orderKurus(order)
+    // Every order value the bank's answer is compared with fails here, before any request.
+    const expected = this.orderExpectations(order)
 
     const requestData = await this.dispatchRequestDataPrepared(
       this.requestDataMapper.create3DPaymentRequestData(this.account, order, txType, callback),
@@ -173,7 +199,7 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
     const response = redactHashPassword(this.responseDataMapper.map3DPaymentData(callback, provision, txType, order))
     this.logger.debug('finished 3D payment', { mapped_response: response })
 
-    return this.checkProvision(provision, response, order, orderId, expectedKurus)
+    return this.checkProvision(provision, response, orderId, expected)
   }
 
   /** @throws UnsupportedPaymentModelError this bank has no 3D Pay model */
@@ -207,8 +233,8 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
 
     const orderId = boaOrderId(order)
     this.assertSignedFieldsBound(callback, orderId)
-    // An amount the bank cannot be sent fails here, before any request.
-    this.orderKurus(order)
+    // Every order value the bank's record is compared with fails here, before any request.
+    const expected = this.orderExpectations(order)
 
     const response = redactHashPassword(this.responseDataMapper.map3DHostResponseData(callback, txType, order))
     if (response.status !== TX_APPROVED) {
@@ -219,7 +245,7 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
       throw new PosError('3D Host callback with response code 00 was not mapped as approved')
     }
 
-    return this.confirmHostedPayment(response, order, orderId)
+    return this.confirmHostedPayment(response, orderId, expected)
   }
 
   /**
@@ -279,12 +305,44 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
     return html
   }
 
+  /** The sale and the pre-authorization: an answer whose response code is ambiguous is an unknown outcome, not a decline. */
   override async makeRegularPayment(order: PosOrder, card: CreditCard, txType: TxType): Promise<PosResponse> {
-    return redactHashPassword(await super.makeRegularPayment(order, card, txType))
+    const paymentModel = MODEL.NON_SECURE
+    this.logger.debug('making payment', { model: paymentModel, tx_type: txType })
+    if (txType !== TX_TYPE.PAY_AUTH && txType !== TX_TYPE.PAY_PRE_AUTH) {
+      throw new UnsupportedTransactionTypeError(`Invalid transaction type "${txType}" provided`)
+    }
+
+    const requestData = await this.dispatchRequestDataPrepared(
+      this.requestDataMapper.createNonSecurePaymentRequestData(this.account, order, txType, card),
+      txType,
+      order,
+      paymentModel,
+    )
+    const answer = await this.sendRequest(txType, paymentModel, requestData, order)
+    const response = redactHashPassword(this.responseDataMapper.mapPaymentResponse(answer, txType, order))
+    this.assertClearOutcome(answer, response, order.id)
+
+    return response
   }
 
+  /** The close of a pre-authorization: an answer whose response code is ambiguous is an unknown outcome. */
   override async makeRegularPostPayment(order: PosOrder): Promise<PosResponse> {
-    return redactHashPassword(await super.makeRegularPostPayment(order))
+    const txType = TX_TYPE.PAY_POST_AUTH
+    const paymentModel = MODEL.NON_SECURE
+    this.logger.debug('making payment', { model: paymentModel, tx_type: txType })
+
+    const requestData = await this.dispatchRequestDataPrepared(
+      this.requestDataMapper.createNonSecurePostAuthPaymentRequestData(this.account, order),
+      txType,
+      order,
+      paymentModel,
+    )
+    const answer = await this.sendRequest(txType, paymentModel, requestData, order)
+    const response = redactHashPassword(this.responseDataMapper.mapPaymentResponse(answer, txType, order))
+    this.assertClearOutcome(answer, response, order.id)
+
+    return response
   }
 
   override async status(order: PosOrder): Promise<PosResponse> {
@@ -432,19 +490,11 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
   private checkProvision(
     provision: Record<string, unknown>,
     response: PosResponse,
-    order: PosOrder,
     orderId: string,
-    expectedKurus: string,
+    expected: OrderExpectations,
   ): PosResponse {
     const evidence: PosResponse = { ...response, requires_manual_review: true }
-    const unknown = unknownProvisionOutcome(provision)
-    if (unknown === 'empty') {
-      this.logger.error('3D provision answer has no data', { order_id: echo(orderId) })
-      throw new PosHttpError('Bank answered the provision without any data; its outcome is unknown', { url: '' })
-    }
-    if (unknown === 'ambiguous') {
-      this.fail('order_status', SUCCESS_CODE, 'ambiguous response code', orderId, evidence)
-    }
+    this.assertClearOutcome(provision, response, orderId)
 
     const booked = textOf(provision, 'ResponseCode') === SUCCESS_CODE
     if (response.status === TX_APPROVED && !booked) {
@@ -458,8 +508,8 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
     const mismatch = provisionMismatch(
       provision,
       orderId,
-      expectedKurus,
-      this.orderCurrency(order),
+      expected.kurus,
+      expected.currency,
       PROVISION_CURRENCY_KEYS,
       false,
     )
@@ -486,12 +536,17 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
    * the order id and without the callback's unsigned references, flagged for manual review: a genuine payment whose
    * record lags or differs still needs attention.
    */
-  private async confirmHostedPayment(response: PosResponse, order: PosOrder, orderId: string): Promise<PosResponse> {
-    const { record, failure } = await this.bankRecordConfirms(order, orderId)
+  private async confirmHostedPayment(
+    response: PosResponse,
+    orderId: string,
+    expected: OrderExpectations,
+  ): Promise<PosResponse> {
+    const { record, failure } = await this.bankRecordConfirms(orderId, expected)
     if (failure !== null) {
       const evidence: PosResponse = {
         ...response,
         order_id: orderId,
+        remote_order_id: null,
         auth_code: null,
         ref_ret_num: null,
         transaction_id: null,
@@ -511,7 +566,7 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
       transaction_id: textOf(record, 'Stan') ?? null,
       remote_order_id: textOf(record, 'OrderId') ?? null,
       amount: Number(textOf(record, 'FirstAmount')),
-      currency: order.currency ?? CURRENCY.TRY,
+      currency: expected.currencyCode,
       installment_count:
         typeof installment === 'string' && INSTALLMENT_TEXT.test(installment)
           ? normalizedInstallment(Number(installment))
@@ -524,7 +579,7 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
    * one completed, open sale of this order id, amount and currency (null when it does). Every check reads the answer
    * exactly as the bank sent it.
    */
-  private async bankRecordConfirms(order: PosOrder, orderId: string): Promise<Confirmation> {
+  private async bankRecordConfirms(orderId: string, expected: OrderExpectations): Promise<Confirmation> {
     const statusOrder: PosOrder = { id: orderId }
     const requestData = await this.dispatchRequestDataPrepared(
       this.requestDataMapper.createStatusRequestData(this.account, statusOrder),
@@ -553,30 +608,35 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
       return closed(['order_id', orderId, recordOrderId ?? ''])
     }
 
-    for (const [key, expected] of [
+    for (const [key, wanted] of [
       ['ResponseCode', SUCCESS_CODE],
+      ['TransactionStatus', TRANSACTION_SUCCESSFUL],
       ['OrderStatus', SALE_COMPLETED],
       ['LastOrderStatus', SALE_COMPLETED],
     ] as const) {
       const actual = textOf(record, key)
-      if (actual !== expected) {
-        return closed(['order_status', `${key} ${expected}`, `${key} ${actual ?? ''}`])
+      if (actual !== wanted) {
+        return closed(['order_status', `${key} ${wanted}`, `${key} ${actual ?? ''}`])
       }
     }
 
-    const expectedAmount = numberFormat2(parseOrderAmount(order.amount))
+    // A sale without 3D (which anyone holding the hashed password could make through the API) is no 3D Host payment.
+    const security = textOf(record, 'TransactionSecurity')
+    if (security !== undefined && (security === null || security === NON_SECURE_SECURITY)) {
+      return closed(['order_status', 'a 3D transaction', `TransactionSecurity ${security ?? ''}`])
+    }
+
     const amount = textOf(record, 'FirstAmount')
-    if (typeof amount !== 'string' || !RECORD_AMOUNT.test(amount) || amount !== expectedAmount) {
-      return closed(['amount', expectedAmount, amount ?? ''])
+    if (typeof amount !== 'string' || !RECORD_AMOUNT.test(amount) || amount !== expected.amountText) {
+      return closed(['amount', expected.amountText, amount ?? ''])
     }
 
-    const expectedCurrency = this.orderCurrency(order)
     const currency = textOf(record, 'FEC')
-    if (typeof currency !== 'string' || !isCurrencyCode(currency, expectedCurrency)) {
-      return closed(['currency', expectedCurrency, currency ?? ''])
+    if (typeof currency !== 'string' || !isCurrencyCode(currency, expected.currency)) {
+      return closed(['currency', expected.currency, currency ?? ''])
     }
 
-    const installmentFailure = this.installmentMismatch(record, order)
+    const installmentFailure = this.installmentMismatch(record, expected.installment)
     if (installmentFailure !== null) {
       return closed(installmentFailure)
     }
@@ -599,11 +659,10 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
    * The bank's page may offer installments, so a record's count is compared only when the order states one; one
    * installment is a single payment, like none.
    */
-  private installmentMismatch(record: Record<string, unknown>, order: PosOrder): Mismatch | null {
-    if (order.installment === undefined || order.installment === null) {
+  private installmentMismatch(record: Record<string, unknown>, expected: number | null): Mismatch | null {
+    if (expected === null) {
       return null
     }
-    const expected = normalizedInstallment(parseInstallment(order.installment))
     const text = textOf(record, 'InstallmentCount')
     if (text === undefined) {
       return expected === 0 ? null : ['installment', String(expected), '']
@@ -615,13 +674,39 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
     return null
   }
 
-  /** The order amount in kuruş as text; an amount the bank cannot be sent is a `PosError`. */
-  private orderKurus(order: PosOrder): string {
-    return String(toKurus(parseOrderAmount(order.amount)))
+  /**
+   * A money-moving answer whose response code is not one plain value says nothing certain about the money: the
+   * mapped answer is attached and flagged for manual review.
+   */
+  private assertClearOutcome(answer: Record<string, unknown>, response: PosResponse, orderId: unknown): void {
+    if (hasAmbiguousResponseCode(answer)) {
+      this.logger.error('bank answer has an ambiguous response code', { order_id: echo(orderId) })
+      throw new OrderMismatchError('order_status', SUCCESS_CODE, 'ambiguous response code', {
+        ...response,
+        requires_manual_review: true,
+      })
+    }
   }
 
-  private orderCurrency(order: PosOrder): string {
-    return String(this.requestValueMapper.mapCurrency(order.currency ?? CURRENCY.TRY))
+  /**
+   * The order values a bank answer is compared with, read once before any request: an amount the bank cannot be
+   * sent, a currency it does not know or an installment count that is not one is a `PosError` while no money moved.
+   */
+  private orderExpectations(order: PosOrder): OrderExpectations {
+    const amount = parseOrderAmount(order.amount)
+    const currencyCode = order.currency ?? CURRENCY.TRY
+    const installment =
+      order.installment === undefined || order.installment === null
+        ? null
+        : normalizedInstallment(parseInstallment(order.installment))
+
+    return {
+      kurus: String(toKurus(amount)),
+      amountText: numberFormat2(amount),
+      currencyCode,
+      currency: String(this.requestValueMapper.mapCurrency(currencyCode)),
+      installment,
+    }
   }
 
   private fail(

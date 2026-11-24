@@ -109,7 +109,10 @@ describe('VakifKatilimPosHttpClient', () => {
 
   it('request', async () => {
     const sent: Sent[] = []
-    const c = createClient(fakeFetch(sent, '<response><result>success</result></response>'))
+    // deviation: ruling (final fix wave) the answer to a provision must carry a response code
+    const c = createClient(
+      fakeFetch(sent, '<response><ResponseCode>00</ResponseCode><result>success</result></response>'),
+    )
     const actual = await c.request(
       TX_TYPE.PAY_AUTH,
       MODEL.THREE_D_SECURE,
@@ -118,7 +121,7 @@ describe('VakifKatilimPosHttpClient', () => {
       `${API_URL}/ThreeDModelProvisionGate`,
     )
 
-    expect(actual).toStrictEqual({ result: 'success' })
+    expect(actual).toStrictEqual({ ResponseCode: '00', result: 'success' })
     expect(sent[0]?.url).toBe(`${API_URL}/ThreeDModelProvisionGate`)
     expect(latin1(sent[0])).toBe(xmlOf('<request-data>x</request-data>'))
     expect(new Headers(sent[0]?.init.headers).get('Content-Type')).toBe('text/xml; charset=UTF-8')
@@ -244,7 +247,7 @@ describe('VakifKatilimPosHttpClient', () => {
       const sent: Sent[] = []
       const c = createClient(fakeFetch(sent, answer))
       await c.request(
-        TX_TYPE.PAY_AUTH,
+        TX_TYPE.STATUS,
         MODEL.NON_SECURE,
         { CardHolderName: 'Şule', City: 'İstanbul', Name: 'Ömer Çelik ş' },
         { id: '1' },
@@ -277,7 +280,7 @@ describe('VakifKatilimPosHttpClient', () => {
       const xml = Buffer.from('<?xml version="1.0" encoding="utf-16"?><r><m>İşlem onaylandı</m></r>', 'utf8')
       const c = createClient(fakeFetch([], new Uint8Array(xml)))
 
-      expect(await c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({
+      expect(await c.request(TX_TYPE.STATUS, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({
         m: 'İşlem onaylandı',
       })
     })
@@ -286,7 +289,7 @@ describe('VakifKatilimPosHttpClient', () => {
       const xml = Buffer.from(`<?xml version="1.0" encoding="${declared}"?><r><m>İşlem</m></r>`, 'utf8')
       const c = createClient(fakeFetch([], new Uint8Array(xml)))
 
-      expect(await c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({ m: 'İşlem' })
+      expect(await c.request(TX_TYPE.STATUS, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({ m: 'İşlem' })
     })
 
     // addition: the bank's Turkish answer in a declared single-byte charset is read correctly
@@ -298,7 +301,7 @@ describe('VakifKatilimPosHttpClient', () => {
       ])
       const c = createClient(fakeFetch([], new Uint8Array(xml)))
 
-      expect(await c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({ m: 'Şifre' })
+      expect(await c.request(TX_TYPE.STATUS, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({ m: 'Şifre' })
     })
 
     it('removes the null character the bank puts into an answer', async () => {
@@ -309,10 +312,39 @@ describe('VakifKatilimPosHttpClient', () => {
       })
     })
 
-    it('answers 204 with an empty record', async () => {
-      const c = createClient(fakeFetch([], '', 204))
-      expect(await c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({})
-    })
+    // addition: ruling (final fix wave), an answer to a money-moving request without a response code is an unknown
+    // outcome naming the request URL; the answer to a status or a reversal is mapped as it comes
+    it.each([
+      [TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, 'Non3DPayGate'],
+      [TX_TYPE.PAY_AUTH, MODEL.THREE_D_SECURE, 'ThreeDModelProvisionGate'],
+      [TX_TYPE.PAY_PRE_AUTH, MODEL.NON_SECURE, 'PreAuthorizaten'],
+      [TX_TYPE.PAY_POST_AUTH, MODEL.NON_SECURE, 'PreAuthorizatenClose'],
+    ] as Array<[TxType, PaymentModel, string]>)(
+      'a %s %s answer without a response code is PosHttpError',
+      async (tx, model, path) => {
+        for (const [body, status] of [
+          ['', 204],
+          ['<r/>', 200],
+          ['<r>00</r>', 200],
+          ['<r><ResponseCode/></r>', 200],
+          ['<r><ResponseCode xsi:nil="true"/></r>', 200],
+          ['<r><ResponseMessage>x</ResponseMessage></r>', 200],
+        ] as Array<[string, number]>) {
+          const c = createClient(fakeFetch([], body, status))
+          const err = await c.request(tx, model, { a: 1 }, { id: '1' }).catch((e: unknown) => e)
+          expect(err).toBeInstanceOf(PosHttpError)
+          expect((err as PosHttpError).url).toBe(`${API_URL}/${path}`)
+        }
+      },
+    )
+
+    it.each([[TX_TYPE.STATUS], [TX_TYPE.CANCEL], [TX_TYPE.REFUND], [TX_TYPE.ORDER_HISTORY]])(
+      'a %s answered 204 is an empty record',
+      async (tx) => {
+        const c = createClient(fakeFetch([], '', 204))
+        expect(await c.request(tx, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).toStrictEqual({})
+      },
+    )
 
     it('does not follow a redirect', async () => {
       const c = createClient(fakeFetch([], '', 302, { Location: 'https://evil.example/' }))

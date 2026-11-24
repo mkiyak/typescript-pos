@@ -10,6 +10,7 @@ import { XmlEncoder } from '../serializer/XmlEncoder.js'
 import type { PosOrder } from '../types.js'
 import { ownValue } from '../util/ownValue.js'
 import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
+import { assertPaymentAnswerHasCode } from './boaPaymentAnswer.js'
 import type { HttpTransport, HttpTransportResponse } from './HttpTransport.js'
 
 type Node = string | Readonly<Record<string, unknown>>
@@ -101,7 +102,11 @@ export class VakifKatilimPosHttpClient extends AbstractHttpClient {
     return `${this.endpoint}/${path}`
   }
 
-  /** The kind of the order being reversed is read from the order the gateway already passes along. */
+  /**
+   * The kind of the order being reversed is read from the order the gateway already passes along. The answer to a
+   * request that can move money (provision, sale, pre-authorization, close) must carry a response code: one that
+   * does not says nothing about the money and is an unknown outcome (`PosHttpError` naming the request URL).
+   */
   override async request(
     txType: ClientTxType,
     paymentModel: PaymentModel,
@@ -110,8 +115,10 @@ export class VakifKatilimPosHttpClient extends AbstractHttpClient {
     url?: string | null,
   ): Promise<Record<string, unknown>> {
     const target = url ?? this.getApiUrl(txType, paymentModel, orderTxTypeOf(order) as TxType | null)
+    const answer = await super.request(txType, paymentModel, requestData, order, target)
+    assertPaymentAnswerHasCode(txType, answer, target)
 
-    return super.request(txType, paymentModel, requestData, order, target)
+    return answer
   }
 
   private pathOf(txType: unknown, paymentModel: unknown, orderTxType: unknown): string | undefined {
