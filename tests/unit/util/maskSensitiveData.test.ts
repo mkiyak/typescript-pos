@@ -113,4 +113,29 @@ describe('maskSensitiveData', () => {
     for (let i = 0; i < 20000; i++) deep = { n: deep }
     expect(() => maskSensitiveData(deep)).not.toThrow()
   })
+
+  // addition: expiry object keys
+  it('masks ExpireMonth and ExpireYear keys', () => {
+    expect(maskSensitiveData({ ExpireMonth: '12', expireYear: '2021' })).toEqual({
+      ExpireMonth: '***',
+      expireYear: '***',
+    })
+  })
+
+  // addition: query-string card fields
+  it('masks card fields in query strings', () => {
+    const out = maskSensitiveData('PAN=5555444433332222&CVV=122&ExpireMonth=12&ExpireYear=2021&MerchantPassword=x')
+    for (const leak of ['5555444433332222', '=122', '=12&', '=2021', '=x']) {
+      expect(out).not.toContain(leak)
+    }
+  })
+
+  // addition: JSON-encoded secrets inside strings
+  it('masks JSON-in-string secrets and keeps other pairs', () => {
+    const out = maskSensitiveData('{"HostMerchantId":"000000000111111","Password":"3XTgER89as","TransactionId":"abc"}')
+    expect(out).toContain('"Password":"***"')
+    expect(out).toContain('"TransactionId":"abc"')
+    expect(out).not.toContain('3XTgER89as')
+    expect(maskSensitiveData('{"Password" : "a\\"b"}')).toBe('{"Password":"***"}')
+  })
 })

@@ -22,6 +22,8 @@ const SENSITIVE_KEYS = new Set([
   'store_key',
   'cvv2val',
   'expires',
+  'expiremonth',
+  'expireyear',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -35,17 +37,22 @@ const SENSITIVE_TAGS = [
   'Expiry',
   'ExpiryDate',
   'Expires',
+  'ExpireMonth',
+  'ExpireYear',
   'Password',
   'MerchantPassword',
   'Pan',
 ]
 const XML_PATTERN = new RegExp(`(<(${SENSITIVE_TAGS.join('|')})(?:\\s[^>]*)?>)[^<]*(</\\2\\s*>)`, 'gi')
 const QUERY_PATTERN = new RegExp(`(?<![A-Za-z0-9_])(${SENSITIVE_TAGS.join('|')})=[^&\\s"']*`, 'gi')
+// JSON-encoded pairs inside strings: "Password" : "value" (escaped quotes allowed in the value).
+const JSON_PATTERN = new RegExp(`"(${SENSITIVE_TAGS.join('|')})"\\s*:\\s*"(?:[^"\\\\]|\\\\.)*"`, 'gi')
 
 function maskString(value: string): string {
   return value
     .replace(XML_PATTERN, `$1${MASK}$3`)
     .replace(QUERY_PATTERN, `$1=${MASK}`)
+    .replace(JSON_PATTERN, `"$1":"${MASK}"`)
     .replace(PAN_PATTERN, (m) => `${m.slice(0, 6)}****${m.slice(-4)}`)
 }
 

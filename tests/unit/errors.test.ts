@@ -26,6 +26,11 @@ describe('errors', () => {
     expect(e.message).toBe('boom')
   })
 
+  // addition: common payment mismatch fields
+  it.each(['transaction_id', 'transaction_type'] as const)('OrderMismatchError accepts field %s', (field) => {
+    expect(new E.OrderMismatchError(field, 'a', 'b').field).toBe(field)
+  })
+
   it('OrderMismatchError carries fields', () => {
     const e = new E.OrderMismatchError('order_id', 'A', 'B')
     expect(e.name).toBe('OrderMismatchError')

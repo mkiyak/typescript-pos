@@ -14,6 +14,7 @@ export type PosOrder = Record<string, unknown> & {
   auth_code?: string
   pre_auth_amount?: number
   order_type?: string
+  payment_token?: string
 }
 
 /** Callback POST body sent back by the bank. */

@@ -21,7 +21,14 @@ export class NotImplementedError extends PosError {}
 export class InvalidCardError extends PosError {}
 
 /** Callback field that did not match the order / account. */
-export type OrderMismatchField = 'order_id' | 'amount' | 'currency' | 'merchant_id' | 'storetype'
+export type OrderMismatchField =
+  | 'order_id'
+  | 'amount'
+  | 'currency'
+  | 'merchant_id'
+  | 'storetype'
+  | 'transaction_id'
+  | 'transaction_type'
 
 export class OrderMismatchError extends PosError {
   readonly field: OrderMismatchField
