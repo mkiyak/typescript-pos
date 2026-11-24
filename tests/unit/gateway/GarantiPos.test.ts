@@ -297,8 +297,12 @@ describe('GarantiPos (mocked collaborators)', () => {
     },
   )
 
-  /** Callback echo fields of a 3D Secure order (deviation: G5 binding needs the order and the echo fields). */
+  /**
+   * Callback echo fields of a 3D Secure order (deviation: G5 binding needs the order and the echo fields; a signed
+   * callback also carries the terminal as clientid).
+   */
   const boundEcho = (orderId: string): Data => ({
+    clientid: '30691298',
     oid: orderId,
     orderid: orderId,
     txnamount: '101',
@@ -492,6 +496,7 @@ describe('GarantiPos (mocked collaborators)', () => {
   })
 
   const threeDPayCallback = (): Data => ({
+    clientid: '30691298',
     hash: 'H',
     hashparams: 'clientid:oid:authcode:procreturncode:response:mdstatus:cavv:eci:md:rnd:',
     oid: '123',
@@ -797,6 +802,118 @@ describe('GarantiPos (mocked collaborators)', () => {
     expect(err.field).toBe('terminal_id')
     expect(err.paymentMayHaveCompleted).toBe(true)
     expect(err.response?.requires_manual_review).toBe(true)
+  })
+  // addition: review finding, a signed callback must carry the terminal as clientid
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+  ])('3D Secure rejects a signed callback with a %s clientid before provisioning', async (_name, clientid) => {
+    responseMapper.is3dAuthSuccess.mockReturnValue(true)
+    crypt.check3DHash.mockReturnValue(true)
+    const { clientid: _c, ...echo } = boundEcho('ORDER-1')
+    const cb = clientid === undefined ? { mdstatus: '1', ...echo } : { mdstatus: '1', ...echo, clientid }
+    const err = (await pos
+      .payment(MODEL.THREE_D_SECURE, boundOrder('ORDER-1'), TX_TYPE.PAY_AUTH, null, cb)
+      .catch((e: unknown) => e)) as OrderMismatchError
+    expect(err).toBeInstanceOf(OrderMismatchError)
+    expect(err.field).toBe('terminal_id')
+    expect(err.actual).toBe('')
+    expect(httpClient.request).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+  ])('3D Pay rejects a signed callback with a %s clientid', async (_name, clientid) => {
+    crypt.check3DHash.mockReturnValue(true)
+    responseMapper.map3DPayResponseData.mockReturnValue({ status: 'approved', order_id: '123', proc_return_code: '00' })
+    const { clientid: _c, ...cb } = threeDPayCallback()
+    const err = (await pos
+      .payment(
+        MODEL.THREE_D_PAY,
+        { id: '123', amount: 1.01, currency: CURRENCY.TRY },
+        TX_TYPE.PAY_AUTH,
+        null,
+        clientid === undefined ? cb : { ...cb, clientid },
+      )
+      .catch((e: unknown) => e)) as OrderMismatchError
+    expect(err).toBeInstanceOf(OrderMismatchError)
+    expect(err.field).toBe('terminal_id')
+  })
+
+  // addition: an unsigned 3D Pay decline without clientid is still an ordinary decline
+  it('3D Pay accepts an unsigned decline without clientid', async () => {
+    responseMapper.map3DPayResponseData.mockReturnValue({ status: 'declined', order_id: '123', proc_return_code: '99' })
+    const { clientid: _c, hash: _h, ...cb } = threeDPayCallback()
+    await expect(
+      pos.payment(MODEL.THREE_D_PAY, { id: '123', amount: 1.01 }, TX_TYPE.PAY_AUTH, null, cb),
+    ).resolves.toStrictEqual({ status: 'declined', order_id: '123', proc_return_code: '99' })
+    expect(crypt.check3DHash).not.toHaveBeenCalled()
+  })
+
+  // addition: review finding, the signed authcode pins the end of the signed oid
+  it.each([
+    ['304919', '00', true],
+    ['P18552', '00', true],
+    ['ab12CD', '00', true],
+    [' 304919 ', '00', true],
+    ['', '92', true],
+    [' ', '92', true],
+    ['', '', true],
+    ['', '00', false],
+    [' ', '00', false],
+    ['30491', '00', false],
+    ['3049190', '00', false],
+    ['30491-', '00', false],
+    ['2', '92', false],
+    ['04919', '92', false],
+  ])('3D Pay signed authcode %j with procreturncode %j accepted: %s', async (authcode, procreturncode, accepted) => {
+    crypt.check3DHash.mockReturnValue(true)
+    const mapped = {
+      status: procreturncode === '00' ? 'approved' : 'declined',
+      order_id: '123',
+      proc_return_code: procreturncode,
+    }
+    responseMapper.map3DPayResponseData.mockReturnValue(mapped)
+    const result = pos
+      .payment(MODEL.THREE_D_PAY, { id: '123', amount: 1.01, currency: CURRENCY.TRY }, TX_TYPE.PAY_AUTH, null, {
+        ...threeDPayCallback(),
+        authcode,
+        procreturncode,
+      })
+      .catch((e: unknown) => e)
+    if (accepted) {
+      await expect(result).resolves.toStrictEqual(mapped)
+    } else {
+      const err = await result
+      expect(err).toBeInstanceOf(HashMismatchError)
+      expect(responseMapper.map3DPayResponseData).not.toHaveBeenCalled()
+    }
+  })
+
+  // addition: review finding, attacker-controlled key names are echoed only up to 64 characters
+  it('caps a long nested key name in the error and the log', async () => {
+    const key = `k${'x'.repeat(200)}`
+    const err = (await pos
+      .payment(MODEL.THREE_D_PAY, { id: '123' }, TX_TYPE.PAY_AUTH, null, {
+        ...threeDPayCallback(),
+        [key]: { a: 1 } as unknown as string,
+      })
+      .catch((e: unknown) => e)) as PosError
+    expect(err).toBeInstanceOf(PosError)
+    expect(err.message).toContain(key.slice(0, 64))
+    expect(err.message).not.toContain(key.slice(0, 65))
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(key.slice(0, 65))
+  })
+
+  // addition: a non-enumerable nested value is found too
+  it('rejects a non-enumerable nested value', async () => {
+    const cb = threeDPayCallback()
+    Object.defineProperty(cb, 'zz', { value: { oid: '123' }, enumerable: false })
+    await expect(pos.payment(MODEL.THREE_D_PAY, { id: '123' }, TX_TYPE.PAY_AUTH, null, cb)).rejects.toThrow(
+      '3D callback field "zz" must be a string',
+    )
+    expect(crypt.check3DHash).not.toHaveBeenCalled()
   })
 })
 
@@ -1470,6 +1587,79 @@ describe('GarantiPos (end to end) forged callbacks', () => {
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(HashMismatchError)
       expect((err as Error).message).toBe('3D callback outcome fields are malformed')
+    },
+  )
+  // addition: review finding, the signed oid cannot borrow from or lend to the signed authcode, and clientid
+  // cannot be dropped to lengthen it (original hash FC9EBD15... still verifies for every vector)
+  it.each([
+    [
+      'SHIFT-A oid -> authcode',
+      { oid: 'order22', orderid: 'order22', transid: 'order22', authcode: '2304919', txnamount: '999900' },
+      { id: 'order22', amount: 9999, currency: CURRENCY.TRY },
+      HashMismatchError,
+    ],
+    [
+      'SHIFT-B authcode -> oid',
+      { oid: 'order2223', orderid: 'order2223', transid: 'order2223', authcode: '04919', txnamount: '999900' },
+      { id: 'order2223', amount: 9999, currency: CURRENCY.TRY },
+      HashMismatchError,
+    ],
+    [
+      'SHIFT-C clientid dropped, terminal id moved into oid',
+      { clientid: undefined, oid: '30691298order222', orderid: '30691298order222' },
+      { id: '30691298order222', amount: 100.25, currency: CURRENCY.TRY },
+      OrderMismatchError,
+    ],
+  ] as Array<[string, Record<string, string | undefined>, PosOrder, typeof PosError]>)(
+    '3D Pay: %s fails closed, never approved',
+    async (_name, shift, order, errorClass) => {
+      const cb: Record<string, string> = { ...payCallback }
+      for (const [k, v] of Object.entries(shift)) {
+        if (v === undefined) delete cb[k]
+        else cb[k] = v
+      }
+      expect(new GarantiPosCrypt().check3DHash(createAccount(), cb)).toBe(true)
+      const { sent, fetchImpl } = recordingFetch()
+      const err = await realGateway(fetchImpl)
+        .payment(MODEL.THREE_D_PAY, order, TX_TYPE.PAY_AUTH, null, cb)
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(errorClass)
+      if (err instanceof OrderMismatchError) {
+        expect(err.field).toBe('terminal_id')
+      }
+      expect(sent).toHaveLength(0)
+    },
+  )
+
+  // addition: review finding, the same boundary shifts on a signed 3D Secure callback never reach the bank
+  it.each([
+    [
+      'oid -> authcode',
+      { oid: '2023100354B', orderid: '2023100354B', authcode: 'B' },
+      { ...secureOrder, id: '2023100354B' },
+      HashMismatchError,
+    ],
+    [
+      'clientid dropped, terminal id moved into oid',
+      { clientid: undefined, oid: '306912982023100354BB', orderid: '306912982023100354BB' },
+      { ...secureOrder, id: '306912982023100354BB' },
+      OrderMismatchError,
+    ],
+  ] as Array<[string, Record<string, string | undefined>, PosOrder, typeof PosError]>)(
+    '3D Secure: %s fails closed, nothing sent',
+    async (_name, shift, order, errorClass) => {
+      const cb: Record<string, string> = { ...secureCallback }
+      for (const [k, v] of Object.entries(shift)) {
+        if (v === undefined) delete cb[k]
+        else cb[k] = v
+      }
+      expect(new GarantiPosCrypt().check3DHash(createAccount(), cb)).toBe(true)
+      const { sent, fetchImpl } = recordingFetch()
+      const err = await realGateway(fetchImpl)
+        .payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, null, cb)
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(errorClass)
+      expect(sent).toHaveLength(0)
     },
   )
 })
