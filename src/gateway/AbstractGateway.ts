@@ -46,6 +46,10 @@ export type GatewayConfig = {
    *
    * Without a signed callback (`require_3d_hash: false` and no `Hash`), the order-binding guard compares
    * browser-supplied values and only stops naive replays; enable `require_3d_hash` once your bank sends `Hash`.
+   *
+   * Garanti 3D Pay: reject a callback that carries no `hash` (`HashMismatchError`). Default false, because the
+   * bank sends some error callbacks unsigned; without it an unsigned callback is accepted only when it maps as
+   * declined and its `procreturncode` is not `00`.
    */
   require_3d_hash?: boolean
 }
