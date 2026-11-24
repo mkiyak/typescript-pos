@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { GatewayClassNotConfiguredError, PosError } from '../../../src/errors.js'
@@ -8,6 +10,7 @@ import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import type { PosLogger } from '../../../src/logger.js'
 import { AbstractMappedPosQuery } from '../../../src/pos-query/AbstractMappedPosQuery.js'
 import { AbstractPosQuery } from '../../../src/pos-query/AbstractPosQuery.js'
+import { AkbankPosQuery } from '../../../src/pos-query/AkbankPosQuery.js'
 import { AssecoPosQuery } from '../../../src/pos-query/AssecoPosQuery.js'
 import { GarantiPosQuery } from '../../../src/pos-query/GarantiPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../../../src/pos-query/PayFlexCPV4PosQuery.js'
@@ -64,6 +67,7 @@ describe('PosQueryFactory', () => {
   })
 
   it('getPosQueryClassForGateway returns the registered class or null', () => {
+    expect(PosQueryFactory.getPosQueryClassForGateway('AkbankPos')).toBe(AkbankPosQuery)
     expect(PosQueryFactory.getPosQueryClassForGateway('AssecoPos')).toBe(AssecoPosQuery)
     expect(PosQueryFactory.getPosQueryClassForGateway('GarantiPos')).toBe(GarantiPosQuery)
     expect(PosQueryFactory.getPosQueryClassForGateway('PayFlexV4Pos')).toBe(PayFlexV4PosQuery)
@@ -223,3 +227,101 @@ function assecoConfigFor(cls: string): PosConfig {
     },
   }
 }
+
+const SECRET =
+  '3230323330393034313735303032363031353172675f357637355f3273387373745f7233725f73323333383737335f323272383774767276327672323531355f'
+const akbankAccount = () =>
+  AccountFactory.createAkbankPosAccount(
+    'akbank-pos',
+    '2023090417500272654BD9A49CF07574',
+    '2023090417500284633D137A249DBBEB',
+    SECRET,
+  )
+const hmac = (s: string) => createHmac('sha512', SECRET).update(s, 'utf8').digest('base64')
+
+describe('PosQueryFactory with AkbankPos', () => {
+  it('creates an AkbankPosQuery in test mode from the shipped test config', () => {
+    const q = PosQueryFactory.createPosQuery(akbankAccount(), posTestConfig)
+    expect(q).toBeInstanceOf(AkbankPosQuery)
+    expect(q).toBeInstanceOf(AbstractMappedPosQuery)
+  })
+
+  it('rejects an AssecoPosAccount for the akbank-pos bank', () => {
+    expect(() => PosQueryFactory.createPosQuery(assecoAccount('akbank-pos'), posTestConfig)).toThrow(PosError)
+  })
+
+  // addition: end to end through the real mappers, signed client and crypt with a fake fetch
+  function e2e(answer: string, logger?: PosLogger) {
+    const calls: Array<{ url: string; body: string; headers: Record<string, string> }> = []
+    const fake = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const body = init?.body
+      const text = typeof body === 'string' ? body : Buffer.from(body as Uint8Array).toString('utf8')
+      const headers = Object.fromEntries(new Headers(init?.headers).entries())
+      // the signature must cover the exact body that was sent
+      expect(headers['auth-hash']).toBe(hmac(text))
+      calls.push({ url: String(url), body: text, headers })
+      return new Response(answer, { status: 200 })
+    })
+    const q = PosQueryFactory.createPosQuery(akbankAccount(), posTestConfig, {
+      fetch: fake as unknown as typeof fetch,
+      logger,
+    })
+    return { q, calls, fake }
+  }
+
+  it('history posts the Türkiye wall-clock dates to the report endpoint and maps the answer', async () => {
+    const answer = readFileSync(
+      new URL('../test_data/akbankpos/history/daily_history_raw.json', import.meta.url),
+      'utf8',
+    )
+    const { q, calls } = e2e(answer)
+    const result = await q.history({
+      start_date: new Date('2024-04-13T13:00:00+03:00'),
+      end_date: new Date('2024-04-14T13:00:00+03:00'),
+    })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe('https://apipre.akbank.com/api/v1/payment/virtualpos/portal/report/transaction')
+    const body = JSON.parse(calls[0]?.body ?? '{}')
+    expect(body.report).toEqual({ startDateTime: '2024-04-13T13:00:00.000', endDateTime: '2024-04-14T13:00:00.000' })
+    expect(body.terminal).toEqual({
+      merchantSafeId: '2023090417500272654BD9A49CF07574',
+      terminalSafeId: '2023090417500284633D137A249DBBEB',
+    })
+    expect(result.status).toBe('approved')
+    expect(result.trans_count).toBe(525)
+  })
+
+  it('customQuery adds terminal, version and a 128-hex-digit random number and posts to the process endpoint', async () => {
+    const { q, calls } = e2e('{"responseCode":"VPS-0000"}')
+    const result = await q.customQuery({
+      txnCode: '1020',
+      order: { orderTrackId: 'ae15a6c8-467e-45de-b24c-b98821a42667' },
+    })
+
+    expect(calls[0]?.url).toBe('https://apipre.akbank.com/api/v1/payment/virtualpos/transaction/process')
+    const body = JSON.parse(calls[0]?.body ?? '{}')
+    expect(body.version).toBe('1.00')
+    expect(body.terminal.merchantSafeId).toBe('2023090417500272654BD9A49CF07574')
+    expect(body.randomNumber).toMatch(/^[0-9A-F]{128}$/)
+    expect(result).toEqual({ responseCode: 'VPS-0000' })
+  })
+
+  it('customQuery refuses a foreign origin without calling the bank', async () => {
+    const { q, fake } = e2e('{}')
+    await expect(q.customQuery({ txnCode: '1020' }, 'https://evil.example/x')).rejects.toBeInstanceOf(PosError)
+    expect(fake).not.toHaveBeenCalled()
+  })
+
+  it('never logs the secret key or the signature', async () => {
+    const lines: string[] = []
+    const record = (...args: unknown[]) => void lines.push(JSON.stringify(args))
+    const logger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
+    const { q, calls } = e2e('{"responseCode":"VPS-0000"}', logger)
+    await q.customQuery({ txnCode: '1020' })
+
+    const all = lines.join('\n')
+    expect(all).not.toContain(SECRET)
+    expect(all).not.toContain(hmac(calls[0]?.body ?? ''))
+  })
+})

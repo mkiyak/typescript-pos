@@ -1,3 +1,4 @@
+import { AkbankPosQueryResponseDataMapper } from '../data-mapper/pos-query/response/AkbankPosQueryResponseDataMapper.js'
 import { GarantiPosQueryResponseDataMapper } from '../data-mapper/pos-query/response/GarantiPosQueryResponseDataMapper.js'
 import type { QueryResponseDataMapperInterface } from '../data-mapper/pos-query/response/QueryResponseDataMapperInterface.js'
 import type { ResponseValueFormatterInterface } from '../data-mapper/response/value-formatter/ResponseValueFormatterInterface.js'
@@ -18,7 +19,10 @@ type ResponseMapperClass = {
  * here. AssecoPos, PayFlexV4Pos and PayFlexCPV4Pos answer custom queries only, which are returned as the bank sent
  * them, so they have none.
  */
-const RESPONSE_MAPPERS: readonly ResponseMapperClass[] = [GarantiPosQueryResponseDataMapper]
+const RESPONSE_MAPPERS: readonly ResponseMapperClass[] = [
+  AkbankPosQueryResponseDataMapper,
+  GarantiPosQueryResponseDataMapper,
+]
 
 /** Picks the query response mapper of a gateway class, or null when it has none. Internal: not part of the public API. */
 export const PosQueryResponseMapperFactory = {

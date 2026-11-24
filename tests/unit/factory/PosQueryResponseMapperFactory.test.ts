@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { AkbankPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/AkbankPosQueryResponseDataMapper.js'
 import { GarantiPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/GarantiPosQueryResponseDataMapper.js'
 import { AssecoPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/AssecoPosResponseValueFormatter.js'
 import { BasicResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
 import { GarantiPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/GarantiPosResponseValueFormatter.js'
+import { AkbankPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/AkbankPosResponseValueMapper.js'
 import { AssecoPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/AssecoPosResponseValueMapper.js'
 import { GarantiPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/GarantiPosResponseValueMapper.js'
 import { PayFlexCPV4PosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayFlexCPV4PosResponseValueMapper.js'
@@ -20,6 +22,17 @@ describe('PosQueryResponseMapperFactory', () => {
         noopLogger,
       ),
     ).toBeNull()
+  })
+
+  it('testCreateForGatewayReturnsCorrectMapper AkbankPos', () => {
+    expect(
+      PosQueryResponseMapperFactory.createForGateway(
+        'AkbankPos',
+        new BasicResponseValueFormatter(),
+        new AkbankPosResponseValueMapper(),
+        noopLogger,
+      ),
+    ).toBeInstanceOf(AkbankPosQueryResponseDataMapper)
   })
 
   it('testCreateForGatewayReturnsCorrectMapper GarantiPos', () => {

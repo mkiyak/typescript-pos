@@ -79,6 +79,7 @@ export {
 } from './PosInterface.js'
 export { AbstractMappedPosQuery, type MappedPosQueryDeps } from './pos-query/AbstractMappedPosQuery.js'
 export { AbstractPosQuery, type PosQueryDeps } from './pos-query/AbstractPosQuery.js'
+export { AkbankPosQuery } from './pos-query/AkbankPosQuery.js'
 export { AssecoPosQuery } from './pos-query/AssecoPosQuery.js'
 export { GarantiPosQuery } from './pos-query/GarantiPosQuery.js'
 export { PayFlexCPV4PosQuery } from './pos-query/PayFlexCPV4PosQuery.js'

@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import type { CryptInterface } from '../../../src/crypt/CryptInterface.js'
+import { AkbankPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/AkbankPosQueryRequestDataMapper.js'
 import { AssecoPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/AssecoPosQueryRequestDataMapper.js'
 import { GarantiPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/GarantiPosQueryRequestDataMapper.js'
 import { PayFlexCPV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayFlexCPV4PosQueryRequestDataMapper.js'
 import { PayFlexV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayFlexV4PosQueryRequestDataMapper.js'
+import { AkbankPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/AkbankPosRequestValueFormatter.js'
 import { AssecoPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/AssecoPosRequestValueFormatter.js'
 import { GarantiPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/GarantiPosRequestValueFormatter.js'
 import { PayFlexCPV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexCPV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
+import { AkbankPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/AkbankPosRequestValueMapper.js'
 import { AssecoPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/AssecoPosRequestValueMapper.js'
 import { GarantiPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/GarantiPosRequestValueMapper.js'
 import { PayFlexCPV4PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayFlexCPV4PosRequestValueMapper.js'
@@ -19,6 +22,7 @@ import { LANG } from '../../../src/PosInterface.js'
 const crypt = {} as CryptInterface
 
 const rows = [
+  ['AkbankPos', AkbankPosQueryRequestDataMapper, AkbankPosRequestValueMapper, AkbankPosRequestValueFormatter],
   ['AssecoPos', AssecoPosQueryRequestDataMapper, AssecoPosRequestValueMapper, AssecoPosRequestValueFormatter],
   ['GarantiPos', GarantiPosQueryRequestDataMapper, GarantiPosRequestValueMapper, GarantiPosRequestValueFormatter],
   [
