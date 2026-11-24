@@ -41,9 +41,8 @@ export async function startPayment(orderId: string, amount: number, card: Credit
     currency: 'TRY',
     installment: 0,
     success_url: 'https://shop.example.com/pos/callback', // the bank posts every outcome here
-    fail_url: 'https://shop.example.com/pos/callback',
   }
-  // Persist `order` (id and amount!) and tie it to the customer's session; never store the card.
+  // Persist `order` (id and amount!) and tie it to an unguessable token in the callback URL; never store the card.
   return pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card)
   // -> { gateway: 'https://.../YKBPaymentService', method: 'POST', inputs: { ... } }
 }
@@ -51,7 +50,7 @@ export async function startPayment(orderId: string, amount: number, card: Credit
 /** Step 2: the bank POSTs the customer back here (cross-site, so no session cookie may be present). */
 export async function handleCallback(
   body: Record<string, string | undefined>,
-  order: PosOrder, // the order stored for this customer, never looked up from a callback field
+  order: PosOrder, // the order stored for this customer, looked up by the token in the callback URL, never from a callback field
 ): Promise<{ paid: boolean; review: boolean; response?: PosResponse }> {
   try {
     // The bank decrypts the packets and its MAC is verified; the result must match the order before provisioning.

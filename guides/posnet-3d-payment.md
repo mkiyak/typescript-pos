@@ -35,9 +35,9 @@ const account = AccountFactory.createPosNetPosAccount(
 const pos = PosFactory.createPosGateway(account, posTestConfig) // or posProductionConfig
 ```
 
-- Merchant id, terminal id and POSNET id are required, and so is the encryption key when you pass one: an empty or
-  blank value throws `MissingAccountInfoError` when the account is created, so nothing is ever signed or sent with a
-  missing value.
+- Merchant id, terminal id and POSNET id are required. The encryption key is optional when the account is created
+  but required for 3D Secure. A blank value for any of them throws `MissingAccountInfoError`, so nothing is ever
+  signed or sent with a missing value.
 - The encryption key signs and verifies the 3D data. Keep it, like every other credential, out of your logs and
   your front-end code.
 - `success_url` is required for the 3D form. The bank posts every outcome there, a failed authentication included;
@@ -54,7 +54,8 @@ const pos = PosFactory.createPosGateway(account, posTestConfig) // or posProduct
    automatically.
 3. The customer authenticates; the bank POSTs the browser to your `success_url` with three opaque packets
    (`MerchantPacket`, `BankPacket`, `Sign`).
-4. Load the order from the customer's session on the server and call
+4. Look the order up by an unguessable token you put in the callback URL (the callback is a cross-site POST, so a
+   session cookie may be missing) and call
    `pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, null, callbackBody)`. No card is needed after the
    redirect, so pass `null`.
 
@@ -72,7 +73,7 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
   unexpected format, throws `HashMismatchError`.
 - **The result is bound to the order.** Before anything is charged, the order id, amount, currency and installment
   count the bank decrypted must be this order's; otherwise `OrderMismatchError` is thrown and nothing has been
-  charged. Load the order from the customer's session, never from a field of the callback.
+  charged. Look the order up by the unguessable token in your callback URL, never by a field of the callback.
 - **A failed 3D never charges.** A callback whose 3D status is not 1 to 4 is mapped as `declined` without a provision
   request. Half 3D (`md_status` 2 to 4) continues as the bank allows. On a declined result, the echoed remote order
   id, amount and currency come from the bank's answer before the MAC check, so do not treat them as authoritative:

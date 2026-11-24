@@ -34,8 +34,9 @@ const account = AccountFactory.createPosNetPosAccount(
 const pos = PosFactory.createPosGateway(account, posTestConfig) // or posProductionConfig
 ```
 
-Empty or blank credentials throw `MissingAccountInfoError` when the account is created. `success_url` and
-`fail_url` are used for the 3D form; public HTTPS URLs without `localhost` are usually required.
+Empty or blank credentials throw `MissingAccountInfoError` when the account is created. `success_url` is
+required for the 3D form and the bank posts every outcome there, a failed authentication included; `fail_url` is
+ignored. Public HTTPS URLs without `localhost` are usually required.
 
 ## Flow
 
@@ -50,7 +51,8 @@ Empty or blank credentials throw `MissingAccountInfoError` when the account is c
      PCI DSS scope applies. Never store it.
 3. Render a form that posts `inputs` to `gateway`, and submit it automatically. The customer authenticates and the
    bank POSTs the browser to your callback URL.
-4. Load the order from the customer's session and call
+4. Look the order up by an unguessable token you put in the callback URL (the callback is a cross-site POST, so a
+   session cookie may be missing) and call
    `pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, null, callbackBody)`. No card is needed here, so pass
    `null`.
 
@@ -71,7 +73,7 @@ Empty or blank credentials throw `MissingAccountInfoError` when the account is c
   checks the 3D session values itself.
 - **Complete each order once.** Mark it paid in an idempotent update. A network error (`PosHttpError`, timeout)
   during provisioning means the outcome is unknown: keep the order pending and re-check it with `pos.status(order)`.
-- Load the order from the customer's session, never from a field of the callback.
+- Look the order up by the unguessable token in your callback URL, never by a field of the callback.
 
 ## Order ids
 

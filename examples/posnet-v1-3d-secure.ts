@@ -40,9 +40,8 @@ export async function startPayment(orderId: string, amount: number) {
     currency: 'TRY',
     installment: 0,
     success_url: 'https://shop.example.com/pos/callback',
-    fail_url: 'https://shop.example.com/pos/callback',
   }
-  // Persist `order` (id and amount!) and tie it to the customer's session before redirecting.
+  // Persist `order` (id and amount!) and tie it to an unguessable token in the callback URL before redirecting.
   return pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, null, true) // createWithoutCard
   // -> { gateway: 'https://.../SecureVerification.aspx', method: 'POST', inputs: { ... } }
 }
@@ -50,7 +49,7 @@ export async function startPayment(orderId: string, amount: number) {
 /** Step 2: the bank POSTs the customer back here (cross-site, so no session cookie may be present). */
 export async function handleCallback(
   body: Record<string, string | undefined>,
-  order: PosOrder, // the order stored for this customer, never looked up from a callback field
+  order: PosOrder, // the order stored for this customer, looked up by the token in the callback URL, never from a callback field
 ): Promise<{ paid: boolean; review: boolean; response?: PosResponse }> {
   try {
     // A successful 3D must carry a valid MAC; the echoed order values must match before the provision request.
