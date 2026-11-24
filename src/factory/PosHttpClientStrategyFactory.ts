@@ -1,3 +1,4 @@
+import { AkbankPosHttpClient } from '../client/AkbankPosHttpClient.js'
 import { AssecoPosHttpClient } from '../client/AssecoPosHttpClient.js'
 import { GarantiPosHttpClient } from '../client/GarantiPosHttpClient.js'
 import { HttpClientStrategy } from '../client/HttpClientStrategy.js'
@@ -6,9 +7,19 @@ import { PayFlexCPV4PosHttpClient } from '../client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../client/PayFlexV4PosSearchApiHttpClient.js'
+import { AkbankPosCrypt } from '../crypt/AkbankPosCrypt.js'
+import type { CryptInterface } from '../crypt/CryptInterface.js'
 import { GatewayClassNotConfiguredError, PosError } from '../errors.js'
 import type { GatewayConfig } from '../gateway/AbstractGateway.js'
 import type { PosLogger } from '../logger.js'
+import type { AbstractPosAccount } from '../model/account/AbstractPosAccount.js'
+import { AkbankPosAccount } from '../model/account/AkbankPosAccount.js'
+
+/** What a client needs to sign its requests itself; gateways whose clients do not sign ignore it. */
+export interface HttpClientSigning {
+  account: AbstractPosAccount
+  crypt: CryptInterface
+}
 
 /** Card data, credentials and 3D forms must never travel over plain HTTP: every configured endpoint is `https:`. */
 export function assertHttpsEndpoints(config: GatewayConfig): void {
@@ -45,6 +56,7 @@ export const PosHttpClientStrategyFactory = {
     config: GatewayConfig,
     transport: HttpTransport,
     logger: PosLogger,
+    signing?: HttpClientSigning,
   ): HttpClientStrategy {
     switch (gatewayClass) {
       case 'AssecoPos':
@@ -65,6 +77,16 @@ export const PosHttpClientStrategyFactory = {
         return new HttpClientStrategy([
           new GarantiPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
         ])
+      case 'AkbankPos': {
+        const account = signing?.account
+        const crypt = signing?.crypt
+        if (!(account instanceof AkbankPosAccount) || !(crypt instanceof AkbankPosCrypt)) {
+          throw new PosError('AkbankPos needs its account and crypt to sign requests.')
+        }
+        return new HttpClientStrategy([
+          new AkbankPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger, crypt, account),
+        ])
+      }
       default:
         throw new GatewayClassNotConfiguredError(`No HTTP clients for gateway class [${gatewayClass}].`)
     }

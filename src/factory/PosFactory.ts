@@ -129,7 +129,10 @@ function createAssecoPos(
       logger,
     ),
     crypt,
-    clientStrategy: PosHttpClientStrategyFactory.createForGateway(AssecoPos.GATEWAY_CLASS, config, transport, logger),
+    clientStrategy: PosHttpClientStrategyFactory.createForGateway(AssecoPos.GATEWAY_CLASS, config, transport, logger, {
+      account,
+      crypt,
+    }),
     logger,
     hooks,
   })
@@ -171,6 +174,7 @@ function createPayFlexV4Pos(
       config,
       transport,
       logger,
+      { account, crypt },
     ),
     logger,
     hooks,
@@ -215,6 +219,7 @@ function createPayFlexCPV4Pos(
       config,
       transport,
       logger,
+      { account, crypt },
     ),
     logger,
     hooks,
@@ -252,7 +257,10 @@ function createGarantiPos(
       logger,
     ),
     crypt,
-    clientStrategy: PosHttpClientStrategyFactory.createForGateway(GarantiPos.GATEWAY_CLASS, config, transport, logger),
+    clientStrategy: PosHttpClientStrategyFactory.createForGateway(GarantiPos.GATEWAY_CLASS, config, transport, logger, {
+      account,
+      crypt,
+    }),
     logger,
     hooks,
   })

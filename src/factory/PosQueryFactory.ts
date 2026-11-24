@@ -159,7 +159,10 @@ export const PosQueryFactory = {
         crypt,
         gatewayConfig.lang ?? LANG.TR,
       ),
-      clientStrategy: PosHttpClientStrategyFactory.createForGateway(gatewayClass, gatewayConfig, transport, logger),
+      clientStrategy: PosHttpClientStrategyFactory.createForGateway(gatewayClass, gatewayConfig, transport, logger, {
+        account,
+        crypt,
+      }),
       logger,
       hooks: options.hooks ?? {},
       allowedApiOrigins: options.allowedApiOrigins,
