@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from 'node:util'
 import type { AbstractHttpClient } from '../client/AbstractHttpClient.js'
 import type { HttpClientStrategy } from '../client/HttpClientStrategy.js'
 import type { CryptInterface } from '../crypt/CryptInterface.js'
@@ -7,7 +6,7 @@ import type { RequestValueFormatterInterface } from '../data-mapper/request/valu
 import type { RequestValueMapperInterface } from '../data-mapper/request/value-mapper/RequestValueMapperInterface.js'
 import type { ResponseDataMapperInterface } from '../data-mapper/response/mapper/ResponseDataMapperInterface.js'
 import { PosError, UnsupportedPaymentModelError, UnsupportedTransactionTypeError } from '../errors.js'
-import { runHooks } from '../hooks.js'
+import { prepareRequestDataWithHooks, runHooks } from '../hooks.js'
 import { createSafeLogger, type PosLogger } from '../logger.js'
 import type { AbstractPosAccount } from '../model/account/AbstractPosAccount.js'
 import type { CreditCard } from '../model/card/CreditCard.js'
@@ -398,47 +397,30 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
     order: PosOrder,
     paymentModel: PaymentModel,
   ): Promise<Record<string, unknown>> {
-    const hooks = this.hooks.onRequestDataPrepared
-    if (hooks === undefined || hooks.length === 0) {
-      return requestData
+    const { data, changed } = await prepareRequestDataWithHooks<RequestDataPreparedEvent>(
+      this.hooks.onRequestDataPrepared,
+      requestData,
+      (clonedRequestData) => ({
+        requestData: clonedRequestData,
+        bankName: this.account.getBankName(),
+        txType,
+        gatewayClass: this.gatewayClassName(),
+        order: Object.freeze({ ...order }),
+        paymentModel,
+      }),
+      'onRequestDataPrepared',
+    )
+
+    if (changed) {
+      this.logger.debug('Request data is changed via listeners', {
+        tx_type: txType,
+        bank_name: this.account.getBankName(),
+        initial_data: requestData,
+        updated_data: data,
+      })
     }
 
-    let baseline: Record<string, unknown>
-    let eventData: Record<string, unknown>
-    try {
-      baseline = structuredClone(requestData)
-      eventData = structuredClone(requestData)
-    } catch (e) {
-      throw new PosError(
-        `Request data cannot be cloned for onRequestDataPrepared hooks: ${e instanceof Error ? e.message : String(e)}`,
-        { cause: e },
-      )
-    }
-
-    const event: RequestDataPreparedEvent = {
-      requestData: eventData,
-      bankName: this.account.getBankName(),
-      txType,
-      gatewayClass: this.gatewayClassName(),
-      order: Object.freeze({ ...order }),
-      paymentModel,
-    }
-    await runHooks(hooks, event)
-
-    // Compare against a clone (not the original) so that cloning itself, which drops class prototypes,
-    // is not reported as a change.
-    if (isDeepStrictEqual(baseline, event.requestData)) {
-      return requestData
-    }
-
-    this.logger.debug('Request data is changed via listeners', {
-      tx_type: event.txType,
-      bank_name: event.bankName,
-      initial_data: requestData,
-      updated_data: event.requestData,
-    })
-
-    return event.requestData
+    return data
   }
 
   protected getClient(txType: TxType, paymentModel: PaymentModel): AbstractHttpClient {

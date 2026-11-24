@@ -1,11 +1,11 @@
 import { noopLogger, type PosLogger } from '../logger.js'
-import { type PaymentModel, TX_TYPE, type TxType } from '../PosInterface.js'
+import { type PaymentModel, TX_TYPE } from '../PosInterface.js'
 import type { EncodedData } from '../serializer/EncodedData.js'
 import { FormEncoder } from '../serializer/FormEncoder.js'
 import { XmlDecoder } from '../serializer/XmlDecoder.js'
 import { XmlEncoder } from '../serializer/XmlEncoder.js'
 import type { PosOrder } from '../types.js'
-import { AbstractHttpClient } from './AbstractHttpClient.js'
+import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
 import type { HttpTransport } from './HttpTransport.js'
 
 /**
@@ -23,16 +23,16 @@ export class PayFlexV4PosHttpClient extends AbstractHttpClient {
     return gatewayClass === 'PayFlexV4Pos' && apiName === PayFlexV4PosHttpClient.API_NAME_PAYMENT_API
   }
 
-  supportsTx(txType: TxType, _paymentModel: PaymentModel): boolean {
+  supportsTx(txType: ClientTxType, _paymentModel: PaymentModel): boolean {
     return txType !== TX_TYPE.INTERNAL_3D_FORM_BUILD && txType !== TX_TYPE.STATUS
   }
 
-  override getApiUrl(txType: TxType, paymentModel: PaymentModel): string {
+  override getApiUrl(txType: ClientTxType, paymentModel: PaymentModel): string {
     return super.getApiUrl(txType, paymentModel)
   }
 
   protected override encode(
-    _txType: TxType,
+    _txType: ClientTxType,
     _paymentModel: PaymentModel,
     requestData: Record<string, unknown>,
     _order: PosOrder,

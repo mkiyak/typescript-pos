@@ -5,6 +5,7 @@ import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { PosHttpError } from '../../../src/errors.js'
 import type { PosLogger } from '../../../src/logger.js'
 import { MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../src/PosInterface.js'
+import { QUERY_TYPE } from '../../../src/pos-query/PosQueryInterface.js'
 
 // HTTP is replaced by a fake fetch.
 
@@ -198,5 +199,12 @@ describe('AssecoPosHttpClient', () => {
       c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { Password: 'ISBANK07', Number: '4355084355084358' }, { id: '1' }),
     ).rejects.toThrow(PosHttpError)
     expect(JSON.stringify([logger.debug.mock.calls, logger.error.mock.calls])).not.toContain('4355084355084358')
+  })
+})
+
+// addition: custom_query support
+describe('AssecoPosHttpClient query support', () => {
+  it('supportsTx(custom_query) is true', () => {
+    expect(createClient(fakeFetch([], '')).supportsTx(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE)).toBe(true)
   })
 })

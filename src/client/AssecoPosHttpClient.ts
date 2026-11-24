@@ -1,12 +1,12 @@
 import iconv from 'iconv-lite'
 import type { PosLogger } from '../logger.js'
 import { noopLogger } from '../logger.js'
-import type { PaymentModel, TxType } from '../PosInterface.js'
+import type { PaymentModel } from '../PosInterface.js'
 import type { EncodedData } from '../serializer/EncodedData.js'
 import { XmlDecoder } from '../serializer/XmlDecoder.js'
 import { XmlEncoder } from '../serializer/XmlEncoder.js'
 import type { PosOrder } from '../types.js'
-import { AbstractHttpClient } from './AbstractHttpClient.js'
+import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
 import type { HttpTransport, HttpTransportResponse } from './HttpTransport.js'
 
 const REQUEST_ENCODING = 'ISO-8859-9'
@@ -67,16 +67,16 @@ export class AssecoPosHttpClient extends AbstractHttpClient {
     return gatewayClass === 'AssecoPos' && apiName === AssecoPosHttpClient.API_NAME_PAYMENT_API
   }
 
-  supportsTx(_txType: TxType, _paymentModel: PaymentModel): boolean {
+  supportsTx(_txType: ClientTxType, _paymentModel: PaymentModel): boolean {
     return true
   }
 
-  override getApiUrl(txType: TxType, paymentModel: PaymentModel): string {
+  override getApiUrl(txType: ClientTxType, paymentModel: PaymentModel): string {
     return super.getApiUrl(txType, paymentModel)
   }
 
   protected override encode(
-    _txType: TxType,
+    _txType: ClientTxType,
     _paymentModel: PaymentModel,
     requestData: Record<string, unknown>,
     _order: PosOrder,

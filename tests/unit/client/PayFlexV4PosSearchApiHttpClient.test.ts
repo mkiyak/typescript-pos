@@ -4,6 +4,7 @@ import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClie
 import { PayFlexV4PosSearchApiHttpClient } from '../../../src/client/PayFlexV4PosSearchApiHttpClient.js'
 import { PosHttpError } from '../../../src/errors.js'
 import { MODEL, TX_TYPE } from '../../../src/PosInterface.js'
+import { QUERY_TYPE } from '../../../src/pos-query/PosQueryInterface.js'
 
 // HTTP is replaced by a fake fetch.
 
@@ -93,5 +94,12 @@ describe('PayFlexV4PosSearchApiHttpClient', () => {
       .catch((e: unknown) => e)
     expect(err).toBeInstanceOf(PosHttpError)
     expect((err as PosHttpError).url).toBe(API_URL)
+  })
+})
+
+// addition: custom_query support
+describe('PayFlexV4PosSearchApiHttpClient query support', () => {
+  it('supportsTx(custom_query) is false', () => {
+    expect(createClient(fakeFetch([], '')).supportsTx(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE)).toBe(false)
   })
 })

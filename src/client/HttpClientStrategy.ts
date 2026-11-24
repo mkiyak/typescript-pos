@@ -1,6 +1,6 @@
 import { UnsupportedTransactionTypeError } from '../errors.js'
-import type { PaymentModel, TxType } from '../PosInterface.js'
-import type { AbstractHttpClient } from './AbstractHttpClient.js'
+import type { PaymentModel } from '../PosInterface.js'
+import type { AbstractHttpClient, ClientTxType } from './AbstractHttpClient.js'
 
 /** Picks the HTTP client for a transaction type. */
 export class HttpClientStrategy {
@@ -10,7 +10,7 @@ export class HttpClientStrategy {
     return this.clients
   }
 
-  getClient(txType: TxType, paymentModel: PaymentModel): AbstractHttpClient {
+  getClient(txType: ClientTxType, paymentModel: PaymentModel): AbstractHttpClient {
     for (const client of this.clients) {
       if (client.supportsTx(txType, paymentModel)) return client
     }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { runHooks } from '../../src/hooks.js'
+import { PosError } from '../../src/errors.js'
+import { prepareRequestDataWithHooks, runHooks } from '../../src/hooks.js'
 
 describe('runHooks', () => {
   it('returns the event when no hooks', async () => {
@@ -31,5 +32,70 @@ describe('runHooks', () => {
 
   it('propagates hook errors', async () => {
     await expect(runHooks([() => Promise.reject(new Error('x'))], {})).rejects.toThrow('x')
+  })
+})
+
+// addition: shared request-data hook helper
+describe('prepareRequestDataWithHooks', () => {
+  type Ev = { requestData: Record<string, unknown> }
+  const build = (d: Record<string, unknown>): Ev => ({ requestData: d })
+
+  it('returns the same reference without hooks and never builds the event', async () => {
+    const d = { a: 0 }
+    let built = 0
+    const b = (x: Record<string, unknown>) => {
+      built++
+      return build(x)
+    }
+    for (const hooks of [undefined, []]) {
+      const r = await prepareRequestDataWithHooks<Ev>(hooks, d, b, 'x')
+      expect(r.data).toBe(d)
+      expect(r.changed).toBe(false)
+    }
+    expect(built).toBe(0)
+  })
+
+  it('reports a mutation and leaves the input untouched', async () => {
+    const d: Record<string, unknown> = { k: 'v' }
+    const r = await prepareRequestDataWithHooks<Ev>(
+      [
+        (e) => {
+          e.requestData.a = 1
+        },
+      ],
+      d,
+      build,
+      'x',
+    )
+    expect(r.changed).toBe(true)
+    expect(r.data.a).toBe(1)
+    expect(d).toEqual({ k: 'v' })
+  })
+
+  it('accepts a replaced requestData', async () => {
+    const r = await prepareRequestDataWithHooks<Ev>(
+      [
+        (e) => {
+          e.requestData = { z: 1 }
+        },
+      ],
+      { a: 1 },
+      build,
+      'x',
+    )
+    expect(r).toEqual({ data: { z: 1 }, changed: true })
+  })
+
+  it('returns the original reference for a no-op hook', async () => {
+    const d = { a: 1 }
+    const r = await prepareRequestDataWithHooks<Ev>([() => {}], d, build, 'x')
+    expect(r.data).toBe(d)
+    expect(r.changed).toBe(false)
+  })
+
+  it('throws PosError when the data cannot be cloned', async () => {
+    const p = prepareRequestDataWithHooks<Ev>([() => {}], { f: () => 1 }, build, 'x')
+    await expect(p).rejects.toBeInstanceOf(PosError)
+    await expect(p).rejects.toThrow(/^Request data cannot be cloned for x hooks:/)
   })
 })

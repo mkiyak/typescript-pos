@@ -1,5 +1,6 @@
-import { type PaymentModel, TX_TYPE, type TxType } from '../PosInterface.js'
+import { type PaymentModel, TX_TYPE } from '../PosInterface.js'
 import { XmlEncoder } from '../serializer/XmlEncoder.js'
+import type { ClientTxType } from './AbstractHttpClient.js'
 import { PayFlexV4PosHttpClient } from './PayFlexV4PosHttpClient.js'
 
 /**
@@ -13,7 +14,7 @@ export class PayFlexV4PosSearchApiHttpClient extends PayFlexV4PosHttpClient {
     return gatewayClass === 'PayFlexV4Pos' && apiName === PayFlexV4PosSearchApiHttpClient.API_NAME_QUERY_API
   }
 
-  override supportsTx(txType: TxType, _paymentModel: PaymentModel): boolean {
+  override supportsTx(txType: ClientTxType, _paymentModel: PaymentModel): boolean {
     return txType === TX_TYPE.STATUS
   }
 

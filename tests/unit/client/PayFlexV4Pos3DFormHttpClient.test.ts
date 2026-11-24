@@ -3,6 +3,7 @@ import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3DFormHttpClient.js'
 import { PosHttpError } from '../../../src/errors.js'
 import { MODEL, TX_TYPE } from '../../../src/PosInterface.js'
+import { QUERY_TYPE } from '../../../src/pos-query/PosQueryInterface.js'
 
 // HTTP is replaced by a fake fetch.
 
@@ -94,5 +95,12 @@ describe('PayFlexV4Pos3DFormHttpClient', () => {
     expect(sent[0]?.init.body).toBe(
       'SuccessUrl=https%3A%2F%2Fdomain.com%2Fok%3Fa%3D1%26b%3D2&Name=%C4%B0%C5%9F+%C3%96deme',
     )
+  })
+})
+
+// addition: custom_query support
+describe('PayFlexV4Pos3DFormHttpClient query support', () => {
+  it('supportsTx(custom_query) is false', () => {
+    expect(createClient(fakeFetch([], '')).supportsTx(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE)).toBe(false)
   })
 })

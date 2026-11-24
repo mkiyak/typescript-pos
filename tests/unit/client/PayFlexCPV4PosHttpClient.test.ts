@@ -3,6 +3,7 @@ import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { PayFlexCPV4PosHttpClient } from '../../../src/client/PayFlexCPV4PosHttpClient.js'
 import { PosHttpError } from '../../../src/errors.js'
 import { MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../src/PosInterface.js'
+import { QUERY_TYPE } from '../../../src/pos-query/PosQueryInterface.js'
 
 // HTTP is replaced by a fake fetch.
 
@@ -161,5 +162,31 @@ describe('PayFlexCPV4PosHttpClient', () => {
     const c = createClient(fakeFetch([], ''), `${API_URL}/`)
     expect(c.getApiUrl(TX_TYPE.INTERNAL_3D_FORM_BUILD, MODEL.THREE_D_PAY)).toBe(`${API_URL}/CreateToken`)
     expect(c.getApiUrl(TX_TYPE.STATUS, MODEL.NON_SECURE)).toBe(`${API_URL}/GetVposTransaction`)
+  })
+})
+
+// addition: custom_query support
+describe('PayFlexCPV4PosHttpClient query support', () => {
+  it('supportsTx(custom_query) is true', () => {
+    expect(createClient(fakeFetch([], '')).supportsTx(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE)).toBe(true)
+  })
+})
+
+// addition: custom_query reaches GetVposTransaction as JSON
+describe('PayFlexCPV4PosHttpClient custom_query', () => {
+  it('builds the GetVposTransaction URL under a trailing-slash base', () => {
+    const c = createClient(fakeFetch([], ''), 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment/')
+    expect((c as unknown as { getApiUrl(t: string, m: string): string }).getApiUrl('custom_query', 'regular')).toBe(
+      'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment/GetVposTransaction',
+    )
+  })
+
+  it('posts the JSON body with JSON headers', async () => {
+    const sent: Sent[] = []
+    const c = createClient(fakeFetch(sent, '{"ResultCode":"0000"}'))
+    await c.request(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE, { TransactionId: 'abc' }, {})
+    expect(sent[0]?.init.body).toBe('{"TransactionId":"abc"}')
+    expect(header(sent[0], 'Content-Type')).toBe('application/json')
+    expect(header(sent[0], 'Accept')).toBe('application/json')
   })
 })

@@ -1,6 +1,7 @@
 import { PosHttpError } from '../errors.js'
 import { createSafeLogger, type PosLogger } from '../logger.js'
 import type { PaymentModel, TxType } from '../PosInterface.js'
+import type { QueryType } from '../pos-query/PosQueryInterface.js'
 import type { EncodedData } from '../serializer/EncodedData.js'
 import { JsonDecoder } from '../serializer/JsonDecoder.js'
 import type { PosOrder } from '../types.js'
@@ -12,6 +13,9 @@ const CONTENT_TYPES: Record<EncodedData['format'], string> = {
   form: 'application/x-www-form-urlencoded',
   json: 'application/json',
 }
+
+/** Payment transaction types and query types both go through the HTTP clients. */
+export type ClientTxType = TxType | QueryType
 
 /** Encode -> post -> decode. Concrete clients override encode/decode/headers. */
 export abstract class AbstractHttpClient {
@@ -25,10 +29,10 @@ export abstract class AbstractHttpClient {
     this.logger = createSafeLogger(logger)
   }
 
-  abstract supportsTx(txType: TxType, paymentModel: PaymentModel): boolean
+  abstract supportsTx(txType: ClientTxType, paymentModel: PaymentModel): boolean
 
   async request(
-    txType: TxType,
+    txType: ClientTxType,
     paymentModel: PaymentModel,
     requestData: Record<string, unknown>,
     order: PosOrder,
@@ -88,13 +92,13 @@ export abstract class AbstractHttpClient {
   }
 
   /** Overridable for gateways whose URL depends on the transaction. */
-  protected getApiUrl(_txType: TxType, _paymentModel: PaymentModel): string {
+  protected getApiUrl(_txType: ClientTxType, _paymentModel: PaymentModel): string {
     return this.endpoint
   }
 
   /** Default: JSON. */
   protected encode(
-    _txType: TxType,
+    _txType: ClientTxType,
     _paymentModel: PaymentModel,
     requestData: Record<string, unknown>,
     _order: PosOrder,
@@ -103,7 +107,7 @@ export abstract class AbstractHttpClient {
   }
 
   /** Default: JSON. */
-  protected decode(body: string, _txType: TxType, _paymentModel: PaymentModel): Promise<Record<string, unknown>> {
+  protected decode(body: string, _txType: ClientTxType, _paymentModel: PaymentModel): Promise<Record<string, unknown>> {
     return Promise.resolve(JsonDecoder.decode(body))
   }
 
@@ -117,10 +121,10 @@ export abstract class AbstractHttpClient {
     return response.body
   }
 
-  protected headers(_txType: TxType, _paymentModel: PaymentModel, encoded: EncodedData): Record<string, string> {
+  protected headers(_txType: ClientTxType, _paymentModel: PaymentModel, encoded: EncodedData): Record<string, string> {
     return { 'Content-Type': CONTENT_TYPES[encoded.format] }
   }
 
   /** Hook for gateways that signal failures inside a 2xx body. Throw to reject. */
-  protected checkFailResponseData(_txType: TxType, _data: Record<string, unknown>, _order: PosOrder): void {}
+  protected checkFailResponseData(_txType: ClientTxType, _data: Record<string, unknown>, _order: PosOrder): void {}
 }

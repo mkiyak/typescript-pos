@@ -1,11 +1,11 @@
 import { noopLogger, type PosLogger } from '../logger.js'
-import { type PaymentModel, TX_TYPE, type TxType } from '../PosInterface.js'
+import { type PaymentModel, TX_TYPE } from '../PosInterface.js'
 import type { EncodedData } from '../serializer/EncodedData.js'
 import { FormEncoder } from '../serializer/FormEncoder.js'
 import { JsonDecoder } from '../serializer/JsonDecoder.js'
 import { XmlDecoder } from '../serializer/XmlDecoder.js'
 import type { PosOrder } from '../types.js'
-import { AbstractHttpClient } from './AbstractHttpClient.js'
+import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
 import type { HttpTransport } from './HttpTransport.js'
 
 /**
@@ -33,11 +33,11 @@ export class PayFlexCPV4PosHttpClient extends AbstractHttpClient {
     )
   }
 
-  supportsTx(_txType: TxType, _paymentModel: PaymentModel): boolean {
+  supportsTx(_txType: ClientTxType, _paymentModel: PaymentModel): boolean {
     return true
   }
 
-  override getApiUrl(txType: TxType, _paymentModel: PaymentModel): string {
+  override getApiUrl(txType: ClientTxType, _paymentModel: PaymentModel): string {
     const base = this.endpoint.endsWith('/') ? this.endpoint.slice(0, -1) : this.endpoint
     if (txType === TX_TYPE.INTERNAL_3D_FORM_BUILD) {
       return `${base}/CreateToken`
@@ -47,7 +47,7 @@ export class PayFlexCPV4PosHttpClient extends AbstractHttpClient {
   }
 
   protected override encode(
-    txType: TxType,
+    txType: ClientTxType,
     _paymentModel: PaymentModel,
     requestData: Record<string, unknown>,
     _order: PosOrder,
@@ -59,7 +59,11 @@ export class PayFlexCPV4PosHttpClient extends AbstractHttpClient {
     return { data: JSON.stringify(requestData), format: 'json' }
   }
 
-  protected override headers(txType: TxType, paymentModel: PaymentModel, encoded: EncodedData): Record<string, string> {
+  protected override headers(
+    txType: ClientTxType,
+    paymentModel: PaymentModel,
+    encoded: EncodedData,
+  ): Record<string, string> {
     return { ...super.headers(txType, paymentModel, encoded), Accept: 'application/json' }
   }
 

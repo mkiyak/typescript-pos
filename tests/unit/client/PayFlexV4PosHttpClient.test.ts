@@ -4,6 +4,7 @@ import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClie
 import { PosHttpError } from '../../../src/errors.js'
 import type { PosLogger } from '../../../src/logger.js'
 import { MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../src/PosInterface.js'
+import { QUERY_TYPE } from '../../../src/pos-query/PosQueryInterface.js'
 
 // HTTP is replaced by a fake fetch.
 
@@ -128,5 +129,12 @@ describe('PayFlexV4PosHttpClient', () => {
     ).rejects.toThrow(PosHttpError)
     const logged = JSON.stringify([logger.debug.mock.calls, logger.error.mock.calls])
     expect(logged).not.toContain('4938410157705591')
+  })
+})
+
+// addition: custom_query support
+describe('PayFlexV4PosHttpClient query support', () => {
+  it('supportsTx(custom_query) is true', () => {
+    expect(createClient(fakeFetch([], '')).supportsTx(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE)).toBe(true)
   })
 })

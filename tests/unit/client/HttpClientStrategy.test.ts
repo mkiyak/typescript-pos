@@ -2,10 +2,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { AbstractHttpClient } from '../../../src/client/AbstractHttpClient.js'
 import { HttpClientStrategy } from '../../../src/client/HttpClientStrategy.js'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
+import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3DFormHttpClient.js'
+import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClient.js'
+import { PayFlexV4PosSearchApiHttpClient } from '../../../src/client/PayFlexV4PosSearchApiHttpClient.js'
 import { PosHttpError, UnsupportedTransactionTypeError } from '../../../src/errors.js'
 import type { PosLogger } from '../../../src/logger.js'
 import { noopLogger } from '../../../src/logger.js'
 import { MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../src/PosInterface.js'
+import { QUERY_TYPE } from '../../../src/pos-query/PosQueryInterface.js'
 import type { EncodedData } from '../../../src/serializer/EncodedData.js'
 import { XmlEncoder } from '../../../src/serializer/XmlEncoder.js'
 
@@ -149,5 +153,27 @@ describe('AbstractHttpClient', () => {
     expect(logged).toContain('parsing bank response failed')
     expect(logged).not.toContain('4355084355084358')
     expect(logged).not.toContain('>123<')
+  })
+})
+
+// addition: query types route through the same strategy
+describe('HttpClientStrategy with query types', () => {
+  const t = new HttpTransport()
+  const v4 = new PayFlexV4PosHttpClient('https://bank.test/pay', t)
+  const form = new PayFlexV4Pos3DFormHttpClient('https://bank.test/3d', t)
+  const search = new PayFlexV4PosSearchApiHttpClient('https://bank.test/search', t)
+  const strategy = new HttpClientStrategy([v4, form, search])
+
+  it('routes custom_query to the payment client and status to the search client', () => {
+    expect(strategy.getClient(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE)).toBe(v4)
+    expect(strategy.getClient(TX_TYPE.STATUS, MODEL.NON_SECURE)).toBe(search)
+  })
+
+  it('throws when no client handles the query type', () => {
+    const s = new HttpClientStrategy([new TestClient(() => false)])
+    expect(() => s.getClient(QUERY_TYPE.HISTORY, MODEL.NON_SECURE)).toThrow(UnsupportedTransactionTypeError)
+    expect(() => s.getClient(QUERY_TYPE.HISTORY, MODEL.NON_SECURE)).toThrow(
+      'No HTTP client configured for transaction type: history',
+    )
   })
 })

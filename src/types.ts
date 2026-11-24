@@ -1,4 +1,5 @@
 import type { Currency, Lang, PaymentModel, TxType } from './PosInterface.js'
+import type { QueryType } from './pos-query/PosQueryInterface.js'
 
 export type PosOrder = Record<string, unknown> & {
   id?: string
@@ -51,6 +52,15 @@ export interface RequestDataPreparedEvent {
   readonly paymentModel: PaymentModel
 }
 
+/** `requestData` (a structured clone of the mapped request) is mutable; `originalData` is a frozen shallow copy of the caller's input. */
+export interface PosQueryRequestDataPreparedEvent {
+  requestData: Record<string, unknown>
+  readonly bankName: string
+  readonly queryType: QueryType
+  readonly gatewayClass: string
+  readonly originalData: Readonly<Record<string, unknown>>
+}
+
 /** `formInputs` is mutable. */
 export interface Before3DFormHashCalculatedEvent {
   formInputs: Record<string, string>
@@ -62,5 +72,6 @@ export interface Before3DFormHashCalculatedEvent {
 
 export interface PosHooks {
   onRequestDataPrepared?: Array<(e: RequestDataPreparedEvent) => void | Promise<void>>
+  onPosQueryRequestDataPrepared?: Array<(e: PosQueryRequestDataPreparedEvent) => void | Promise<void>>
   onBefore3DFormHashCalculated?: Array<(e: Before3DFormHashCalculatedEvent) => void | Promise<void>>
 }
