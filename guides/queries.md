@@ -80,7 +80,7 @@ would send them to a foreign host. `apiUrl` is accepted only when it:
 - has the same origin (scheme, host and port) as one of the endpoints in the bank's config, or as an entry of
   `allowedApiOrigins`.
 
-Anything else makes `customQuery` throw a `PosError` before a request is built or sent. A path on a configured bank
+Anything else makes the `customQuery` promise reject with a `PosError` before a request is built or sent. A path on a configured bank
 host works as is. Add other bank hosts explicitly (each entry must be an `https:` URL, checked when the object is
 created):
 
@@ -97,11 +97,11 @@ It runs after the credentials are added and before the request is sent. The even
 
 | Field | Meaning |
 |---|---|
-| `requestData` | The prepared request. Mutate it in place; it is a copy, so your caller's object is untouched. |
+| `requestData` | The prepared request. Mutate it in place or assign a new object to it; it is a copy, so your caller's object is untouched. |
 | `bankName` | The bank key, e.g. `vakifbank-cp`. |
 | `queryType` | A `QUERY_TYPE` value, e.g. `custom_query`. |
 | `gatewayClass` | The gateway the query serves, e.g. `PayFlexCPV4Pos`. |
-| `originalData` | What you passed in. Frozen, read-only. |
+| `originalData` | What you passed in. Frozen at the top level only (nested objects stay mutable, so do not change them). |
 
 ```ts
 const query = PosQueryFactory.createPosQuery(account, posProductionConfig, {
@@ -121,5 +121,6 @@ When a hook changes the data, the change is written to the debug log with sensit
 
 ## Logging
 
-Query logs are masked like the gateway logs: card numbers, passwords and keys never appear. The raw answer of a custom
-query is returned to you and is never logged.
+Query logs are masked like the gateway logs: card numbers, passwords and keys never appear. A decoded answer of a custom
+query is returned to you and is not logged. An HTTP error body or a body that cannot be decoded is logged, masked and
+truncated.

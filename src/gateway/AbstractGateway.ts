@@ -6,7 +6,7 @@ import type { RequestValueFormatterInterface } from '../data-mapper/request/valu
 import type { RequestValueMapperInterface } from '../data-mapper/request/value-mapper/RequestValueMapperInterface.js'
 import type { ResponseDataMapperInterface } from '../data-mapper/response/mapper/ResponseDataMapperInterface.js'
 import { PosError, UnsupportedPaymentModelError, UnsupportedTransactionTypeError } from '../errors.js'
-import { prepareRequestDataWithHooks, runHooks } from '../hooks.js'
+import { prepareRequestDataWithHooks } from '../hooks.js'
 import { createSafeLogger, type PosLogger } from '../logger.js'
 import type { AbstractPosAccount } from '../model/account/AbstractPosAccount.js'
 import type { CreditCard } from '../model/card/CreditCard.js'

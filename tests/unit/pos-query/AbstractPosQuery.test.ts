@@ -170,6 +170,30 @@ describe('AbstractPosQuery', () => {
       expect(stub.request).not.toHaveBeenCalled()
     })
 
+    // addition: a non-string URL cannot be checked once and then used with a different value
+    it('rejects a non-string apiUrl whose toString changes between calls', async () => {
+      const onHook = vi.fn()
+      const { q, mapper, stub } = setup({ hooks: { onPosQueryRequestDataPrepared: [onHook] } })
+      let calls = 0
+      const sneaky = {
+        toString: () => (calls++ === 0 ? 'https://entegrasyon.asseco-see.com.tr/fim/api' : 'https://evil.example/'),
+      } as unknown as string
+      await expect(q.customQuery({ bin: '1' }, sneaky)).rejects.toBeInstanceOf(PosError)
+      expect(mapper.createCustomQueryRequestData).not.toHaveBeenCalled()
+      expect(onHook).not.toHaveBeenCalled()
+      expect(stub.request).not.toHaveBeenCalled()
+    })
+
+    // addition: plain-JS callers can pass anything as the request data
+    it.each([null, 'text', 5, ['a']])('rejects non-object request data %j with a PosError', async (input) => {
+      const { q, mapper, stub } = setup()
+      const p = q.customQuery(input as unknown as Record<string, unknown>)
+      await expect(p).rejects.toBeInstanceOf(PosError)
+      await expect(p).rejects.toThrow('Custom query request data must be an object.')
+      expect(mapper.createCustomQueryRequestData).not.toHaveBeenCalled()
+      expect(stub.request).not.toHaveBeenCalled()
+    })
+
     it('null and undefined apiUrl use the client default', async () => {
       const { q, stub } = setup()
       await q.customQuery({}, null)

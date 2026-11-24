@@ -92,6 +92,9 @@ export abstract class AbstractPosQuery<A extends AbstractPosAccount = AbstractPo
   }
 
   async customQuery(requestData: Record<string, unknown>, apiUrl?: string | null): Promise<Record<string, unknown>> {
+    if (typeof requestData !== 'object' || requestData === null || Array.isArray(requestData)) {
+      throw new PosError('Custom query request data must be an object.')
+    }
     // The mapper puts the merchant credentials into the body, so the target is checked before anything is built.
     if (apiUrl !== undefined && apiUrl !== null) {
       this.assertAllowedApiUrl(apiUrl)
@@ -177,7 +180,8 @@ export abstract class AbstractPosQuery<A extends AbstractPosAccount = AbstractPo
    * carries the merchant credentials. The rejected URL is not echoed: it may itself contain secrets.
    */
   protected assertAllowedApiUrl(apiUrl: string): void {
-    const url = parseUrl(apiUrl)
+    // A non-string (plain-JS caller) could change its string form between the check and the use.
+    const url = typeof apiUrl === 'string' ? parseUrl(apiUrl) : null
     const allowed =
       url !== null &&
       url.protocol === 'https:' &&

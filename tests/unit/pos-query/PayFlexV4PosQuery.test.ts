@@ -9,7 +9,7 @@ import { PayFlexV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos
 import type { QueryRequestDataMapperInterface } from '../../../src/data-mapper/pos-query/request/QueryRequestDataMapperInterface.js'
 import { PayFlexV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
-import { PosError, PosHttpError, UnsupportedTransactionTypeError } from '../../../src/errors.js'
+import { PosError, PosHttpError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import { noopLogger, type PosLogger } from '../../../src/logger.js'

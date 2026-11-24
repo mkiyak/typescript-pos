@@ -112,7 +112,7 @@ export const PosQueryFactory = {
         responseValueMapper = new PayFlexV4PosResponseValueMapper()
         break
       }
-      default: {
+      case 'PayFlexCPV4Pos': {
         if (!(account instanceof PayFlexPosAccount)) {
           throw new PosError(`Bank [${bankName}] is configured for PayFlexCPV4Pos and needs a PayFlexPosAccount.`)
         }
@@ -121,7 +121,10 @@ export const PosQueryFactory = {
         crypt = new PayFlexCPV4PosCrypt(logger)
         responseValueFormatter = new BasicResponseValueFormatter()
         responseValueMapper = new PayFlexCPV4PosResponseValueMapper()
+        break
       }
+      default:
+        throw new GatewayClassNotConfiguredError(`PosQuery not found for gateway ${gatewayClass}`)
     }
 
     const responseDataMapper = PosQueryResponseMapperFactory.createForGateway(
