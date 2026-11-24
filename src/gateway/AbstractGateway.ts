@@ -60,6 +60,11 @@ export type GatewayConfig = {
    * PosNetV1Pos: reject a declined 3D callback that carries no `Mac` (`HashMismatchError`). Default false: without
    * it an unsigned callback is accepted only as a decline (nothing is provisioned). A successful callback must
    * always carry a valid `Mac`, and a `Mac` on a declined callback must always verify.
+   *
+   * PayForPos: reject any 3D callback that carries no `ResponseHash` (`HashMismatchError`). Default false: without
+   * it an unsigned declined callback is mapped as declined, an unsigned successful callback is rejected for QNB
+   * Finansbank (which signs every callback) and, for other institutions such as Ziraat Katilim, never approves a
+   * payment by itself (the bank's status record decides). A present `ResponseHash` is always verified.
    */
   require_3d_hash?: boolean
 }
