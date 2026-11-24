@@ -1,13 +1,14 @@
 import { MissingAccountInfoError } from '../errors.js'
 import { AkbankPosAccount } from '../model/account/AkbankPosAccount.js'
 import { AssecoPosAccount } from '../model/account/AssecoPosAccount.js'
+import { BoaPosAccount } from '../model/account/BoaPosAccount.js'
 import { GarantiPosAccount } from '../model/account/GarantiPosAccount.js'
 import { InterPosAccount } from '../model/account/InterPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
 
-/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor and InterPos gateways. */
+/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor, InterPos and BOA (Kuveyt, Vakif Katilim) gateways. */
 export const AccountFactory = {
   createAssecoPosAccount(
     bank: string,
@@ -98,4 +99,15 @@ export const AccountFactory = {
   ): InterPosAccount {
     return new InterPosAccount(bank, shopCode, userCode, userPass, merchantPass)
   },
-} as const
+
+  createBoaPosAccount(
+    bank: string,
+    merchantId: string,
+    username: string,
+    customerId: string,
+    secretKey: string,
+    subMerchantId: string | null = null,
+  ): BoaPosAccount {
+    return new BoaPosAccount(bank, merchantId, username, customerId, secretKey, subMerchantId)
+  },
+}

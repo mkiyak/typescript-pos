@@ -306,4 +306,23 @@ describe('maskSensitiveData', () => {
     expect(out).not.toMatch(/\d{16}/)
     expect(maskSensitiveData('OrderId=1;;Pan=540061******0430;;ProcReturnCode=00')).not.toMatch(/\d{16}/)
   })
+  // addition: B11 the hashed password is the effective signing secret of the BOA banks
+  it('masks HashPassword in objects, XML and form text and keeps MerchantId', () => {
+    expect(maskSensitiveData({ HashPassword: 'h58bUB83xQz2/21SUeOemUgkF5U=' })).toStrictEqual({ HashPassword: '***' })
+    expect(maskSensitiveData({ hashpassword: 'x', MerchantId: '1' })).toStrictEqual({
+      hashpassword: '***',
+      MerchantId: '1',
+    })
+    const xml = maskSensitiveData(
+      '<VPosMessage><MerchantId>80</MerchantId><HashPassword>c77dFssAnYSy6O2MJo+5tMYtGVc=</HashPassword></VPosMessage>',
+    )
+    expect(xml).toContain('<HashPassword>***</HashPassword>')
+    expect(xml).toContain('<MerchantId>80</MerchantId>')
+    expect(xml).not.toContain('c77dFss')
+    const form = maskSensitiveData('HashPassword=c77dFssAnYSy6O2MJo%2B5tMYtGVc%3D&MerchantId=1')
+    expect(form).toBe('HashPassword=***&MerchantId=1')
+    const json = maskSensitiveData('{"HashPassword":"c77dFssAnYSy6O2MJo+5tMYtGVc=","MerchantId":"1"}')
+    expect(json).not.toContain('c77dFss')
+    expect(json).toContain('"MerchantId":"1"')
+  })
 })

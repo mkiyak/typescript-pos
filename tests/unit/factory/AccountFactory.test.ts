@@ -4,6 +4,7 @@ import { MissingAccountInfoError, type OrderMismatchField, PosError } from '../.
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { AkbankPosAccount } from '../../../src/model/account/AkbankPosAccount.js'
 import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js'
+import { BoaPosAccount } from '../../../src/model/account/BoaPosAccount.js'
 import { GarantiPosAccount } from '../../../src/model/account/GarantiPosAccount.js'
 import { InterPosAccount } from '../../../src/model/account/InterPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
@@ -316,6 +317,58 @@ describe('AccountFactory InterPos', () => {
   })
 })
 
+describe('AccountFactory BOA account', () => {
+  it('createBoaPosAccount', () => {
+    const a = AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'APIUSER', '11111', 'kdsnsksl', 'SUB1')
+    expect(a).toBeInstanceOf(BoaPosAccount)
+    expect(a.getBankName()).toBe('vakif-katilim')
+    expect(a.getMerchantId()).toBe('1')
+    expect(a.getUsername()).toBe('APIUSER')
+    expect(a.getCustomerId()).toBe('11111')
+    expect(a.getSecretKey()).toBe('kdsnsksl')
+    expect(a.getSubMerchantId()).toBe('SUB1')
+  })
+
+  it('createBoaPosAccount without sub merchant id', () => {
+    const a = AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'APIUSER', '11111', 'kdsnsksl')
+    expect(a.getSubMerchantId()).toBeNull()
+  })
+
+  // addition: B1 an empty or blank credential is missing, never signed or sent
+  it.each([
+    ['merchantId', ['', 'u', 'c', 's']],
+    ['merchantId', [' ', 'u', 'c', 's']],
+    ['username', ['m', '', 'c', 's']],
+    ['username', ['m', '  ', 'c', 's']],
+    ['customerId', ['m', 'u', '', 's']],
+    ['customerId', ['m', 'u', ' ', 's']],
+    ['secretKey', ['m', 'u', 'c', '']],
+    ['secretKey', ['m', 'u', 'c', '\t']],
+  ] as const)('blank %s is rejected (%j)', (_name, [m, u, c, s]) => {
+    expect(() => AccountFactory.createBoaPosAccount('kuveytpos', m, u, c, s)).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: B1
+  it.each([[''], [' ']])('a blank sub merchant id %j is rejected', (sub) => {
+    expect(() => AccountFactory.createBoaPosAccount('kuveytpos', 'm', 'u', 'c', 's', sub)).toThrow(
+      MissingAccountInfoError,
+    )
+  })
+
+  // addition: B1 a non-string credential is missing too
+  it('a non-string credential is rejected', () => {
+    const make = AccountFactory.createBoaPosAccount as unknown as (...a: unknown[]) => unknown
+    expect(() => make('kuveytpos', 80, 'u', 'c', 's')).toThrow(MissingAccountInfoError)
+    expect(() => make('kuveytpos', 'm', 'u', 'c', null)).toThrow(MissingAccountInfoError)
+    expect(() => make('kuveytpos', 'm', 'u', undefined, 's')).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: B1 the account has no separate password
+  it('getPassword is empty', () => {
+    expect(AccountFactory.createBoaPosAccount('kuveytpos', 'm', 'u', 'c', 's').getPassword()).toBe('')
+  })
+})
+
 describe('account credential leakage', () => {
   const accounts = [
     ['Asseco', () => AccountFactory.createAssecoPosAccount('akbank', 'mid', 'USER1', 'PW1', 'SK1')],
@@ -343,6 +396,8 @@ describe('account credential leakage', () => {
     ],
     // addition: F1
     ['InterPos', () => AccountFactory.createInterPosAccount('denizbank', 'mid', 'USER1', 'user-pass', 'merchant-pass')],
+    // addition: B1
+    ['BOA', () => AccountFactory.createBoaPosAccount('vakif-katilim', 'mid', 'APIUSER', '11111', 'kdsnsksl', 'SUB1')],
   ] as const
 
   it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
@@ -363,6 +418,8 @@ describe('account credential leakage', () => {
         '12345678',
         'user-pass',
         'merchant-pass',
+        '11111',
+        'SUB1',
       ])
         expect(out).not.toContain(secret)
     }
