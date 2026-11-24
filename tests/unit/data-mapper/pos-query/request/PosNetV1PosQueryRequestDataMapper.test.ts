@@ -55,6 +55,17 @@ describe('PosNetV1PosQueryRequestDataMapper', () => {
     expect(actual.MAC).toBe('pre_set_mac')
   })
 
+  // addition: a null MAC counts as absent, so the request is signed instead of sent with `MAC: null`
+  it('signs a request whose MAC is null', () => {
+    const { crypt, hashFromParams } = stub()
+    const actual = create(crypt).createCustomQueryRequestData(account, {
+      MACParams: 'MerchantNo:TerminalNo',
+      MAC: null,
+    })
+    expect(hashFromParams).toHaveBeenCalledTimes(1)
+    expect(actual.MAC).toBe('generated_mac')
+  })
+
   it('testCreateHistoryRequestDataThrows', () => {
     expect(() => create(stub().crypt).createHistoryRequestData(account, {})).toThrow(UnsupportedTransactionTypeError)
   })

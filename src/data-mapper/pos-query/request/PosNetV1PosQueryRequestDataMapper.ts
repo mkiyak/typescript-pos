@@ -28,7 +28,8 @@ export class PosNetV1PosQueryRequestDataMapper extends AbstractQueryRequestDataM
       TerminalNo: account.getTerminalId(),
     })
 
-    if (ownValue(merged, 'MAC') === undefined) {
+    const presetMac = ownValue(merged, 'MAC')
+    if (presetMac === undefined || presetMac === null) {
       const macParams = ownValue(merged, 'MACParams')
       if (typeof macParams !== 'string' || macParams === '') {
         throw new PosError(
