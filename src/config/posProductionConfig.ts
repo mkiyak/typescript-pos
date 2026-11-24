@@ -9,12 +9,13 @@ export type PosProductionBank =
   | 'isbank'
   | 'sekerbank'
   | 'vakifbank'
+  | 'vakifbank-cp'
   | 'ziraat-vpos'
   | 'ziraat-asseco'
 
 /**
- * Production endpoints for the AssecoPos and PayFlexV4Pos banks (the VakifBank
- * API gateway on port 8443). Copy and adjust the entries you use; `require_3d_hash` is left at its default.
+ * Production endpoints for the AssecoPos, PayFlexV4Pos and PayFlexCPV4Pos banks (the VakifBank
+ * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default.
  *
  * Deeply frozen: spread an entry into a new object to change it
  * (`{ ...posProductionConfig.banks.vakifbank, require_3d_hash: true }`).
@@ -77,6 +78,13 @@ export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeCo
         payment_api: 'https://apigw.vakifbank.com.tr:8443/virtualPos/Vposreq',
         gateway_3d: 'https://inbound.apigateway.vakifbank.com.tr:8443/threeDGateway/Enrollment',
         query_api: 'https://apigw.vakifbank.com.tr:8443/virtualPos/Search',
+      },
+    },
+    'vakifbank-cp': {
+      name: 'VakifBank-PayFlex-Common-Payment',
+      class: 'PayFlexCPV4Pos',
+      gateway_endpoints: {
+        payment_api: 'https://inbound.apigateway.vakifbank.com.tr:8443/commonPayment',
       },
     },
     'ziraat-vpos': {

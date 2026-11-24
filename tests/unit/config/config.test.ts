@@ -5,6 +5,7 @@ import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { PosFactory } from '../../../src/factory/PosFactory.js'
 import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
+import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 
 const configs = { production: posProductionConfig, test: posTestConfig }
@@ -12,10 +13,10 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos and PayFlexV4Pos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos and PayFlexCPV4Pos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
-      expect(['AssecoPos', 'PayFlexV4Pos']).toContain(bank.class)
+      expect(['AssecoPos', 'PayFlexV4Pos', 'PayFlexCPV4Pos']).toContain(bank.class)
     }
   })
 
@@ -25,7 +26,10 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         ? AccountFactory.createAssecoPosAccount(key, 'c', 'u', 'p', 'k')
         : AccountFactory.createPayFlexPosAccount(key, 'm', 'p', 't')
     const gateway = PosFactory.createPosGateway(account, cfg)
-    expect(gateway).toBeInstanceOf(bank.class === 'AssecoPos' ? AssecoPos : PayFlexV4Pos)
+    const expected = { AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos }[
+      bank.class as 'AssecoPos' | 'PayFlexV4Pos' | 'PayFlexCPV4Pos'
+    ]
+    expect(gateway).toBeInstanceOf(expected)
   })
 
   it('every URL is https and none uses port 4443', () => {
@@ -114,6 +118,24 @@ describe('VakifBank endpoints', () => {
       gateway_3d: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/threeDGateway/Enrollment',
       query_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/virtualPos/Search',
     })
+  })
+
+  it('production vakifbank-cp is the common payment API', () => {
+    expect(posProductionConfig.banks['vakifbank-cp']).toStrictEqual({
+      name: 'VakifBank-PayFlex-Common-Payment',
+      class: 'PayFlexCPV4Pos',
+      gateway_endpoints: { payment_api: 'https://inbound.apigateway.vakifbank.com.tr:8443/commonPayment' },
+    })
+    expect(Object.isFrozen(posProductionConfig.banks['vakifbank-cp'])).toBe(true)
+  })
+
+  it('test vakifbank-cp is the common payment test API', () => {
+    expect(posTestConfig.banks['vakifbank-cp']).toStrictEqual({
+      name: 'VakifBank-PayFlex-Common-Payment',
+      class: 'PayFlexCPV4Pos',
+      gateway_endpoints: { payment_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment' },
+    })
+    expect(Object.isFrozen(posTestConfig.banks['vakifbank-cp'])).toBe(true)
   })
 
   it('production has the Asseco banks', () => {

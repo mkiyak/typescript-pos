@@ -16,6 +16,7 @@ toplayan TypeScript kütüphanesi. Node.js 22 veya üzeri gerekir; ESM ve Common
 | -------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AssecoPos`    | İş Bankası, Ziraat (Asseco), Akbank (Asseco), Halkbank, TEB, Şekerbank, QNB Finansbank (Asseco)   | Birim testli; 3D hash'i PHP ile karşılaştırmalı test edildi (1000 rastgele kümede 0 uyuşmazlık).                                                                                                            |
 | `PayFlexV4Pos` | VakıfBank (8443 portu), Ziraat (PayFlex)                                                          | Birim testli. VakıfBank herkese açık TEST ortamında 2026-11-23'te canlı doğrulandı: 3D kayıt kontrolü (Status `Y`), 3D'siz Satış (`0000`) ve İptal (`0000`). |
+| `PayFlexCPV4Pos` | VakıfBank (Güvenli Ortak Ödeme, port 8443) | Birim testli. |
 
 ## Kurulum
 
@@ -68,6 +69,7 @@ Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://g
 
 - [Asseco 3D Pay Hosting](https://github.com/mkiyak/typescript-pos/blob/main/guides/asseco-3d-payment.md)
 - [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
+- [VakıfBank Ortak Ödeme (3D Host / 3D Pay)](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-cp-payment.md)
 - [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Diğer işlemler: `pos.cancel(order)`, `pos.refund(order)` (`order.order_amount` verilmiş ve `order.amount` ondan

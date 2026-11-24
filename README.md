@@ -15,6 +15,7 @@ ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
 | -------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AssecoPos`    | İş Bankası, Ziraat (Asseco), Akbank (Asseco), Halkbank, TEB, Şekerbank, QNB Finansbank (Asseco) | Unit-tested; the 3D hash is differential-tested against PHP (0 mismatches in 1000 random sets).                                                                                                      |
 | `PayFlexV4Pos` | VakıfBank (port 8443), Ziraat (PayFlex)                                                       | Unit-tested. VakıfBank public TEST environment, verified live on 2026-11-23: 3D enrollment (Status `Y`), non-3D Sale (`0000`) and Cancel (`0000`). |
+| `PayFlexCPV4Pos` | VakıfBank (Common Payment hosted page, port 8443) | Unit-tested. |
 
 ## Install
 
@@ -67,6 +68,7 @@ Complete, compile-checked versions with error handling live in [`examples/`](htt
 
 - [Asseco 3D Pay Hosting](https://github.com/mkiyak/typescript-pos/blob/main/guides/asseco-3d-payment.md)
 - [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
+- [VakıfBank Common Payment (3D Host / 3D Pay)](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-cp-payment.md)
 - [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Other operations: `pos.cancel(order)`, `pos.refund(order)` (partial when `order.order_amount` is set and

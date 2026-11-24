@@ -49,6 +49,7 @@ describe('public index', () => {
         'AbstractGateway',
         'AssecoPos',
         'PayFlexV4Pos',
+        'PayFlexCPV4Pos',
         'AssecoPosAccount',
         'PayFlexPosAccount',
         'posProductionConfig',
@@ -64,6 +65,11 @@ describe('public index', () => {
   it('PosFactory creates a gateway from the shipped test config', () => {
     const account = mod.AccountFactory.createPayFlexPosAccount('vakifbank', 'm', 'p', 't')
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.PayFlexV4Pos)
+  })
+
+  it('PosFactory creates the common payment gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createPayFlexPosAccount('vakifbank-cp', 'm', 'p', 't')
+    expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.PayFlexCPV4Pos)
   })
 
   it('exports the types the public API refers to', () => {

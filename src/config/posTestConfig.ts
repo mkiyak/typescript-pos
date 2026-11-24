@@ -1,11 +1,11 @@
 import { freezeConfig, type ShippedPosConfig } from './freezeConfig.js'
 
 /** Bank keys of `posTestConfig`. */
-export type PosTestBank = 'asseco' | 'vakifbank' | 'ziraat-vpos'
+export type PosTestBank = 'asseco' | 'vakifbank' | 'vakifbank-cp' | 'ziraat-vpos'
 
 /**
- * Test endpoints for the AssecoPos and PayFlexV4Pos banks (the VakifBank test API
- * gateway on port 8443). `test_mode` only changes request data for gateways that support it; for these two
+ * Test endpoints for the AssecoPos, PayFlexV4Pos and PayFlexCPV4Pos banks (the VakifBank test API
+ * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it; for these
  * gateways the environment is selected by the endpoint URLs.
  *
  * Deeply frozen: spread an entry into a new object to change it
@@ -28,6 +28,13 @@ export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
         payment_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/virtualPos/Vposreq',
         gateway_3d: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/threeDGateway/Enrollment',
         query_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/virtualPos/Search',
+      },
+    },
+    'vakifbank-cp': {
+      name: 'VakifBank-PayFlex-Common-Payment',
+      class: 'PayFlexCPV4Pos',
+      gateway_endpoints: {
+        payment_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment',
       },
     },
     'ziraat-vpos': {

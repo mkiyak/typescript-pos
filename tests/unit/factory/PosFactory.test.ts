@@ -6,6 +6,7 @@ import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { type PosConfig, PosFactory } from '../../../src/factory/PosFactory.js'
 import type { AbstractGateway, GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
+import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../src/PosInterface.js'
 import type { PosHooks, PosOrder } from '../../../src/types.js'
@@ -58,6 +59,28 @@ describe('PosFactory.createPosGateway', () => {
     expect(gateway.getCurrencies().length).toBeGreaterThan(0)
     expect(Object.keys(gateway.getCardTypeMapping()).length).toBeGreaterThan(0)
     expect(gateway.get3DGatewayURL()).toBe('https://pay.example.com/Enrollment')
+  })
+
+  it('creates a PayFlexCPV4Pos gateway from the shipped test config', () => {
+    const account = payFlexAccount('vakifbank-cp')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(PayFlexCPV4Pos)
+    expect(gateway.getAccount()).toBe(account)
+  })
+
+  it('rejects a non-PayFlex account for PayFlexCPV4Pos', () => {
+    expect(() => PosFactory.createPosGateway(assecoAccount('vakifbank-cp'), posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(assecoAccount('vakifbank-cp'), posTestConfig)).toThrow(/PayFlexPosAccount/)
+  })
+
+  it('rejects an http: payment_api override for PayFlexCPV4Pos', () => {
+    const bank = posTestConfig.banks['vakifbank-cp'] as GatewayConfig
+    const cfg: PosConfig = {
+      banks: {
+        'vakifbank-cp': { ...bank, gateway_endpoints: { payment_api: 'http://pay.example.com/commonPayment' } },
+      },
+    }
+    expect(() => PosFactory.createPosGateway(payFlexAccount('vakifbank-cp'), cfg)).toThrow(PosError)
   })
 
   it('throws GatewayClassNotConfiguredError when the bank is not in the config', () => {
@@ -184,6 +207,7 @@ describe('PosFactory.createPosGateway', () => {
     const accounts = {
       AssecoPos: (bank: string) => assecoAccount(bank),
       PayFlexV4Pos: (bank: string) => payFlexAccount(bank),
+      PayFlexCPV4Pos: (bank: string) => payFlexAccount(bank),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

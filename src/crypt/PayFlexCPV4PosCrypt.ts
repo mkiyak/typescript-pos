@@ -4,11 +4,12 @@ import type { GatewayResponseData } from '../types.js'
 import { AbstractCrypt } from './AbstractCrypt.js'
 
 /**
- * VakifBank Common Payment. The gateway never calls any of these methods.
+ * VakifBank Common Payment (guide v2.1). The gateway never calls any of these methods.
  *
  * - The registration request carries no `HashedData`: the field is optional (guide section 5) and the formula
- *   needs values that do not exist before the 3D step, so a registration cannot be signed with it (R2).
- * - The success/fail callback carries no signature; it is confirmed by the query API instead (R7).
+ *   needs values that do not exist before the 3D step, so a registration cannot be signed with it.
+ * - The success/fail callback carries no signature; it is confirmed by the transaction query instead
+ *   (guide sections 5 and 6.4).
  */
 export class PayFlexCPV4PosCrypt extends AbstractCrypt<PayFlexPosAccount> {
   static supports(gatewayClass: string): boolean {

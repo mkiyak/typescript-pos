@@ -38,6 +38,7 @@ export {
   type SupportedTransactions,
 } from './gateway/AbstractGateway.js'
 export { AssecoPos } from './gateway/AssecoPos.js'
+export { PayFlexCPV4Pos } from './gateway/PayFlexCPV4Pos.js'
 export { PayFlexV4Pos } from './gateway/PayFlexV4Pos.js'
 export { noopLogger, type PosLogger } from './logger.js'
 export { AbstractPosAccount } from './model/account/AbstractPosAccount.js'
