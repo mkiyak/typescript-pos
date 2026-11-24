@@ -266,6 +266,7 @@ describe('VakifKatilimPosHttpClient', () => {
       ['an empty body', ''],
       ['plain text', 'Service Unavailable'],
       ['an entity definition', '<!DOCTYPE r [<!ENTITY x "A">]><r><a>&x;</a></r>'],
+      ['a split entity definition', '<!DOC&#x0;TYPE r [<!ENT&#x0;ITY x "A">]><r><a>&x;</a></r>'],
     ])('rejects %s answered with 200', async (_n, body) => {
       const c = createClient(fakeFetch([], body))
       await expect(c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, { id: '1' })).rejects.toThrow(PosHttpError)

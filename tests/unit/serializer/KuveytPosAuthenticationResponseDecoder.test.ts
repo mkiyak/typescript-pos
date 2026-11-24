@@ -214,4 +214,19 @@ describe('KuveytPosAuthenticationResponseDecoder', () => {
   ])('%s', (_name, xml, expected) => {
     expect(KuveytPosAuthenticationResponseDecoder.decode(encodeURIComponent(xml))).toStrictEqual(expected)
   })
+
+  // addition: a declaration split by a null character reference is refused or never expands
+  it.each([
+    ['upper case', '<?xml version="1.0"?><!DOC&#x0;TYPE a [<!ENT&#x0;ITY x "BOOM">]><R><A>&x;</A></R>'],
+    ['lower case', '<!doc&#x0;type a [<!ent&#x0;ity x "BOOM">]><R><A>&x;</A></R>'],
+  ])('does not expand a split %s', (_n, xml) => {
+    let decoded: unknown
+    try {
+      decoded = KuveytPosAuthenticationResponseDecoder.decode(encodeURIComponent(xml))
+    } catch (e) {
+      expect(e).toBeInstanceOf(PosError)
+      return
+    }
+    expect(JSON.stringify(decoded)).not.toContain('BOOM')
+  })
 })

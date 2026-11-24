@@ -187,4 +187,24 @@ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   ])('refuses %s', (_n, xml) => {
     expect(() => VakifKatilimPosXmlDecoder.decode(xml)).toThrow(PosHttpError)
   })
+
+  // addition: the refusal looks at the text the parser reads, so a declaration split by a null character is seen
+  it.each([
+    ['DOCTYPE', '<?xml version="1.0"?><!DOC&#x0;TYPE a [<!ENT&#x0;ITY x "BOOM">]><R><A>&x;</A></R>'],
+    ['lower case', '<?xml version="1.0"?><!doc&#x0;type a [<!ent&#x0;ity x "BOOM">]><R><A>&x;</A></R>'],
+    ['several characters', '<!D&#x0;O&#x0;C&#x0;TYPE a [<!E&#x0;N&#x0;T&#x0;ITY x "BOOM">]><R><A>&x;</A></R>'],
+    ['only the entity', '<!DOCTYPE a [<!ENT&#x0;ITY x "BOOM">]><R><A>&x;</A></R>'],
+    ['before the declaration', '&#x0;<!DOC&#x0;TYPE a [<!ENTITY x "BOOM">]><R><A>&x;</A></R>'],
+  ])('refuses a split %s', (_n, xml) => {
+    expect(() => VakifKatilimPosXmlDecoder.decode(xml)).toThrow(PosHttpError)
+  })
+
+  // addition: the utf-16 declaration is removed in any letter case, like the client reads it
+  it.each(['utf-16', 'UTF-16', 'Utf-16'])('removes a %s declaration', (declared) => {
+    expect(
+      VakifKatilimPosXmlDecoder.decode(`<?xml version="1.0" encoding="${declared}"?><R><A>1</A></R>`),
+    ).toStrictEqual({
+      A: '1',
+    })
+  })
 })
