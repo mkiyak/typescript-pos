@@ -1364,6 +1364,128 @@ describe('AkbankPos (end to end) 3D Pay', () => {
   })
 })
 
+describe('AkbankPos (end to end) confirmation by the bank record', () => {
+  const HOSTED_FIELDS =
+    'txnCode+responseCode+responseMessage+hostResponseCode+hostMessage+txnDateTime+merchantSafeId+terminalSafeId+orderId+cardHolderName+authCode+rrn+batchNumber+stan'
+  const approvedBase = (orderId = 'ORD00000001'): Record<string, string> => ({
+    txnCode: '3000',
+    responseCode: 'VPS-0000',
+    responseMessage: 'BASARILI',
+    hostResponseCode: '00',
+    hostMessage: '000 ONAY',
+    txnDateTime: '2024-04-18T20:27:45.000',
+    merchantSafeId: MERCHANT_SAFE_ID,
+    terminalSafeId: TERMINAL_SAFE_ID,
+    orderId,
+    cardHolderName: 'JOHN DOE',
+    authCode: '306456',
+    rrn: '411024360235',
+    batchNumber: '43',
+    stan: '86',
+    hashParams: HOSTED_FIELDS,
+  })
+  const order: PosOrder = { id: 'ORD00000001', amount: 1.01, currency: CURRENCY.TRY, installment: 0 }
+  const pay = (
+    callback: Record<string, string>,
+    answer: (json: Data) => Data,
+    txType: TxType = TX_TYPE.PAY_AUTH,
+    o: PosOrder = order,
+  ) => {
+    const { fetchImpl } = bankFetch(answer)
+    return realGateway(fetchImpl)
+      .payment(MODEL.THREE_D_PAY, o, txType, null, cb(callback))
+      .catch((e: unknown) => e) as Promise<Data>
+  }
+
+  // addition: F1 the signed fields have no separators: the cardholder name can take characters from the codes
+  it('returns the bank references of the confirming transaction, not the re-split callback values', async () => {
+    const legit = sign(approvedBase())
+    const shifted = { ...legit, cardHolderName: 'JOHN DO', authCode: 'E30645', rrn: '641102436023', batchNumber: '543' }
+    expect(new AkbankPosCrypt().check3DHash(createAccount(), cb(shifted))).toBe(true)
+
+    const res = await pay(shifted, () => historyAnswer('ORD00000001'))
+
+    expect(res.status).toBe('approved')
+    expect(res.auth_code).toBe('306456')
+    expect(res.ref_ret_num).toBe('411024360235')
+    expect(res.batch_num).toBe(43)
+    expect((res.transaction_time as Date).toISOString()).toBe('2024-04-18T17:27:45.000Z')
+  })
+
+  // addition: F4 an order that is no longer a completed payment is not approved, and the error says why
+  it('reports the order status when the payment was refunded or cancelled', async () => {
+    const res = (await pay(sign(approvedBase()), () => historyAnswer('ORD00000001', { txnStatus: 'R' }))) as unknown
+    const err = res as OrderMismatchError
+    expect(err).toBeInstanceOf(OrderMismatchError)
+    expect(err.field).toBe('order_status')
+    expect(err.actual).toMatch(/REFUNDED|CANCELED/)
+    expect(err.paymentMayHaveCompleted).toBe(true)
+  })
+
+  // addition: F5 a different installment plan than ordered is a mismatch; a missing count equals a single payment
+  it.each([
+    ['12 installments for a single-payment order', { installCount: 12 }, 0, 'installment', '0', '12'],
+    ['a single payment for an installment order', { installCount: 1 }, 3, 'installment', '3', '0'],
+  ] as Array<[string, Data, number, string, string, string]>)(
+    'OrderMismatchError for %s',
+    async (_label, overrides, installment, field, expected, actual) => {
+      const err = (await pay(sign(approvedBase()), () => historyAnswer('ORD00000001', overrides), TX_TYPE.PAY_AUTH, {
+        ...order,
+        installment,
+      })) as unknown as OrderMismatchError
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      expect(err.field).toBe(field)
+      expect(err.expected).toBe(expected)
+      expect(err.actual).toBe(actual)
+      expect(err.paymentMayHaveCompleted).toBe(true)
+    },
+  )
+
+  it.each([
+    ['a missing count', { installCount: undefined }, 0],
+    ['a count of 1', { installCount: 1 }, 0],
+    ['a count of 3', { installCount: 3 }, 3],
+  ] as Array<[string, Data, number]>)('approves %s that equals the ordered installments', async (_l, overrides, n) => {
+    const res = await pay(sign(approvedBase()), () => historyAnswer('ORD00000001', overrides), TX_TYPE.PAY_AUTH, {
+      ...order,
+      installment: n,
+    })
+    expect(res.status).toBe('approved')
+    expect(res.installment_count).toBe(n)
+  })
+
+  // addition: F8 a pre-authorization is confirmed by a transaction of its own type that is still open
+  it('approves a 3D Pay pre-authorization confirmed by an open pre-authorization', async () => {
+    const callback = sign({ ...approvedBase(), txnCode: '3004' })
+    const res = await pay(
+      callback,
+      () => historyAnswer('ORD00000001', { txnCode: '3004', preAuthStatus: 'O' }),
+      TX_TYPE.PAY_PRE_AUTH,
+    )
+    expect(res.status).toBe('approved')
+    expect(res.transaction_type).toBe('pre')
+  })
+
+  // addition: F8 one gateway instance confirms concurrent callbacks, each against its own order
+  it('concurrent hosted confirmations each resolve to their own order', async () => {
+    const { sent, fetchImpl } = bankFetch((json) => {
+      const id = json.order.orderId as string
+      return historyAnswer(id, { rrn: id === 'ORD00000001' ? '411024360235' : '522135471346' })
+    })
+    const p = realGateway(fetchImpl)
+    const second = { ...approvedBase('ORD00000002'), rrn: '522135471346' }
+
+    const [a, b] = await Promise.all([
+      p.payment(MODEL.THREE_D_PAY, order, TX_TYPE.PAY_AUTH, null, cb(sign(approvedBase()))),
+      p.payment(MODEL.THREE_D_PAY, { ...order, id: 'ORD00000002' }, TX_TYPE.PAY_AUTH, null, cb(sign(second))),
+    ])
+
+    expect([a.order_id, a.ref_ret_num]).toStrictEqual(['ORD00000001', '411024360235'])
+    expect([b.order_id, b.ref_ret_num]).toStrictEqual(['ORD00000002', '522135471346'])
+    expect(sent.map((s) => s.json.order.orderId).sort()).toStrictEqual(['ORD00000001', 'ORD00000002'])
+  })
+})
+
 describe('AkbankPos (end to end) 3D Host', () => {
   // addition: A8 an approved 3D Host callback is confirmed with the order history
   it('confirms an approved callback with the bank order history', async () => {

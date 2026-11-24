@@ -110,6 +110,13 @@ function comparableAmount(value: unknown): string | null {
   }
 }
 
+/** A bank or order installment count as a number: a single payment (nothing, 0 or 1) is 0. */
+function installmentCount(value: unknown): number {
+  const count = Number(asText(value))
+
+  return Number.isInteger(count) && count > 1 ? count : 0
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -151,8 +158,9 @@ type HostedModel = typeof MODEL.THREE_D_PAY | typeof MODEL.THREE_D_HOST
  *   order id equals `order.id`. The end of the signed order id is not fixed by any format (the cardholder name that
  *   follows it is typed by the cardholder), and the callback carries no amount. So an approved result is confirmed
  *   with the bank by one signed order history request before it is returned: the bank must report the order as
- *   approved, with an approved transaction of the requested type that is completed, for the order amount and
- *   currency. Otherwise `OrderMismatchError` with `paymentMayHaveCompleted`. Errors of that request (such as
+ *   approved, with an approved transaction of the requested type that is completed, for the order amount, currency and
+ *   installment count (a single payment is 0 or 1 alike), and the authorization code, reference number, batch
+ *   number and time of the returned result are taken from that bank record, not from the callback. Otherwise `OrderMismatchError` with `paymentMayHaveCompleted`. Errors of that request (such as
  *   `PosHttpError`) propagate unchanged; the payment may have completed, so check it later with `orderHistory`.
  *   Declined callbacks are not confirmed.
  */
@@ -323,7 +331,8 @@ export class AkbankPos extends AbstractGateway<AkbankPosAccount> {
     }
 
     if (response.status === TX_APPROVED) {
-      await this.confirmPayment(response, order, txType)
+      const confirmed = await this.confirmPayment(response, order, txType)
+      this.takeBankReferences(response, confirmed)
     }
 
     return response
@@ -331,9 +340,14 @@ export class AkbankPos extends AbstractGateway<AkbankPosAccount> {
 
   /**
    * The callback cannot pin the end of its order id and carries no amount, so the bank's own record of the order
-   * decides: it must hold an approved, completed transaction of this type for the order amount and currency.
+   * decides: it must hold an approved, completed transaction of this type for the order amount, currency and
+   * installment plan. Returns that transaction.
    */
-  private async confirmPayment(response: PosResponse, order: PosOrder, txType: TxType): Promise<void> {
+  private async confirmPayment(
+    response: PosResponse,
+    order: PosOrder,
+    txType: TxType,
+  ): Promise<Record<string, unknown>> {
     const orderId = asText(order.id)
     const history = await this.orderHistory({ id: orderId })
 
@@ -343,18 +357,19 @@ export class AkbankPos extends AbstractGateway<AkbankPosAccount> {
     }
 
     const transactions = Array.isArray(history.transactions) ? history.transactions.filter(isRecord) : []
-    const completed = transactions.filter(
-      (tx) =>
-        tx.status === TX_APPROVED &&
-        tx.transaction_type === txType &&
-        CONFIRMED_ORDER_STATUSES.includes(tx.order_status),
-    )
-    if (completed.length === 0) {
+    const ofType = transactions.filter((tx) => tx.status === TX_APPROVED && tx.transaction_type === txType)
+    if (ofType.length === 0) {
       const approvedTypes = transactions
         .filter((tx) => tx.status === TX_APPROVED)
         .map((tx) => asText(tx.transaction_type))
         .join(',')
       this.fail('transaction_type', txType, approvedTypes, orderId, response)
+    }
+
+    const completed = ofType.filter((tx) => CONFIRMED_ORDER_STATUSES.includes(tx.order_status))
+    if (completed.length === 0) {
+      const actual = asText((ofType[0] as Record<string, unknown>).order_status)
+      this.fail('order_status', CONFIRMED_ORDER_STATUSES.join(' or '), actual, orderId, response)
     }
 
     const expectedAmount = comparableAmount(order.amount)
@@ -367,12 +382,38 @@ export class AkbankPos extends AbstractGateway<AkbankPosAccount> {
     }
 
     const expectedCurrency = order.currency ?? CURRENCY.TRY
-    if (!sameAmount.some((tx) => tx.currency === expectedCurrency)) {
+    const sameCurrency = sameAmount.filter((tx) => tx.currency === expectedCurrency)
+    if (sameCurrency.length === 0) {
       const actual = asText((sameAmount[0] as Record<string, unknown>).currency)
       this.fail('currency', expectedCurrency, actual, orderId, response)
     }
 
+    // A single payment is reported as 0 or 1 (or nothing) alike; any other count is a different plan.
+    const orderedInstallments = installmentCount(order.installment)
+    const sameInstallments = sameCurrency.filter((tx) => installmentCount(tx.installment_count) === orderedInstallments)
+    const confirmed = sameInstallments[0]
+    if (confirmed === undefined) {
+      const actual = installmentCount((sameCurrency[0] as Record<string, unknown>).installment_count)
+      this.fail('installment', String(orderedInstallments), String(actual), orderId, response)
+    }
+
     this.logger.info('payment confirmed by the bank order history', { order_id: orderId })
+
+    return confirmed
+  }
+
+  /**
+   * The signed callback values have no separators, so the cardholder name can take characters from the codes that
+   * follow it. The references handed to the merchant therefore come from the bank's own record of the payment.
+   */
+  private takeBankReferences(response: PosResponse, transaction: Record<string, unknown>): void {
+    response.auth_code = (transaction.auth_code ?? null) as PosResponse['auth_code']
+    response.ref_ret_num = (transaction.ref_ret_num ?? null) as PosResponse['ref_ret_num']
+    response.batch_num = (transaction.batch_num ?? null) as PosResponse['batch_num']
+    response.installment_count = installmentCount(transaction.installment_count)
+    if (transaction.transaction_time instanceof Date) {
+      response.transaction_time = transaction.transaction_time
+    }
   }
 
   /**
