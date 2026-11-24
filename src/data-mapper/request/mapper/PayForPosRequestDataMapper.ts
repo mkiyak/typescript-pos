@@ -130,6 +130,10 @@ export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayFor
   }
 
   createRefundRequestData(account: PayForPosAccount, order: PosOrder, refundTxType: TxType): Record<string, unknown> {
+    if (refundTxType !== TX_TYPE.REFUND && refundTxType !== TX_TYPE.REFUND_PARTIAL) {
+      // Every other type maps to another bank operation; a refund request must never become a sale or a cancel.
+      throw new UnsupportedTransactionTypeError(`Unsupported refund transaction type: ${String(refundTxType)}`)
+    }
     const orderId = this.orderId(order)
     const amount = this.amount(order)
 

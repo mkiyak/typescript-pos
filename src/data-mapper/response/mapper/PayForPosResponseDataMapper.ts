@@ -301,7 +301,7 @@ export class PayForPosResponseDataMapper extends AbstractResponseDataMapper {
   }
 
   extractMdStatus(raw3DAuthResponseData: Raw): string | null {
-    return typeof raw3DAuthResponseData === 'object' &&
+    return isRecord(raw3DAuthResponseData) &&
       Object.hasOwn(raw3DAuthResponseData, '3DStatus') &&
       typeof raw3DAuthResponseData['3DStatus'] === 'string'
       ? raw3DAuthResponseData['3DStatus']

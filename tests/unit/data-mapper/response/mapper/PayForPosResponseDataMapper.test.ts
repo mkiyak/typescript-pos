@@ -23,7 +23,7 @@ type Mocked<T> = { [K in keyof T]: ReturnType<typeof vi.fn> }
 // biome-ignore lint/suspicious/noExplicitAny: fixtures of heterogeneous shape
 type Data = Record<string, any>
 
-/** PHP ksort + assertSame: same keys (any order) with identical values. */
+/** Same keys (in any order) with identical values. */
 function expectSameSorted(actual: Data, expected: Data): void {
   expect(Object.keys(actual).sort()).toStrictEqual(Object.keys(expected).sort())
   expect(actual).toStrictEqual(expected)
@@ -43,7 +43,7 @@ const history = (name: string): Data =>
 
 const T = (iso: string) => new Date(`${iso}+03:00`)
 
-// deviation: F22 the reference instants carry no zone; bank times are UTC+03:00
+// deviation: F22 the expected instants are Türkiye time (UTC+03:00); bank times carry no zone
 const orderHistoryTestDataProvider: Array<[string, { fixture: string; expectedData: Data }]> = [
   [
     'success_pre_pay_post_pay_then_cancel',
@@ -315,8 +315,13 @@ describe('PayForPosResponseDataMapper', () => {
     expect(mapper.extractMdStatus(responseData)).toBeNull()
   })
 
+  // addition: a missing callback reads as no md status instead of throwing
+  it.each([[null], [undefined], [['1']]])('extractMdStatus(%j) -> null without throwing', (responseData) => {
+    expect(mapper.extractMdStatus(responseData as never)).toBeNull()
+  })
+
   it.each(paymentTestDataProvider)('mapPaymentResponse %s', (_name, { order, txType, responseData, expectedData }) => {
-    // deviation: Q6 the reference compares a fresh `new DateTimeImmutable()`; the stub returns a fixed instant
+    // deviation: Q6 an approved payment is stamped with the current time; the stub returns a fixed instant
     const expected = { ...expectedData }
     if (expected.transaction_time !== null) expected.transaction_time = NOW
     formatter.formatDateTime.mockReturnValue(NOW)
@@ -595,7 +600,7 @@ describe('PayForPosResponseDataMapper', () => {
     )
 
     // addition: a 5-digit VoidTime is padded to the six digits of the date-time layout
-    // deviation: F21 the reference would pass `20240119T13405` to the formatter
+    // deviation: F21 without padding the formatter would receive `20240119T13405`
     it('mapStatusResponse pads a short VoidTime', () => {
       const raw = { ...statusCancelled.responseData, VoidTime: '13405' }
       const actual: Data = realMapper().mapStatusResponse(raw)

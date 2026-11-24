@@ -14,7 +14,7 @@ built-ins (2,000 random sets each, 0 mismatches).
 | Ziraat Katılım | `ziraat-katilim-payfor` | `12` (`PayForPosAccount.MBR_ID_ZIRAAT_KATILIM`) |
 
 ```ts
-import { AccountFactory, PayForPosAccount, PosFactory, posProductionConfig, posTestConfig } from 'typescript-pos'
+import { AccountFactory, PosFactory, posProductionConfig, posTestConfig } from 'typescript-pos'
 
 const account = AccountFactory.createPayForPosAccount(
   'qnbfinansbank-payfor', // key of `banks` in the config
@@ -22,7 +22,7 @@ const account = AccountFactory.createPayForPosAccount(
   userCode,
   userPassword,
   merchantPass, // the merchant (3D) password: needed for every 3D model
-  // PayForPosAccount.MBR_ID_ZIRAAT_KATILIM, // sixth argument, only for Ziraat Katılım
+  // '12', // sixth argument, only for Ziraat Katılım (PayForPosAccount.MBR_ID_ZIRAAT_KATILIM)
 )
 
 const pos = PosFactory.createPosGateway(account, posTestConfig) // or posProductionConfig

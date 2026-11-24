@@ -33,6 +33,8 @@ describe('PayForPosHttpClient', () => {
     [TX_TYPE.PAY_AUTH, MODEL.THREE_D_SECURE],
     [TX_TYPE.PAY_AUTH, MODEL.NON_SECURE],
     [TX_TYPE.REFUND, MODEL.NON_SECURE],
+    [TX_TYPE.STATUS, MODEL.NON_SECURE],
+    // addition: partial refunds go to the same endpoint
     [TX_TYPE.REFUND_PARTIAL, MODEL.NON_SECURE],
   ] as Array<[TxType, PaymentModel]>)('getApiUrl(%s, %s)', (txType, paymentModel) => {
     expect(client.getApiUrl(txType, paymentModel)).toBe(API_URL)
@@ -50,7 +52,7 @@ describe('PayForPosHttpClient', () => {
   it('request', async () => {
     const sent: Sent[] = []
     const c = createClient(fakeFetch(sent, '<response><result>success</result></response>'))
-    // deviation: the encoder takes records; the reference row encodes a list as <item key="0">
+    // deviation: the encoder takes records, so the request data is a record rather than a list
     const actual = await c.request(
       TX_TYPE.PAY_AUTH,
       MODEL.THREE_D_SECURE,
@@ -104,8 +106,8 @@ describe('PayForPosHttpClient', () => {
     expect(err).toBeInstanceOf(PosHttpError)
   })
 
-  // addition: markup characters travel inside CDATA and the body is UTF-8 bytes
-  it('sends special characters in CDATA as UTF-8', async () => {
+  // addition: markup characters travel inside CDATA and non-ASCII text is sent as is (UTF-8 declared)
+  it('wraps markup characters in CDATA and keeps non-ASCII text', async () => {
     const sent: Sent[] = []
     const c = createClient(fakeFetch(sent, '<r><a>1</a></r>'))
     await c.request(
@@ -115,6 +117,7 @@ describe('PayForPosHttpClient', () => {
       { id: '1' },
     )
     const body = sent[0]?.init.body
+    expect(body).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>/)
     expect(body).toContain('<CardHolderName><![CDATA[Ali & Veli <x>]]></CardHolderName>')
     expect(body).toContain('<Note>Çağrı</Note>')
   })

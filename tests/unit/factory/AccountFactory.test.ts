@@ -258,8 +258,15 @@ describe('AccountFactory PayFor', () => {
     )
   })
 
+  // addition: F1 the institution code has one to four digits
+  it.each(['1', '12', '123', '1234'])('accepts the mbrId %j', (mbrId) => {
+    expect(AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'm', 'u', 'p', null, mbrId).getMbrId()).toBe(
+      mbrId,
+    )
+  })
+
   // addition: F1
-  it.each(['', '5a', '12345'])('rejects an invalid mbrId %j', (mbrId) => {
+  it.each(['', '5a', '12345', ' 12', '١٢'])('rejects an invalid mbrId %j', (mbrId) => {
     expect(() => AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'm', 'u', 'p', null, mbrId)).toThrow(
       MissingAccountInfoError,
     )

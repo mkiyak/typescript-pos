@@ -28,13 +28,13 @@ const Z = AccountFactory.createPayForPosAccount(
 const accounts = { finansbank: Q, ziraat_katilim: Z }
 const card = CreditCardFactory.create('5555444433332222', '22', '01', '123', 'ahmet')
 
-/** assertSame on arrays also compares key order: compare the serialised form as well. */
+/** Same values with the same key order: compare the serialised form as well. */
 function expectSame(actual: unknown, expected: unknown): void {
   expect(JSON.stringify(actual)).toBe(JSON.stringify(expected))
   expect(actual).toStrictEqual(expected)
 }
 
-/** Key-sorted copy, for the rows compared after ksort. */
+/** Key-sorted copy, for the rows whose key order is not part of the expectation. */
 function sorted(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 }
@@ -309,6 +309,14 @@ describe('PayForPosRequestDataMapper', () => {
         }),
       )
     })
+
+    // addition: only a full or partial refund builds a refund request
+    it.each([[TX_TYPE.PAY_AUTH], [TX_TYPE.CANCEL], [TX_TYPE.STATUS], ['refundx' as TxType]])(
+      'rejects refund transaction type %s',
+      (txType) => {
+        expect(() => mapper.createRefundRequestData(Q, order, txType)).toThrow(UnsupportedTransactionTypeError)
+      },
+    )
   })
 
   describe('3D form', () => {

@@ -41,7 +41,7 @@ describe('PayForPosRequestValueFormatter', () => {
     expect(formatter.formatDateTime(new Date('2024-04-14T16:45:30.000+03:00'))).toBe('20240414')
   })
 
-  // addition: sub-kurus amounts are rounded like number_format, two-decimal amounts are kept as PHP prints them
+  // addition: sub-kurus amounts are rounded to two decimals (1.005 → 1.01), then trailing zeros and the dot are dropped
   it.each([
     [1.005, '1.01'],
     [0.285, '0.29'],
