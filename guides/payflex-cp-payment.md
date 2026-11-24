@@ -3,8 +3,7 @@
 Gateway `PayFlexCPV4Pos`, bank key `vakifbank-cp`. Complete compile-checked code:
 [`examples/payflex-cp-3d-host.ts`](https://github.com/mkiyak/typescript-pos/blob/main/examples/payflex-cp-3d-host.ts).
 
-Status: unit-tested. The two bank calls it makes (payment registration and transaction query) are documented in the
-VakıfBank Common Payment guide v2.1, which the implementation follows. Test it with your own merchant before going live.
+Status: unit-tested.
 
 ## What it is and PCI scope
 
@@ -32,19 +31,44 @@ const pos = PosFactory.createPosGateway(account, posProductionConfig)
 ## Flow
 
 1. Persist the order on your server and create a short random token that maps to it. Put the token in the
-   `success_url` / `fail_url` query string.
+   `success_url` / `fail_url` query string. Also create a new `transaction_id` for this attempt (for example
+   `randomUUID().replaceAll('-', '')`, 32 characters) and store it with the order (see "Bind the attempt to the
+   order" below).
 2. `pos.get3DFormData(order, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH)` registers the payment with the bank and returns
    `{ gateway, method: 'GET', inputs: { Ptkn } }`. Redirect the browser to `gateway?Ptkn=...`. For 3D Pay pass the
    card as the fourth argument. If the bank does not
    accept the registration it throws `PosError`.
 3. The customer pays on the bank page; the bank sends the browser to your success or fail URL.
-4. Load the order using your token (never from the callback body) and call
+4. Load the order using your token (never from the callback body), including the stored `transaction_id`, and call
    `pos.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, null, callbackBody)`. Use `MODEL.THREE_D_PAY` when your
    contract is 3D Pay, and `TX_TYPE.PAY_PRE_AUTH` for a pre-authorization.
 
-The callback data is informational only. The gateway never believes it: whenever the callback carries a
-`TransactionId` or `PaymentToken`, it asks the bank's transaction query and uses only that answer to decide the
-status, both for approval and for failure. A callback with neither id is returned as `declined` without any request.
+The callback data is informational only. The gateway never believes it: it asks the bank's transaction query and uses
+only that answer to decide the status, both for approval and for failure. The query uses the order's own
+`transaction_id` / `payment_token` when you pass them, otherwise the `TransactionId` / `PaymentToken` of the callback.
+When there is nothing to query (no id on the order or in the callback), the result is `declined` without any request.
+
+## Bind the attempt to the order
+
+Give every payment attempt its own `transaction_id` and keep it with the order:
+
+```ts
+import { randomUUID } from 'node:crypto'
+
+const transactionId = randomUUID().replaceAll('-', '') // 32 letters and digits
+await saveAttempt(orderId, transactionId)
+const form = await pos.get3DFormData({ ...order, transaction_id: transactionId }, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH)
+```
+
+Alternatively store `form.inputs.Ptkn` and pass it back as `order.payment_token`. Pass the stored value back on the
+order when the callback arrives. The gateway then queries that id only, and a callback that names a different
+`TransactionId` or `PaymentToken` is rejected with `OrderMismatchError` (`field: 'transaction_id'`,
+`paymentMayHaveCompleted: false`) before any request. Without a stored id, someone who replays the callback of an
+earlier approved payment of the same order id and amount (for example one that was later cancelled or refunded) can
+make it look approved again, because the transaction query does not report later cancels or refunds. This matters
+most when you reuse order ids after a failed or cancelled attempt.
+
+Use the same stored value for `pos.status(...)` when the callback never arrives.
 
 ## Order fields
 
@@ -55,12 +79,14 @@ status, both for approval and for failure. A callback with neither id is returne
 | `installment` | Number of installments, `0` for a single payment |
 | `success_url`, `fail_url` | Required, public HTTPS |
 | `lang` | Optional bank page language (defaults to the gateway config language, Turkish) |
-| `transaction_id` | Optional unique id for this attempt (letters, digits, `-`, up to 40 characters). Generated when omitted |
+| `transaction_id` | Unique id for this attempt (letters, digits, `-`, up to 40 characters). Generated when omitted, but set it yourself and store it with the order: completion and `status()` use it |
+| `payment_token` | Optional on completion: the stored `form.inputs.Ptkn` of this attempt, used like `transaction_id` |
 
 ## What is checked
 
-An approved query answer must belong to your order. These values are compared: order id, amount, currency, merchant
-id, transaction type and, when present, the transaction id of the callback. A mismatch throws `OrderMismatchError`;
+An approved query answer must belong to your order. The order id, amount (in the cents sent to the bank) and currency
+are always compared. The merchant id, transaction type, transaction id (the order's, otherwise the callback's) and
+payment token (the order's) are compared when the bank answer carries them. A mismatch throws `OrderMismatchError`;
 its `paymentMayHaveCompleted` is `true` because the bank approved something, so check the bank panel and void or
 refund it if it is not yours.
 
@@ -68,11 +94,18 @@ When the callback said the payment succeeded but the query does not confirm it, 
 `requires_manual_review: true`. Do not ship the goods; re-check later with `pos.status({ transaction_id })` and
 reconcile in the bank panel.
 
+A `PosHttpError` or a timeout while completing the payment is not a failed payment: the customer may have paid.
+Keep the order pending and re-check it with `pos.status({ transaction_id })` using the id you stored.
+
+The bank or the customer's browser may deliver the same callback more than once. A repeated legitimate callback for
+the same order is confirmed again and returns `approved` again, so make "mark the order paid" idempotent (for example
+update only orders that are still pending).
+
 ## Status query
 
-`pos.status({ transaction_id })` or `pos.status({ payment_token })` returns the bank record of a payment. Store the
-`transaction_id` from the response (or the one you set on the order) so you can check an uncertain payment later.
-An unknown transaction resolves to `declined`.
+`pos.status({ transaction_id })` or `pos.status({ payment_token })` returns the bank record of a payment. Use the
+`transaction_id` you set on the order (or the stored payment token) so you can check an uncertain payment later,
+also when the callback never arrives. An unknown transaction resolves to `declined`.
 
 ## Capture, cancel and refund
 
