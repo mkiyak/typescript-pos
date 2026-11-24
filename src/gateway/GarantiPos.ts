@@ -107,8 +107,8 @@ function asText(value: unknown): string {
  * before any other check, and every field read for these decisions must be a plain string. After the hash verifies,
  * `procreturncode` (two digits), `response` (`Approved`, `Declined` or `Error`) and `mdstatus` (one digit) must be
  * well formed (each may also be empty), `authcode` empty or six letters or digits (always six when `procreturncode`
- * is `00`), `cavv` empty or 28 base64 characters ending in `=`, and `eci` empty or two digits, otherwise
- * `HashMismatchError`. The signature has no separators, so these fixed formats are what keeps characters from
+ * is `00`), `cavv` empty or 28 base64 characters ending in `=`, and `eci` empty or two digits (and only together
+ * with a `cavv`), otherwise `HashMismatchError`. The signature has no separators, so these fixed formats are what keeps characters from
  * moving between adjacent signed fields; for the same reason a signed callback must carry `oid` (a missing one would
  * let its characters land in `mdstatus` and `cavv` while the unsigned `orderid` names any order). A signed callback
  * must also carry `clientid` equal to the account terminal id (an unsigned one only when present). A signed 3D
@@ -319,7 +319,9 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
       (authCode !== '' && !AUTH_CODE.test(authCode)) ||
       (procReturnCode === '00' && !AUTH_CODE.test(authCode)) ||
       (cavv !== '' && !CAVV.test(cavv)) ||
-      (eci !== '' && !ECI.test(eci))
+      (eci !== '' && !ECI.test(eci)) ||
+      // the bank sends an eci only together with a cavv; an eci alone means characters were moved into it
+      (eci !== '' && cavv === '')
     ) {
       this.logger.error('3D callback outcome fields are malformed', {
         order_id: asText(own(callback, 'oid')),
