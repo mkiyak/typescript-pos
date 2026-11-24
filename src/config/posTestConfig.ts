@@ -1,12 +1,13 @@
 import { freezeConfig, type ShippedPosConfig } from './freezeConfig.js'
 
 /** Bank keys of `posTestConfig`. */
-export type PosTestBank = 'asseco' | 'vakifbank' | 'vakifbank-cp' | 'ziraat-vpos'
+export type PosTestBank = 'asseco' | 'garanti' | 'vakifbank' | 'vakifbank-cp' | 'ziraat-vpos'
 
 /**
- * Test endpoints for the AssecoPos, PayFlexV4Pos and PayFlexCPV4Pos banks (the VakifBank test API
- * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it; for these
- * gateways the environment is selected by the endpoint URLs.
+ * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos and GarantiPos banks (the VakifBank test API
+ * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it; for the
+ * Asseco and PayFlex gateways the environment is selected by the endpoint URLs. The `garanti` entry sets `test_mode: true`
+ * because the Garanti test environment needs `Mode TEST` in every request.
  *
  * Deeply frozen: spread an entry into a new object to change it
  * (`{ ...posTestConfig.banks.vakifbank, require_3d_hash: true }`).
@@ -19,6 +20,16 @@ export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
       gateway_endpoints: {
         payment_api: 'https://entegrasyon.asseco-see.com.tr/fim/api',
         gateway_3d: 'https://entegrasyon.asseco-see.com.tr/fim/est3Dgate',
+      },
+    },
+    garanti: {
+      name: 'Garanti BBVA',
+      class: 'GarantiPos',
+      lang: 'tr',
+      test_mode: true,
+      gateway_endpoints: {
+        payment_api: 'https://sanalposprovtest.garantibbva.com.tr/VPServlet',
+        gateway_3d: 'https://sanalposprovtest.garantibbva.com.tr/servlet/gt3dengine',
       },
     },
     vakifbank: {

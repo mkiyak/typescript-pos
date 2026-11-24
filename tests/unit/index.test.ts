@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
   AbstractGatewayLike,
+  CardClass,
   CardExpiration,
   CryptInterface,
   EncodedData,
@@ -54,7 +55,10 @@ describe('public index', () => {
         'AssecoPos',
         'PayFlexV4Pos',
         'PayFlexCPV4Pos',
+        'GarantiPos',
         'AssecoPosAccount',
+        'GarantiPosAccount',
+        'CARD_CLASS',
         'PayFlexPosAccount',
         'posProductionConfig',
         'posTestConfig',
@@ -83,7 +87,14 @@ describe('public index', () => {
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.PayFlexCPV4Pos)
   })
 
+  it('PosFactory creates the Garanti gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createGarantiPosAccount('garanti', 'm', 'u', 'p', 't')
+    expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.GarantiPos)
+    expect(account).toBeInstanceOf(mod.GarantiPosAccount)
+  })
+
   it('exports the types the public API refers to', () => {
+    expectTypeOf<CardClass>().toEqualTypeOf<'credit' | 'debit' | 'prepaid'>()
     const expiration: CardExpiration = { year: 2030, month: 12 }
     expect(new mod.CreditCard('4111111111111111', expiration, '123').getExpireMonth()).toBe('12')
     expectTypeOf<GatewayDeps['crypt']>().toEqualTypeOf<CryptInterface>()

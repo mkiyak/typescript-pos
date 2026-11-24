@@ -1,4 +1,5 @@
 import { AssecoPosHttpClient } from '../client/AssecoPosHttpClient.js'
+import { GarantiPosHttpClient } from '../client/GarantiPosHttpClient.js'
 import { HttpClientStrategy } from '../client/HttpClientStrategy.js'
 import type { HttpTransport } from '../client/HttpTransport.js'
 import { PayFlexCPV4PosHttpClient } from '../client/PayFlexCPV4PosHttpClient.js'
@@ -59,6 +60,10 @@ export const PosHttpClientStrategyFactory = {
       case 'PayFlexCPV4Pos':
         return new HttpClientStrategy([
           new PayFlexCPV4PosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+        ])
+      case 'GarantiPos':
+        return new HttpClientStrategy([
+          new GarantiPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
         ])
       default:
         throw new GatewayClassNotConfiguredError(`No HTTP clients for gateway class [${gatewayClass}].`)

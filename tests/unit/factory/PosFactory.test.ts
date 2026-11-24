@@ -6,6 +6,7 @@ import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { type PosConfig, PosFactory } from '../../../src/factory/PosFactory.js'
 import type { AbstractGateway, GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
+import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../src/PosInterface.js'
@@ -14,6 +15,9 @@ import type { PosHooks, PosOrder } from '../../../src/types.js'
 const assecoAccount = (bank = 'asseco') => AccountFactory.createAssecoPosAccount(bank, '700655000200', 'u', 'p', 'k')
 const payFlexAccount = (bank = 'vakifbank') =>
   AccountFactory.createPayFlexPosAccount(bank, '000000000011445', 'p', 'VP1')
+
+const garantiAccount = (bank = 'garanti') =>
+  AccountFactory.createGarantiPosAccount(bank, '7000679', 'PROVAUT', '123qweASD/', '30691297', '12345678')
 
 const config: PosConfig = {
   banks: {
@@ -68,6 +72,35 @@ describe('PosFactory.createPosGateway', () => {
     expect(gateway.getAccount()).toBe(account)
   })
 
+  it('creates a GarantiPos gateway from the shipped test config', () => {
+    const account = garantiAccount()
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(GarantiPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(gateway.getCardTypeMapping()).toStrictEqual({}) // GarantiPos has no card type mapping
+    expect(gateway.isTestMode()).toBe(true)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-Garanti account for GarantiPos', () => {
+    expect(() => PosFactory.createPosGateway(assecoAccount('garanti'), posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(assecoAccount('garanti'), posTestConfig)).toThrow(/GarantiPosAccount/)
+  })
+
+  // addition: the testMode option overrides the config and reaches the request body
+  it('lets the testMode option switch GarantiPos to production mode', async () => {
+    const bodies: string[] = []
+    const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
+      bodies.push(String(init?.body))
+      return new Response('<GVPSResponse/>', { status: 200 })
+    }) as unknown as typeof fetch
+    const gateway = PosFactory.createPosGateway(garantiAccount(), posTestConfig, { testMode: false, fetch: fetchImpl })
+    expect(gateway.isTestMode()).toBe(false)
+    await gateway.status({ id: 'o1', currency: CURRENCY.TRY, amount: 1, ip: '127.0.0.1' }).catch(() => undefined)
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).toContain('<Mode>PROD</Mode>')
+  })
+
   it('rejects a non-PayFlex account for PayFlexCPV4Pos', () => {
     expect(() => PosFactory.createPosGateway(assecoAccount('vakifbank-cp'), posTestConfig)).toThrow(PosError)
     expect(() => PosFactory.createPosGateway(assecoAccount('vakifbank-cp'), posTestConfig)).toThrow(/PayFlexPosAccount/)
@@ -94,7 +127,7 @@ describe('PosFactory.createPosGateway', () => {
   })
 
   it('throws GatewayClassNotConfiguredError for an unknown gateway class', () => {
-    const bad: PosConfig = { banks: { asseco: { ...assecoCfg, class: 'GarantiPos' } } }
+    const bad: PosConfig = { banks: { asseco: { ...assecoCfg, class: 'UnknownPos' } } }
     expect(() => PosFactory.createPosGateway(assecoAccount(), bad)).toThrow(GatewayClassNotConfiguredError)
   })
 
@@ -208,6 +241,7 @@ describe('PosFactory.createPosGateway', () => {
       AssecoPos: (bank: string) => assecoAccount(bank),
       PayFlexV4Pos: (bank: string) => payFlexAccount(bank),
       PayFlexCPV4Pos: (bank: string) => payFlexAccount(bank),
+      GarantiPos: (bank: string) => AccountFactory.createGarantiPosAccount(bank, 'm', 'u', 'p', 't', 'k'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

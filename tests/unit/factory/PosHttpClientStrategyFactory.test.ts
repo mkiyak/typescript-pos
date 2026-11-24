@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AssecoPosHttpClient } from '../../../src/client/AssecoPosHttpClient.js'
+import { GarantiPosHttpClient } from '../../../src/client/GarantiPosHttpClient.js'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { PayFlexCPV4PosHttpClient } from '../../../src/client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3DFormHttpClient.js'
@@ -36,6 +37,19 @@ describe('PosHttpClientStrategyFactory', () => {
 
   it('wires PayFlexCPV4Pos with its payment client', () => {
     expect(classesOf('PayFlexCPV4Pos', posTestConfig.banks['vakifbank-cp'])).toEqual([PayFlexCPV4PosHttpClient])
+  })
+
+  it('wires GarantiPos with its payment client', () => {
+    expect(classesOf('GarantiPos', posTestConfig.banks.garanti)).toEqual([GarantiPosHttpClient])
+    expect(GarantiPosHttpClient.supports('GarantiPos', 'payment_api')).toBe(true)
+    expect(GarantiPosHttpClient.supports('GarantiPos', 'query_api')).toBe(false)
+  })
+
+  // addition: a missing endpoint is a PosError, never a request to "undefined"
+  it('requires the payment_api endpoint of GarantiPos', () => {
+    expect(() => classesOf('GarantiPos', { ...posTestConfig.banks.garanti, gateway_endpoints: {} as never })).toThrow(
+      /Endpoint \[payment_api\] is required for/,
+    )
   })
 
   it('requires the query_api endpoint of PayFlexV4Pos', () => {

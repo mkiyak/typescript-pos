@@ -5,29 +5,33 @@ import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { PosFactory } from '../../../src/factory/PosFactory.js'
 import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
+import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
+
+const accountFor = (gatewayClass: string, key: string) => {
+  if (gatewayClass === 'AssecoPos') return AccountFactory.createAssecoPosAccount(key, 'c', 'u', 'p', 'k')
+  if (gatewayClass === 'GarantiPos') return AccountFactory.createGarantiPosAccount(key, 'm', 'u', 'p', 't', 'k')
+  return AccountFactory.createPayFlexPosAccount(key, 'm', 'p', 't')
+}
 
 const configs = { production: posProductionConfig, test: posTestConfig }
 
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos and PayFlexCPV4Pos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos and GarantiPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
-      expect(['AssecoPos', 'PayFlexV4Pos', 'PayFlexCPV4Pos']).toContain(bank.class)
+      expect(['AssecoPos', 'PayFlexV4Pos', 'PayFlexCPV4Pos', 'GarantiPos']).toContain(bank.class)
     }
   })
 
   it.each(entries)('%s builds a gateway with a matching account type', (key, bank) => {
-    const account =
-      bank.class === 'AssecoPos'
-        ? AccountFactory.createAssecoPosAccount(key, 'c', 'u', 'p', 'k')
-        : AccountFactory.createPayFlexPosAccount(key, 'm', 'p', 't')
+    const account = accountFor(bank.class, key)
     const gateway = PosFactory.createPosGateway(account, cfg)
-    const expected = { AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos }[
-      bank.class as 'AssecoPos' | 'PayFlexV4Pos' | 'PayFlexCPV4Pos'
+    const expected = { AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos }[
+      bank.class as 'AssecoPos' | 'PayFlexV4Pos' | 'PayFlexCPV4Pos' | 'GarantiPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -73,10 +77,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
     const [key, bank] = entries[0] as [string, GatewayConfig]
     const copy = { ...bank, require_3d_hash: true }
     expect(copy.require_3d_hash).toBe(true)
-    const account =
-      bank.class === 'AssecoPos'
-        ? AccountFactory.createAssecoPosAccount(key, 'c', 'u', 'p', 'k')
-        : AccountFactory.createPayFlexPosAccount(key, 'm', 'p', 't')
+    const account = accountFor(bank.class, key)
     expect(PosFactory.createPosGateway(account, { banks: { [key]: copy } })).toBeDefined()
   })
 
@@ -143,5 +144,31 @@ describe('VakifBank endpoints', () => {
       expect(posProductionConfig.banks[key].class).toBe('AssecoPos')
     }
     expect(posProductionConfig.banks['ziraat-vpos'].class).toBe('PayFlexV4Pos')
+  })
+})
+
+describe('Garanti endpoints', () => {
+  it('production uses the live VPServlet and 3D engine', () => {
+    expect(posProductionConfig.banks.garanti).toStrictEqual({
+      name: 'Garanti BBVA',
+      class: 'GarantiPos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalposprov.garanti.com.tr/VPServlet',
+        gateway_3d: 'https://sanalposprov.garanti.com.tr/servlet/gt3dengine',
+      },
+    })
+  })
+
+  it('test uses the test host and turns on test_mode', () => {
+    expect(posTestConfig.banks.garanti).toStrictEqual({
+      name: 'Garanti BBVA',
+      class: 'GarantiPos',
+      lang: 'tr',
+      test_mode: true,
+      gateway_endpoints: {
+        payment_api: 'https://sanalposprovtest.garantibbva.com.tr/VPServlet',
+        gateway_3d: 'https://sanalposprovtest.garantibbva.com.tr/servlet/gt3dengine',
+      },
+    })
   })
 })

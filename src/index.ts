@@ -48,15 +48,19 @@ export {
   type SupportedTransactions,
 } from './gateway/AbstractGateway.js'
 export { AssecoPos } from './gateway/AssecoPos.js'
+export { GarantiPos } from './gateway/GarantiPos.js'
 export { PayFlexCPV4Pos } from './gateway/PayFlexCPV4Pos.js'
 export { PayFlexV4Pos } from './gateway/PayFlexV4Pos.js'
 export { noopLogger, type PosLogger } from './logger.js'
 export { AbstractPosAccount } from './model/account/AbstractPosAccount.js'
 export { AssecoPosAccount } from './model/account/AssecoPosAccount.js'
+export { GarantiPosAccount } from './model/account/GarantiPosAccount.js'
 export { PayFlexPosAccount } from './model/account/PayFlexPosAccount.js'
 export { type CardExpiration, CreditCard } from './model/card/CreditCard.js'
 export {
+  CARD_CLASS,
   CARD_TYPE,
+  type CardClass,
   type CardType,
   CURRENCY,
   type Currency,

@@ -4,6 +4,7 @@ import { freezeConfig, type ShippedPosConfig } from './freezeConfig.js'
 export type PosProductionBank =
   | 'akbank'
   | 'finansbank'
+  | 'garanti'
   | 'halkbank'
   | 'teb'
   | 'isbank'
@@ -14,7 +15,7 @@ export type PosProductionBank =
   | 'ziraat-asseco'
 
 /**
- * Production endpoints for the AssecoPos, PayFlexV4Pos and PayFlexCPV4Pos banks (the VakifBank
+ * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos and GarantiPos banks (the VakifBank
  * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default.
  *
  * Deeply frozen: spread an entry into a new object to change it
@@ -37,6 +38,14 @@ export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeCo
       gateway_endpoints: {
         payment_api: 'https://www.fbwebpos.com/fim/api',
         gateway_3d: 'https://www.fbwebpos.com/fim/est3dgate',
+      },
+    },
+    garanti: {
+      name: 'Garanti BBVA',
+      class: 'GarantiPos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalposprov.garanti.com.tr/VPServlet',
+        gateway_3d: 'https://sanalposprov.garanti.com.tr/servlet/gt3dengine',
       },
     },
     halkbank: {
