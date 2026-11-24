@@ -72,12 +72,13 @@ const response = await pos.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, 
 - **Unsigned callbacks.** A callback without `HASH` can only ever become a decline: one that reports success is
   rejected with `HashMismatchError`, and `require_3d_hash: true` in the bank's config rejects unsigned declines too.
   An unsigned decline carries none of the callback's values (the order id is your order's; amount, currency, card
-  mask and authorization data are `null`); only a bounded set of decline reasons and `all` are kept, and those are
-  informational and untrusted. It never sets `requires_manual_review`.
-- **The callback is bound to the order.** The signed order id, amount and currency must equal the order's, and the
-  shop code, when present, your account's; a mismatch throws `OrderMismatchError` (`field` names the value). This
+  mask and authorization data are `null`); only a bounded set of decline reasons, `all` and (3D Secure) `3d_all` are
+  kept, and those are informational and untrusted. It never sets `requires_manual_review`.
+- **The callback is bound to the order.** On every callback that reports 3D success or an approval, the signed order
+  id, amount and currency must equal the order's, and the shop code, when present, your account's; a mismatch throws `OrderMismatchError` (`field` names the value). This
   runs before the payment model is checked, and before any provision request. Load the order from the customer's
-  session, never from a field of the callback.
+  session, never from a field of the callback. A signed decline is returned as the bank sent it, without this check:
+  never use its `order_id` to look up an order.
 - **Approved 3D Pay and 3D Host results are confirmed with the bank.** Every approved result is confirmed with one
   status request before it is returned: the bank's record must be approved for this order and amount, with an
   authorization code, and neither voided nor refunded. Expect one extra request per approved payment. The
@@ -87,7 +88,9 @@ const response = await pos.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, 
   and also means the payment may have completed: keep the order pending and re-check it later with `pos.status(order)`.
 - **3D Secure.** The provision request is sent only for a 3D-successful callback that belongs to the order, and its
   answer must be approved for this order and amount, otherwise `OrderMismatchError` with the result attached. A
-  3D Pay result posted to a 3D Secure order is `OrderMismatchError` on `payment_model` and nothing is provisioned.
+  3D Pay result posted to a 3D Secure order is `OrderMismatchError` on `payment_model` and nothing is provisioned; it
+  costs one status request, and `paymentMayHaveCompleted` / `error.response` are set only when the bank's record
+  shows the payment.
 - **Approved but 3D failed.** When the bank approved the payment although the 3D authentication did not succeed, the
   response is `declined`; it carries `requires_manual_review: true` only when the bank's own record shows the
   payment. Do not ship the goods; reconcile in the bank panel.

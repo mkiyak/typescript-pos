@@ -36,7 +36,8 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
   order id ends in a signed callback.
 - **Strict 3D.** PayFlex accepts only a fully authenticated result (Status `Y`, ECI `02`/`05`, CAVV, `MdStatus` 1).
 - **Manual-review flag.** When a bank authorized money although 3D failed, the response is `declined` with
-  `requires_manual_review: true` (Asseco, Garanti and Akbank 3D Pay/Host). When a signed Asseco or Garanti callback reports a completed payment but does not belong to
+  `requires_manual_review: true` (Asseco, Garanti, Akbank 3D Pay/Host, PayFor and InterPos; for an unsigned PayFor callback and for InterPos only
+  when the bank's own record shows the payment). When a signed Asseco or Garanti callback reports a completed payment but does not belong to
   the order, `OrderMismatchError.paymentMayHaveCompleted` is `true`.
 - **Masking.** Everything handed to your logger, error snippets and `OrderMismatchError.response.all` goes through
   `maskSensitiveData()` (PAN, CVV, expiry, passwords, store keys).
