@@ -7,6 +7,8 @@ import { PayFlexCPV4PosHttpClient } from '../../../src/client/PayFlexCPV4PosHttp
 import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../../../src/client/PayFlexV4PosSearchApiHttpClient.js'
+import { PayForPos3DFormHttpClient } from '../../../src/client/PayForPos3DFormHttpClient.js'
+import { PayForPosHttpClient } from '../../../src/client/PayForPosHttpClient.js'
 import { PosNetPosHttpClient } from '../../../src/client/PosNetPosHttpClient.js'
 import { PosNetV1PosHttpClient } from '../../../src/client/PosNetV1PosHttpClient.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
@@ -26,6 +28,16 @@ const classesOf = (gatewayClass: string, config: GatewayConfig) =>
   PosHttpClientStrategyFactory.createForGateway(gatewayClass, config, transport, noopLogger)
     .getAllClients()
     .map((c) => c.constructor)
+
+const payForConfig: GatewayConfig = {
+  name: 'QNBFinansbank-PayFor',
+  class: 'PayForPos',
+  gateway_endpoints: {
+    payment_api: 'https://vpostest.qnbfinansbank.com/Gateway/XMLGate.aspx',
+    gateway_3d: 'https://vpostest.qnbfinansbank.com/Gateway/Default.aspx',
+    gateway_3d_host: 'https://vpostest.qnbfinansbank.com/Gateway/3DHost.aspx',
+  },
+}
 
 const akbankConfig: GatewayConfig = {
   name: 'AKBANK T.A.S. Akbank Pos',
@@ -74,6 +86,27 @@ describe('PosHttpClientStrategyFactory', () => {
     expect(classesOf('GarantiPos', posTestConfig.banks.garanti)).toEqual([GarantiPosHttpClient])
     expect(GarantiPosHttpClient.supports('GarantiPos', 'payment_api')).toBe(true)
     expect(GarantiPosHttpClient.supports('GarantiPos', 'query_api')).toBe(false)
+  })
+
+  it('wires PayForPos with its payment and 3D form clients', () => {
+    expect(classesOf('PayForPos', payForConfig)).toEqual([PayForPosHttpClient, PayForPos3DFormHttpClient])
+    expect(PayForPosHttpClient.supports('PayForPos', 'payment_api')).toBe(true)
+  })
+
+  // addition: each PayForPos endpoint is required, never a request to "undefined"
+  it.each(['payment_api', 'gateway_3d'])('requires the %s endpoint of PayForPos', (key) => {
+    const endpoints: Record<string, string> = { ...payForConfig.gateway_endpoints }
+    delete endpoints[key]
+    const config = { ...payForConfig, gateway_endpoints: endpoints as never }
+    expect(() => classesOf('PayForPos', config)).toThrow(PosError)
+    expect(() => classesOf('PayForPos', config)).toThrow(new RegExp(`Endpoint \\[${key}\\] is required for`))
+  })
+
+  // addition: the strategy routes the 3D form build and everything else to the matching client
+  it('routes PayForPos transactions to the matching client', () => {
+    const strategy = PosHttpClientStrategyFactory.createForGateway('PayForPos', payForConfig, transport, noopLogger)
+    expect(strategy.getClient('3d_form_build', '3d')).toBeInstanceOf(PayForPos3DFormHttpClient)
+    expect(strategy.getClient('status', 'regular')).toBeInstanceOf(PayForPosHttpClient)
   })
 
   it('wires AkbankPos with its signing payment client', () => {

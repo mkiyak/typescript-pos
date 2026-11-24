@@ -7,6 +7,8 @@ import { PayFlexCPV4PosHttpClient } from '../client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../client/PayFlexV4PosSearchApiHttpClient.js'
+import { PayForPos3DFormHttpClient } from '../client/PayForPos3DFormHttpClient.js'
+import { PayForPosHttpClient } from '../client/PayForPosHttpClient.js'
 import { PosNetPosHttpClient } from '../client/PosNetPosHttpClient.js'
 import { PosNetV1PosHttpClient } from '../client/PosNetV1PosHttpClient.js'
 import { AkbankPosCrypt } from '../crypt/AkbankPosCrypt.js'
@@ -79,6 +81,11 @@ export const PosHttpClientStrategyFactory = {
       case 'GarantiPos':
         return new HttpClientStrategy([
           new GarantiPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+        ])
+      case 'PayForPos':
+        return new HttpClientStrategy([
+          new PayForPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+          new PayForPos3DFormHttpClient(requiredEndpoint(config, 'gateway_3d'), transport, logger),
         ])
       case 'PosNetPos':
         return new HttpClientStrategy([
