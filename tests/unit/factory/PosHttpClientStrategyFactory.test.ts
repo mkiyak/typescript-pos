@@ -4,6 +4,8 @@ import { AssecoPosHttpClient } from '../../../src/client/AssecoPosHttpClient.js'
 import { GarantiPosHttpClient } from '../../../src/client/GarantiPosHttpClient.js'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { InterPosHttpClient } from '../../../src/client/InterPosHttpClient.js'
+import { KuveytPosHttpClient } from '../../../src/client/KuveytPosHttpClient.js'
+import { KuveytPosSoapApiHttpClient } from '../../../src/client/KuveytPosSoapApiHttpClient.js'
 import { PayFlexCPV4PosHttpClient } from '../../../src/client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClient.js'
@@ -241,6 +243,40 @@ describe('PosHttpClientStrategyFactory', () => {
     expect(clients[0]).toBeInstanceOf(PosNetV1PosHttpClient)
     expect((clients[0] as PosNetV1PosHttpClient).getApiUrl('pay', '3d')).toBe(`${paymentApi}/Sale`)
     expect(PosNetV1PosHttpClient.supports('PosNetV1Pos', 'payment_api')).toBe(true)
+  })
+
+  // addition: K5/K6, the client wiring of KuveytPos: payment XML client first, SOAP query client second
+  describe('KuveytPos', () => {
+    const kuveytConfig: GatewayConfig = {
+      name: 'KuveytTurk',
+      class: 'KuveytPos',
+      gateway_endpoints: {
+        payment_api: 'https://boatest.kuveytturk.com.tr/boa.virtualpos.services/Home',
+        gateway_3d: 'https://boatest.kuveytturk.com.tr/boa.virtualpos.services/Home/ThreeDModelPayGate',
+        query_api:
+          'https://boatest.kuveytturk.com.tr/BOA.Integration.WCFService/BOA.Integration.VirtualPos/VirtualPosService.svc/Basic',
+      },
+    }
+
+    it('wires the payment and the SOAP query clients in that order', () => {
+      expect(classesOf('KuveytPos', kuveytConfig)).toEqual([KuveytPosHttpClient, KuveytPosSoapApiHttpClient])
+    })
+
+    it.each(['payment_api', 'query_api'])('requires the %s endpoint', (key) => {
+      const endpoints: Record<string, string> = { ...kuveytConfig.gateway_endpoints }
+      delete endpoints[key]
+      const config = { ...kuveytConfig, gateway_endpoints: endpoints as never }
+      expect(() => classesOf('KuveytPos', config)).toThrow(PosError)
+      expect(() => classesOf('KuveytPos', config)).toThrow(new RegExp(`Endpoint \\[${key}\\] is required for`))
+    })
+
+    it('routes each transaction to the matching client', () => {
+      const strategy = PosHttpClientStrategyFactory.createForGateway('KuveytPos', kuveytConfig, transport, noopLogger)
+      expect(strategy.getClient('status', 'regular')).toBeInstanceOf(KuveytPosSoapApiHttpClient)
+      expect(strategy.getClient('cancel', 'regular')).toBeInstanceOf(KuveytPosSoapApiHttpClient)
+      expect(strategy.getClient('pay', '3d')).toBeInstanceOf(KuveytPosHttpClient)
+      expect(strategy.getClient('3d_form_build', '3d')).toBeInstanceOf(KuveytPosHttpClient)
+    })
   })
 
   it('rejects an unknown gateway class', () => {

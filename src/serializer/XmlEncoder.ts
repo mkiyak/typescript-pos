@@ -1,5 +1,5 @@
 export interface XmlEncoderOptions {
-  encoding?: 'UTF-8' | 'ISO-8859-9'
+  encoding?: 'UTF-8' | 'ISO-8859-1' | 'ISO-8859-9'
   rootName?: string
   /** Drop the `<?xml ?>` declaration. */
   omitDeclaration?: boolean

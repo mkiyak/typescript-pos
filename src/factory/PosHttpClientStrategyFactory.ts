@@ -4,6 +4,8 @@ import { GarantiPosHttpClient } from '../client/GarantiPosHttpClient.js'
 import { HttpClientStrategy } from '../client/HttpClientStrategy.js'
 import type { HttpTransport } from '../client/HttpTransport.js'
 import { InterPosHttpClient } from '../client/InterPosHttpClient.js'
+import { KuveytPosHttpClient } from '../client/KuveytPosHttpClient.js'
+import { KuveytPosSoapApiHttpClient } from '../client/KuveytPosSoapApiHttpClient.js'
 import { PayFlexCPV4PosHttpClient } from '../client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../client/PayFlexV4PosHttpClient.js'
@@ -14,6 +16,7 @@ import { PosNetPosHttpClient } from '../client/PosNetPosHttpClient.js'
 import { PosNetV1PosHttpClient } from '../client/PosNetV1PosHttpClient.js'
 import { AkbankPosCrypt } from '../crypt/AkbankPosCrypt.js'
 import type { CryptInterface } from '../crypt/CryptInterface.js'
+import { KuveytPosRequestValueMapper } from '../data-mapper/request/value-mapper/KuveytPosRequestValueMapper.js'
 import { PosNetV1PosRequestValueMapper } from '../data-mapper/request/value-mapper/PosNetV1PosRequestValueMapper.js'
 import { GatewayClassNotConfiguredError, PosError } from '../errors.js'
 import type { GatewayConfig } from '../gateway/AbstractGateway.js'
@@ -105,6 +108,17 @@ export const PosHttpClientStrategyFactory = {
       case 'InterPos':
         return new HttpClientStrategy([
           new InterPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+        ])
+      case 'KuveytPos':
+        // Payments and the 3D form go to the XML gateway; status, cancel and refund to the SOAP service.
+        return new HttpClientStrategy([
+          new KuveytPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+          new KuveytPosSoapApiHttpClient(
+            requiredEndpoint(config, 'query_api'),
+            transport,
+            logger,
+            new KuveytPosRequestValueMapper(),
+          ),
         ])
       case 'AkbankPos': {
         const account = signing?.account
