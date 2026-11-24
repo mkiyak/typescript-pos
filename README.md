@@ -75,7 +75,7 @@ Complete, compile-checked versions with error handling live in [`examples/`](htt
 - [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Other operations: `pos.cancel(order)`, `pos.refund(order)` (partial when `order.order_amount` is set and
-`order.amount` is lower), `pos.status(order)`, `pos.orderHistory(order)` (Asseco only), `pos.payment(MODEL.NON_SECURE, ...)`
+`order.amount` is lower), `pos.status(order)`, `pos.orderHistory(order)` (Asseco and Garanti), `pos.payment(MODEL.NON_SECURE, ...)`
 for payments without 3D Secure, and `TX_TYPE.PAY_PRE_AUTH` / `TX_TYPE.PAY_POST_AUTH` for pre- and post-authorization.
 
 ### Test vs production configuration
@@ -157,10 +157,10 @@ with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.c
 
 1. Stateless, async API: each network method returns its own response; no `isSuccess()` / `getResponse()` state.
 2. Order and normalized response keys are snake_case and the same for every gateway.
-3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`.
+3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `GarantiPos` always verifies a signed callback and accepts an unsigned one only as a decline (`require_3d_hash: true` rejects it too); `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`.
 4. Sensitive data (PAN, CVV, expiry, passwords, store keys) is masked before it reaches the logger.
 5. Constant-time hash comparison; the Asseco hash uses the exact natural, case-insensitive key ordering the bank expects.
-6. Extra Asseco safeguards: returned order id, amount and storetype (payment model) are compared with the order
+6. Extra Asseco and Garanti safeguards: the returned order id, amount and payment model (Garanti: also terminal and currency) are compared with the order
    (`OrderMismatchError`, with `paymentMayHaveCompleted` when the bank approved); an authorized-but-3D-failed
    response is declined and flagged `requires_manual_review`.
 7. Extra PayFlex safeguards: strict 3D rule (Status `Y`, ECI `02`/`05`, CAVV, `MdStatus` 1 when present), callback

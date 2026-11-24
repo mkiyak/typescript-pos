@@ -41,7 +41,7 @@ const pos = PosFactory.createPosGateway(account, posTestConfig) // or posProduct
   environment needs.
 - 3D Secure and 3D Pay need the store key to sign the form and to verify the callback. Cancel and refund need the
   refund user and password; without them the call fails with `MissingAccountInfoError` before anything is sent.
-- `success_url` and `fail_url` must be public HTTPS URLs.
+- `success_url` and `fail_url` are required for the 3D form. Banks and their firewalls usually need public HTTPS URLs without `localhost`.
 
 ## Flow (3D Pay and 3D Secure)
 
@@ -70,16 +70,17 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
   `require_3d_hash: true` in the bank config every unsigned callback is rejected. In 3D Secure only callbacks that are
   not 3D-successful (no money moves) may skip the signature check; they map as declined without any request.
 - **The callback is bound to the order.** `clientid` must equal the terminal id and `oid` must equal `order.id`
-  (a signed callback must carry both). For 3D Secure the echoed amount, currency, transaction type, terminal and
-  merchant are compared with your order before the provision request; for an approved 3D Pay payment they are
-  compared too. A mismatch throws `OrderMismatchError` (`field` names the value, including `terminal_id` and
-  `payment_model`). Its `paymentMayHaveCompleted` is `true` when the bank reported a completed payment: check the bank
-  panel and void or refund it. `error.response.requires_manual_review` is set in that case as well.
+  (a signed callback must carry both). The echoed amount, currency and transaction type are compared with your order;
+  `terminalid`, `terminalmerchantid` and the security level are compared only when the callback carries them. A
+  mismatch throws `OrderMismatchError` (`field` names the value, including `terminal_id` and `payment_model`).
+  - 3D Secure: every check runs before the provision request, so no payment exists and `paymentMayHaveCompleted` is
+    `false`.
+  - 3D Pay: the checks run on the bank's answer. When it reported a completed payment, `paymentMayHaveCompleted` is
+    `true` and `error.response.requires_manual_review` is set: check the bank panel and void or refund it.
 - **Approved but 3D failed.** When the bank authorized money although the 3D result is not successful, the response is
   `declined` with `requires_manual_review: true`. Do not ship the goods; reconcile in the bank panel.
-- **`md_status`.** `1` is full 3D authentication; `2` to `4` are half-secure results (card or issuer not enrolled,
-  attempt) that the bank still approves, usually with the liability on you. Check `response.md_status === '1'` after
-  `payment` if you accept only full authentication.
+- **`md_status`.** `1` is full 3D authentication and `2` to `4` are half 3D Secure results; the library treats both as
+  3D success. Check `response.md_status === '1'` after `payment` if you accept only full authentication.
 
 A `PosHttpError` or timeout while completing a payment is not a failed payment: keep the order pending and re-check it
 with `pos.status(order)`.
@@ -110,4 +111,5 @@ password of the account. A refund is partial when `amount` is lower than `order_
 
 - Amounts are sent in kuruş (10,50 TL is `1050`), rounded like PHP `number_format`.
 - Bank times without a UTC offset are Türkiye time (UTC+03:00).
-- A missing required order field (for example `ip` or `id`) is rejected with `PosError` before any request.
+- Payments need `id`, `amount` and `ip` on the order, and the 3D form needs `ip` too; a missing one is rejected with
+  `PosError` before any request. `status`, `cancel` and `refund` default `ip` to an empty string.

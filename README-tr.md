@@ -76,7 +76,7 @@ Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://g
 - [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Diğer işlemler: `pos.cancel(order)`, `pos.refund(order)` (`order.order_amount` verilmiş ve `order.amount` ondan
-küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (yalnızca Asseco), 3D Secure'suz ödeme için
+küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (Asseco ve Garanti), 3D Secure'suz ödeme için
 `pos.payment(MODEL.NON_SECURE, ...)` ve ön/son provizyon için `TX_TYPE.PAY_PRE_AUTH` / `TX_TYPE.PAY_POST_AUTH`.
 
 ### Test ve canlı yapılandırma
@@ -160,10 +160,10 @@ olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList` sunar. Asseco, PayFl
 
 1. Durumsuz, async API: her ağ metodu kendi cevabını döner; `isSuccess()` / `getResponse()` durumu yoktur.
 2. Sipariş ve normalize cevap anahtarları snake_case'tir ve her gateway'de aynıdır.
-3. 3D hash doğrulamasını kapatan bir seçenek yoktur. `AssecoPos` her zaman geçerli hash ister; `PayFlexV4Pos` callback `Hash` taşıyorsa her zaman doğrular, `Hash` eksikse yalnızca `require_3d_hash: true` ile reddeder.
+3. 3D hash doğrulamasını kapatan bir seçenek yoktur. `AssecoPos` her zaman geçerli hash ister; `GarantiPos` imzalı callback'i her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder (`require_3d_hash: true` onu da reddeder); `PayFlexV4Pos` callback `Hash` taşıyorsa her zaman doğrular, `Hash` eksikse yalnızca `require_3d_hash: true` ile reddeder.
 4. Hassas veri (PAN, CVV, son kullanma, şifreler, store key) logger'a ulaşmadan maskelenir.
 5. Sabit zamanlı hash karşılaştırması; Asseco hash'i bankanın beklediği doğal, büyük/küçük harf duyarsız anahtar sıralamasını birebir kullanır.
-6. Ek Asseco korumaları: dönen sipariş numarası, tutar ve storetype (ödeme modeli) siparişle karşılaştırılır
+6. Ek Asseco ve Garanti korumaları: dönen sipariş numarası, tutar ve ödeme modeli (Garanti'de ayrıca terminal ve para birimi) siparişle karşılaştırılır
    (`OrderMismatchError`; banka onay verdiyse `paymentMayHaveCompleted` ile); provizyon verilmiş ama 3D başarısız
    cevap `declined` olur ve `requires_manual_review` ile işaretlenir.
 7. Ek PayFlex korumaları: katı 3D kuralı (Status `Y`, ECI `02`/`05`, CAVV, varsa `MdStatus` 1), callback tutar, para
