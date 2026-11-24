@@ -12,7 +12,8 @@ function requireNonBlank(value: string, name: string): string {
  * PayFor account (QNB Finansbank, Ziraat Katilim): merchant number, authorization user code and password, the
  * institution code (`mbrId`) and, when 3D payments are used, the 3D secure merchant password (the secret key).
  * Blank values are rejected at construction so an empty value is never signed or sent; a blank merchant password
- * counts as missing. The institution code is one to four digits.
+ * counts as missing. The institution code is one to four digits without a leading zero, so one institution has one
+ * spelling (`05` is not QNB Finansbank's `5`).
  */
 export class PayForPosAccount extends AbstractPosAccount {
   static readonly MBR_ID_FINANSBANK = '5'
@@ -35,8 +36,10 @@ export class PayForPosAccount extends AbstractPosAccount {
       requireNonBlank(userPassword, 'userPassword'),
       merchantPass === null ? null : requireNonBlank(merchantPass, 'merchantPass'),
     )
-    if (typeof mbrId !== 'string' || !/^[0-9]{1,4}$/.test(mbrId)) {
-      throw new MissingAccountInfoError('PayForPosAccount.mbrId must be an institution code of one to four digits.')
+    if (typeof mbrId !== 'string' || !/^[1-9][0-9]{0,3}$/.test(mbrId)) {
+      throw new MissingAccountInfoError(
+        'PayForPosAccount.mbrId must be an institution code of one to four digits without a leading zero.',
+      )
     }
     this.#mbrId = mbrId
   }

@@ -1689,6 +1689,71 @@ describe('PayForPos (end to end) Ziraat Katılım', () => {
       },
     )
 
+    // addition: values of an unsigned callback never reach a result; only the order and the bank record do
+    const forged: Data = {
+      AuthCode: '<img src=x onerror=alert(1)>',
+      HostRefNum: 'FORGED000001',
+      CardMask: '999999******9999',
+      BatchNo: '9999',
+      Eci: 'xx',
+      TransId: 'FORGED-TRANS',
+      TransactionDate: '01.01.2030 00:00:00',
+      ErrMsg: '<b>forged</b>',
+    }
+    const expectNoCallbackValues = (res: Data): void => {
+      expect(res.order_id).toBe(payOrder.id)
+      for (const key of ['batch_num', 'eci', 'transaction_id', 'md_status', 'tx_status', 'error_message']) {
+        expect(res[key], key).toBeNull()
+      }
+      expect(JSON.stringify({ ...res, all: null })).not.toMatch(/FORGED|onerror|9999|forged|2030/)
+    }
+
+    it('an approved unsigned result takes its references from the bank record or leaves them null', async () => {
+      const { sent, promise } = run(unsigned(forged), {
+        status: confirmed({ AuthCode: '', InsertDatetime: '', HostRefNum: '', CardMask: '' }),
+      })
+      const res = (await promise) as Data
+      expect(res.status).toBe('approved')
+      expectNoCallbackValues(res)
+      expect(res.auth_code).toBeNull()
+      expect(res.transaction_time).toBeNull()
+      expect(res.ref_ret_num).toBeNull()
+      expect(res.masked_number).toBeNull()
+      expect(sent).toHaveLength(1)
+    })
+
+    it('a mismatching unsigned callback attaches a response bound to the order, not to the callback', async () => {
+      const { sent, promise } = run(unsigned({ ...forged, OrderId: 'VICTIM9999' }))
+      const err = await mismatch(promise)
+      expect(err.field).toBe('order_id')
+      expect(err.paymentMayHaveCompleted).toBe(true)
+      expectNoCallbackValues(err.response as Data)
+      expect(err.response?.auth_code).toBe('S86797')
+      expect(err.response?.ref_ret_num).toBe('230422098249')
+      expect(sent).toHaveLength(1)
+    })
+
+    it('an unsigned approved-without-3D result flagged for review carries only bank data', async () => {
+      const { sent, promise } = run(unsigned({ ...forged, '3DStatus': '2' }))
+      const res = (await promise) as Data
+      expect(res.status).toBe('declined')
+      expect(res.requires_manual_review).toBe(true)
+      expectNoCallbackValues(res)
+      expect(res.auth_code).toBe('S86797')
+      expect(res.ref_ret_num).toBe('230422098249')
+      expect(res.masked_number).toBe('415565******6111')
+      expect(sent).toHaveLength(1)
+    })
+
+    it('an unsigned declined result carries no callback values and sends nothing', async () => {
+      const { sent, promise } = run(unsigned({ ...forged, ProcReturnCode: '05' }))
+      const res = (await promise) as Data
+      expect(res.status).toBe('declined')
+      expectNoCallbackValues(res)
+      expect(res.auth_code).toBeNull()
+      expect(sent).toHaveLength(0)
+    })
+
     it('an unsigned approved callback with another amount keeps the response when the bank holds a payment', async () => {
       const { promise } = run(unsigned({ PurchAmount: '2.00' }))
       const err = await mismatch(promise)

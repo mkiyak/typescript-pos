@@ -143,7 +143,10 @@ type HostedModel = typeof MODEL.THREE_D_PAY | typeof MODEL.THREE_D_HOST
  *   provision request would otherwise carry a request guid nobody signed. Otherwise an unsigned declined callback is
  *   mapped as declined, and an unsigned 3D Pay / 3D Host callback of another institution is unsigned data that can
  *   never approve a payment or raise a manual review by itself: only the bank's own status record of the order can
- *   (see below).
+ *   (see below). The result of an unsigned callback, returned or attached to an error, carries none of its values:
+ *   the order id is the order's, and the authorization code, time, host reference, masked card number, amount,
+ *   currency and installment count come from the bank's status record when it was read (otherwise null); codes,
+ *   messages, batch number, ECI and transaction id are null. Only `all` keeps the raw (untrusted) callback.
  * - The signed values have no separators, so after the hash verifies the fields that keep the boundaries fixed must be
  *   well formed, otherwise `HashMismatchError('3D callback fields are malformed')`: `ResponseRnd` is `PF` and digits;
  *   a successful 3D Secure authentication (`3DStatus` 1) carries no authorization code and a return code of one
@@ -265,7 +268,7 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
     }
 
     // Only a signed callback reaches the provision.
-    return this.confirmPayment(response, order, txType, true)
+    return this.confirmPayment(response, order, txType, paymentModel, true)
   }
 
   /**
@@ -392,28 +395,68 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
     }
 
     if (response.status !== TX_APPROVED) {
-      return response
+      return signed ? response : this.unsignedResult(response, order, txType, paymentModel, null)
     }
 
     if (ownText(callback, '3DStatus') !== THREE_D_SUCCESS) {
       // The bank approved a payment whose 3D authentication failed: it is not accepted. A signed callback shows that
       // money may have moved; an unsigned one shows nothing, so only the bank's own record of the order can.
-      if (!signed && !(await this.bankHoldsPayment(order))) {
-        this.logger.error('unsigned callback approved without 3D success, the bank holds no payment', {
-          order_id: this.echo(order.id),
-        })
+      let declined: PosResponse = { ...response, status: TX_DECLINED }
+      if (!signed) {
+        const record = await this.bankRecord(order)
+        declined = this.unsignedResult(declined, order, txType, paymentModel, record)
+        if (!this.holdsPayment(record, order)) {
+          this.logger.error('unsigned callback approved without 3D success, the bank holds no payment', {
+            order_id: this.echo(order.id),
+          })
 
-        return { ...response, status: TX_DECLINED }
+          return this.unsignedResult(declined, order, txType, paymentModel, null)
+        }
       }
       this.logger.error('payment approved without 3D success, manual review required', {
         order_id: this.echo(order.id),
         md_status: this.echo(ownText(callback, '3DStatus')),
       })
 
-      return { ...response, status: TX_DECLINED, requires_manual_review: true }
+      return { ...declined, requires_manual_review: true }
     }
 
-    return this.confirmPayment(response, order, txType, signed)
+    return this.confirmPayment(response, order, txType, paymentModel, signed)
+  }
+
+  /**
+   * The result of an unsigned callback, built from trusted data only: every value the callback could have chosen is
+   * dropped (null) and replaced by the order's id, the requested transaction type and payment model and, when the
+   * bank's status record of the order was read, the record's authorization code, time, host reference, masked card
+   * number, amount, currency and installment count. Only the decided `status`, `requires_manual_review` and the raw
+   * data (`all`, untrusted) are kept.
+   */
+  private unsignedResult(
+    response: PosResponse,
+    order: PosOrder,
+    txType: TxType,
+    paymentModel: PaymentModel,
+    record: PosResponse | null,
+  ): PosResponse {
+    const result: PosResponse = { ...response }
+    for (const key of Object.keys(result)) {
+      if (key !== 'status' && key !== 'requires_manual_review' && key !== 'all') result[key] = null
+    }
+    const fromRecord = (key: string): unknown => (record === null ? null : (record[key] ?? null))
+
+    return {
+      ...result,
+      order_id: asText(order.id),
+      transaction_type: txType,
+      payment_model: paymentModel,
+      auth_code: fromRecord('auth_code'),
+      transaction_time: fromRecord('transaction_time'),
+      ref_ret_num: fromRecord('ref_ret_num'),
+      masked_number: fromRecord('masked_number'),
+      amount: fromRecord('first_amount'),
+      currency: fromRecord('currency'),
+      installment_count: fromRecord('installment_count'),
+    }
   }
 
   /**
@@ -432,18 +475,37 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
       this.assertCallbackMatchesOrder(callback, order, txType, paymentModel)
     } catch (e) {
       if (!(e instanceof OrderMismatchError)) throw e
-      const withResponse = new OrderMismatchError(e.field, e.expected, e.actual, response)
-      if (!withResponse.paymentMayHaveCompleted || (await this.bankHoldsPayment(order))) {
-        throw withResponse
+      // The mapped status decides whether the attached result would report that money may have moved.
+      const wouldFlag = new OrderMismatchError(e.field, e.expected, e.actual, response).paymentMayHaveCompleted
+      if (!wouldFlag) {
+        throw new OrderMismatchError(
+          e.field,
+          e.expected,
+          e.actual,
+          this.unsignedResult(response, order, txType, paymentModel, null),
+        )
+      }
+      const record = await this.bankRecord(order)
+      if (this.holdsPayment(record, order)) {
+        throw new OrderMismatchError(
+          e.field,
+          e.expected,
+          e.actual,
+          this.unsignedResult(response, order, txType, paymentModel, record),
+        )
       }
       throw e
     }
   }
 
-  /** Whether the bank's status record of the order shows an approved payment of this order id. */
-  private async bankHoldsPayment(order: PosOrder): Promise<boolean> {
+  /** The bank's status record of the order (one status request). */
+  private async bankRecord(order: PosOrder): Promise<PosResponse> {
+    return this.status({ id: asText(order.id) })
+  }
+
+  /** Whether a status record shows an approved payment of this order id. */
+  private holdsPayment(record: PosResponse, order: PosOrder): boolean {
     const orderId = asText(order.id)
-    const record = await this.status({ id: orderId })
 
     return orderId !== '' && record.status === TX_APPROVED && asText(record.order_id) === orderId
   }
@@ -456,13 +518,15 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
    * raised without the result attached.
    */
   private async confirmPayment(
-    response: PosResponse,
+    mapped: PosResponse,
     order: PosOrder,
     txType: TxType,
+    paymentModel: PaymentModel,
     signed: boolean,
   ): Promise<PosResponse> {
     const orderId = asText(order.id)
-    const record = await this.status({ id: orderId })
+    const record = await this.bankRecord(order)
+    const response = signed ? mapped : this.unsignedResult(mapped, order, txType, paymentModel, record)
     const evidence = signed ? response : undefined
 
     if (record.status !== TX_APPROVED) {

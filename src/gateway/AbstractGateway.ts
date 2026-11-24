@@ -64,7 +64,9 @@ export type GatewayConfig = {
    * PayForPos: reject any 3D callback that carries no `ResponseHash` (`HashMismatchError`). Default false: without
    * it an unsigned declined callback is mapped as declined, an unsigned successful callback is rejected for QNB
    * Finansbank (which signs every callback) and, for other institutions such as Ziraat Katilim, never approves a
-   * payment by itself (the bank's status record decides). A present `ResponseHash` is always verified.
+   * payment by itself (the bank's status record decides). Whatever this flag says, an unsigned 3D Secure callback
+   * of an institution other than QNB Finansbank is always rejected, declines included. A present `ResponseHash` is
+   * always verified.
    */
   require_3d_hash?: boolean
 }

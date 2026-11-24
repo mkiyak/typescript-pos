@@ -266,7 +266,7 @@ describe('AccountFactory PayFor', () => {
   })
 
   // addition: F1
-  it.each(['', '5a', '12345', ' 12', '١٢'])('rejects an invalid mbrId %j', (mbrId) => {
+  it.each(['', '5a', '12345', ' 12', '١٢', '05', '0005', '0'])('rejects an invalid mbrId %j', (mbrId) => {
     expect(() => AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'm', 'u', 'p', null, mbrId)).toThrow(
       MissingAccountInfoError,
     )
