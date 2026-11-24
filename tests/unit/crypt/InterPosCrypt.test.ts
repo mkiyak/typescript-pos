@@ -282,6 +282,20 @@ describe('InterPosCrypt', () => {
       expect(check(forged)).toBe(false)
     })
 
+    // addition: F9 a null (or absent) signed field reads as empty, so its characters can merge into a neighbour while
+    // the genuine hash still verifies; the gateway's field formats reject each of these (see InterPos.test.ts)
+    it.each([
+      ['decline: amount merged with a null currency', { ...decline3d(), PurchAmount: '1,01949', Currency: null }],
+      [
+        'decline: order id shifted into the return code',
+        { ...decline3d(), OrderId: '20221225E1DF8', ProcReturnCode: '1' },
+      ],
+      ['approval: amount merged with a null currency', { ...pay(), PurchAmount: '1,01949', Currency: null }],
+      ['approval: order id shifted into the return code', { ...pay(), OrderId: '20221225B83B0', ProcReturnCode: '0' }],
+    ] as Array<[string, Cb]>)('accepted by the crypt; the gateway rejects: %s', (_n, resplit) => {
+      expect(check(resplit)).toBe(true)
+    })
+
     // addition: F7 for each of these lists the genuine hash verifies under a check that trusts the announced list
     it.each([
       ['without the trailing colon', HP.slice(0, -1)],
