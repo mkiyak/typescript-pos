@@ -63,6 +63,10 @@ const MD_STATUS = /^\d$/
 const RESPONSES: readonly string[] = ['', 'Approved', 'Declined', 'Error']
 /** A bank authorization code: six letters or digits. Its fixed length pins the boundary to the signed `oid`. */
 const AUTH_CODE = /^[0-9A-Za-z]{6}$/
+/** The 3D authentication value: 20 bytes in base64 (28 characters ending in `=`). Pins `mdstatus` and `eci`. */
+const CAVV = /^[A-Za-z0-9+/]{27}=$/
+/** The electronic commerce indicator: two digits. */
+const ECI = /^\d{2}$/
 
 /** Callback key names are attacker controlled; only this much of one is echoed in errors and logs. */
 const MAX_ECHOED_KEY_LENGTH = 64
@@ -90,23 +94,28 @@ function asText(value: unknown): string {
  *
  * The signature does not cover the order number, amount, currency or transaction type that the provision request
  * takes from the callback, so a callback must belong to the order it is completed for (`OrderMismatchError`):
- * - 3D Secure, before the provision request: `orderid` (required, the provision request uses it) and `oid` (when
- *   present) equal `order.id`; `txnamount` equals the order amount in kuruş; `txncurrencycode` the order currency
+ * - 3D Secure, before the provision request: `orderid` (required, the provision request uses it) and the signed
+ *   `oid` (required) equal `order.id`; `txnamount` equals the order amount in kuruş; `txncurrencycode` the order currency
  *   code; `txntype` the transaction type; and when present `terminalid`, `terminalmerchantid` and
  *   `secure3dsecuritylevel` (`3D`) match the account and the payment model.
  * - 3D Pay, after mapping (the mapped response is attached to the error): `secure3dsecuritylevel` when present is
- *   `3D_PAY` and the mapped `order_id` equals `order.id`; when the bank reports a completed payment, the amount,
+ *   `3D_PAY`, the mapped `order_id` equals `order.id`, and a signed callback carries `oid` equal to `order.id`; when the bank reports a completed payment, the amount,
  *   currency, transaction type, terminal and merchant are bound as above. Declined callbacks echo an amount of 0,
  *   so they are not bound on amount.
  *
  * A callback is a flat record of strings: a nested object or array anywhere at its top level is a `PosError`
  * before any other check, and every field read for these decisions must be a plain string. After the hash verifies,
  * `procreturncode` (two digits), `response` (`Approved`, `Declined` or `Error`) and `mdstatus` (one digit) must be
- * well formed (each may also be empty) and `authcode` empty or six letters or digits (always six when
- * `procreturncode` is `00`), otherwise `HashMismatchError`; a signed callback must carry `clientid` equal to the
- * account terminal id (an unsigned one only when present). A signed 3D Secure callback must carry an empty
- * `authcode`, `procreturncode` and `response` (nothing is provisioned yet), otherwise `HashMismatchError`. 3D success is decided on the trimmed mdStatus, the same value the response mapper reads, and a
- * callback taken down the not-3D-successful path must map as declined.
+ * well formed (each may also be empty), `authcode` empty or six letters or digits (always six when `procreturncode`
+ * is `00`), `cavv` empty or 28 base64 characters ending in `=`, and `eci` empty or two digits, otherwise
+ * `HashMismatchError`. The signature has no separators, so these fixed formats are what keeps characters from
+ * moving between adjacent signed fields; for the same reason a signed callback must carry `oid` (a missing one would
+ * let its characters land in `mdstatus` and `cavv` while the unsigned `orderid` names any order). A signed callback
+ * must also carry `clientid` equal to the account terminal id (an unsigned one only when present). A signed 3D
+ * Secure callback must carry an empty `authcode`, `procreturncode` and `response` (nothing is provisioned yet), and
+ * on a signed 3D Pay callback `procreturncode` is `00` exactly when `response` is `Approved`, otherwise
+ * `HashMismatchError`. 3D success is decided on the trimmed mdStatus, the same value the response mapper reads, and
+ * a callback taken down the not-3D-successful path must map as declined.
  */
 export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
   static readonly NAME = 'GarantiPay'
@@ -160,6 +169,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     }
 
     this.assertTextFields(gatewayResponseData)
+    this.assertSignedOrderId(gatewayResponseData, asText(order.id))
     this.assertSignedOutcomeFormat(gatewayResponseData)
     this.assertNoOutcomeBeforeProvision(gatewayResponseData)
     this.assert3DSecureCallbackMatchesOrder(gatewayResponseData, order, txType)
@@ -205,6 +215,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     this.assertTextFields(gatewayResponseData)
     if (signed) {
       this.assertSignedOutcomeFormat(gatewayResponseData)
+      this.assertApprovalConsistent(gatewayResponseData)
     }
 
     const response = this.responseDataMapper.map3DPayResponseData(gatewayResponseData, txType, order)
@@ -299,12 +310,16 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     const response = asText(own(callback, 'response'))
     const mdStatus = asText(own(callback, 'mdstatus'))
     const authCode = phpTrim(asText(own(callback, 'authcode')))
+    const cavv = phpTrim(asText(own(callback, 'cavv')))
+    const eci = phpTrim(asText(own(callback, 'eci')))
     if (
       (procReturnCode !== '' && !PROC_RETURN_CODE.test(procReturnCode)) ||
       !RESPONSES.includes(response) ||
       (mdStatus !== '' && !MD_STATUS.test(mdStatus)) ||
       (authCode !== '' && !AUTH_CODE.test(authCode)) ||
-      (procReturnCode === '00' && !AUTH_CODE.test(authCode))
+      (procReturnCode === '00' && !AUTH_CODE.test(authCode)) ||
+      (cavv !== '' && !CAVV.test(cavv)) ||
+      (eci !== '' && !ECI.test(eci))
     ) {
       this.logger.error('3D callback outcome fields are malformed', {
         order_id: asText(own(callback, 'oid')),
@@ -312,6 +327,37 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
         response,
         md_status: mdStatus,
         auth_code_length: authCode.length,
+        cavv_length: cavv.length,
+        eci_length: eci.length,
+      })
+      throw new HashMismatchError('3D callback outcome fields are malformed')
+    }
+  }
+
+  /**
+   * The signed `oid` must be present and name the order. Were it allowed to be missing, its characters could be moved
+   * into the following signed fields with the hash still valid, and the unsigned `orderid` could then name any order.
+   */
+  private assertSignedOrderId(callback: GatewayResponseData, orderId: string, response?: PosResponse): void {
+    const oid = own(callback, 'oid')
+    if (orderId === '' || oid !== orderId) {
+      this.fail('order_id', orderId, asText(oid), orderId, response)
+    }
+  }
+
+  /**
+   * A 3D Pay callback reports the provision outcome: the bank approves with return code `00` and response
+   * `Approved`, and never one without the other. A mismatch means signed characters were moved between fields (for
+   * example the tail of the order id read as an authorization code plus `00`).
+   */
+  private assertApprovalConsistent(callback: GatewayResponseData): void {
+    const approvedCode = phpTrim(asText(own(callback, 'procreturncode'))) === '00'
+    const approvedResponse = phpTrim(asText(own(callback, 'response'))) === 'Approved'
+    if (approvedCode !== approvedResponse) {
+      this.logger.error('3D callback outcome fields are malformed', {
+        order_id: asText(own(callback, 'oid')),
+        proc_return_code: asText(own(callback, 'procreturncode')),
+        response: asText(own(callback, 'response')),
       })
       throw new HashMismatchError('3D callback outcome fields are malformed')
     }
@@ -351,10 +397,6 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     if (orderId === '' || orderIdEcho !== orderId) {
       this.fail('order_id', orderId, asText(orderIdEcho), orderId)
     }
-    const oid = own(callback, 'oid')
-    if (oid !== undefined && oid !== orderId) {
-      this.fail('order_id', orderId, asText(oid), orderId)
-    }
 
     this.assertClientId(callback, orderId, true)
     this.assertPaymentEchoMatches(callback, order, txType, orderId)
@@ -375,6 +417,9 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     const mappedOrderId = asText(response.order_id)
     if (orderId === '' || mappedOrderId !== orderId) {
       this.fail('order_id', orderId, mappedOrderId, orderId, response)
+    }
+    if (signed) {
+      this.assertSignedOrderId(callback, orderId, response)
     }
     this.assertClientId(callback, orderId, signed, response)
 

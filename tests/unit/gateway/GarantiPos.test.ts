@@ -880,6 +880,8 @@ describe('GarantiPos (mocked collaborators)', () => {
         ...threeDPayCallback(),
         authcode,
         procreturncode,
+        // a signed 00 always comes with Approved (see the approval consistency rule)
+        response: procreturncode === '00' ? 'Approved' : '',
       })
       .catch((e: unknown) => e)
     if (accepted) {
@@ -937,6 +939,39 @@ describe('GarantiPos (mocked collaborators)', () => {
     expect(err).toBeInstanceOf(HashMismatchError)
     expect(requestMapper.create3DPaymentRequestData).not.toHaveBeenCalled()
     expect(httpClient.request).not.toHaveBeenCalled()
+  })
+
+  // addition: review ruling, a signed callback must carry the order id as oid
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+  ])('3D Secure rejects a signed callback with a %s oid before provisioning', async (_name, oid) => {
+    responseMapper.is3dAuthSuccess.mockReturnValue(true)
+    crypt.check3DHash.mockReturnValue(true)
+    const { oid: _o, ...echo } = boundEcho('ORDER-1')
+    const cb = oid === undefined ? { mdstatus: '1', ...echo } : { mdstatus: '1', ...echo, oid }
+    const err = (await pos
+      .payment(MODEL.THREE_D_SECURE, boundOrder('ORDER-1'), TX_TYPE.PAY_AUTH, null, cb)
+      .catch((e: unknown) => e)) as OrderMismatchError
+    expect(err).toBeInstanceOf(OrderMismatchError)
+    expect(err.field).toBe('order_id')
+    expect(err.actual).toBe('')
+    expect(err.response).toBeUndefined()
+    expect(requestMapper.create3DPaymentRequestData).not.toHaveBeenCalled()
+    expect(httpClient.request).not.toHaveBeenCalled()
+  })
+
+  it('3D Pay rejects a signed callback without oid (response attached)', async () => {
+    crypt.check3DHash.mockReturnValue(true)
+    responseMapper.map3DPayResponseData.mockReturnValue({ status: 'approved', order_id: '123', proc_return_code: '00' })
+    const { oid: _o, ...cb } = threeDPayCallback()
+    const err = (await pos
+      .payment(MODEL.THREE_D_PAY, { id: '123', amount: 1.01, currency: CURRENCY.TRY }, TX_TYPE.PAY_AUTH, null, cb)
+      .catch((e: unknown) => e)) as OrderMismatchError
+    expect(err).toBeInstanceOf(OrderMismatchError)
+    expect(err.field).toBe('order_id')
+    expect(err.actual).toBe('')
+    expect(err.paymentMayHaveCompleted).toBe(true)
   })
 
   // addition: review ruling, empty or blank outcome fields are what the bank sends before provisioning
@@ -1754,6 +1789,190 @@ describe('GarantiPos (end to end) forged callbacks', () => {
       expect(sent[0]?.body).toContain(`<OrderID>${order.id}</OrderID>`)
     },
   )
+})
+
+describe('GarantiPos (end to end) signed order id, cavv and eci formats', () => {
+  const resign = (cb: Record<string, string>): Record<string, string> => {
+    const values = ['clientid', 'oid', 'authcode', 'procreturncode', 'response', 'mdstatus', 'cavv', 'eci', 'md', 'rnd']
+      .map((k) => cb[k] ?? '')
+      .join('')
+    return { ...cb, hash: new GarantiPosCrypt().hashString(`${values}12345678`) }
+  }
+  /** A signed 3D Secure callback for order ORDER12 (hash computed with PHP built-ins and the store key). */
+  const order12Callback: Record<string, string> = {
+    ...secureCallback,
+    oid: 'ORDER12',
+    orderid: 'ORDER12',
+    transid: 'ORDER12',
+    hash: 'A72F77E7E4EE97C544889DEA6CEFD975D27ED247E520F83E7193DC856033B805BC86BE6D57B52F1429CF7BF035C4CFAF7E437AA958A88265D56483DF4A79733C',
+  }
+
+  // addition: review finding, dropping oid and moving its signed characters into mdstatus/cavv keeps the hash
+  // valid; the unsigned orderid could then name any order and amount
+  it('3D Secure: oid dropped, its characters moved into mdstatus and cavv raises OrderMismatchError, nothing sent', async () => {
+    const { oid: _o, ...rest } = secureCallback
+    const forged = {
+      ...rest,
+      mdstatus: '2',
+      cavv: `023100354BB1${secureCallback.cavv}`,
+      orderid: 'VICTIM9',
+      transid: 'VICTIM9',
+      txnamount: '999900',
+    }
+    expect(new GarantiPosCrypt().check3DHash(createAccount(), forged)).toBe(true)
+    const { sent, fetchImpl } = recordingFetch(() => new Response(provisionApproved))
+    const err = (await realGateway(fetchImpl)
+      .payment(
+        MODEL.THREE_D_SECURE,
+        { id: 'VICTIM9', amount: 9999, currency: CURRENCY.TRY, ip: '1.2.3.4' },
+        TX_TYPE.PAY_AUTH,
+        null,
+        forged,
+      )
+      .catch((e: unknown) => e)) as OrderMismatchError
+    expect(err).toBeInstanceOf(OrderMismatchError)
+    expect(err.field).toBe('order_id')
+    expect(err.expected).toBe('VICTIM9')
+    expect(err.actual).toBe('')
+    expect(err.response).toBeUndefined()
+    expect(sent).toHaveLength(0)
+  })
+
+  // addition: review finding, the last oid character moved into mdstatus pushes the old mdstatus into cavv
+  it('3D Secure: oid "ORDER1" + mdstatus "2" + cavv "1…" (hash still valid) raises HashMismatchError, nothing sent', async () => {
+    const cb = {
+      ...order12Callback,
+      oid: 'ORDER1',
+      orderid: 'ORDER1',
+      transid: 'ORDER1',
+      mdstatus: '2',
+      cavv: `1${order12Callback.cavv}`,
+    }
+    expect(new GarantiPosCrypt().check3DHash(createAccount(), cb)).toBe(true)
+    const { sent, fetchImpl } = recordingFetch(() => new Response(provisionApproved))
+    const err = await realGateway(fetchImpl)
+      .payment(MODEL.THREE_D_SECURE, { ...secureOrder, id: 'ORDER1' }, TX_TYPE.PAY_AUTH, null, cb)
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(HashMismatchError)
+    expect((err as Error).message).toBe('3D callback outcome fields are malformed')
+    expect(sent).toHaveLength(0)
+  })
+
+  // addition: review ruling, cavv is empty or 28 base64 characters ending in "=", eci empty or two digits
+  it.each([
+    ['cavv of 27 characters', { cavv: 'xgRlQDz4AAAAAAAAAAAAAAAAAA=' }],
+    ['cavv of 29 characters', { cavv: 'xgRlQDz4AAAAAAAAAAAAAAAAAAAA=' }],
+    ['cavv without the trailing "="', { cavv: 'xgRlQDz4AAAAAAAAAAAAAAAAAAAA' }],
+    ['eci "2"', { eci: '2' }],
+    ['eci "002"', { eci: '002' }],
+  ] as Array<[string, Record<string, string>]>)('signed %s raises HashMismatchError', async (_name, change) => {
+    const secure = resign({ ...secureCallback, ...change })
+    const pay = resign({ ...payCallback, ...change })
+    for (const [model, cb, order] of [
+      [MODEL.THREE_D_SECURE, secure, secureOrder],
+      [MODEL.THREE_D_PAY, pay, payOrder],
+    ] as Array<[PaymentModel, Record<string, string>, PosOrder]>) {
+      expect(new GarantiPosCrypt().check3DHash(createAccount(), cb)).toBe(true)
+      const { sent, fetchImpl } = recordingFetch(() => new Response(provisionApproved))
+      const err = await realGateway(fetchImpl)
+        .payment(model, order, TX_TYPE.PAY_AUTH, null, cb)
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(HashMismatchError)
+      expect((err as Error).message).toBe('3D callback outcome fields are malformed')
+      expect(sent).toHaveLength(0)
+    }
+  })
+
+  // addition: review ruling, the legitimate formats still pass (empty and blank cavv/eci, 28-character cavv)
+  it.each([
+    ['empty cavv and eci', { cavv: '', eci: '' }],
+    ['blank cavv and eci', { cavv: ' ', eci: ' ' }],
+    ['another 28-character cavv', { cavv: 'jCm0m+u/0hUfAREHBAMBcfN+pSo=' }],
+  ] as Array<[string, Record<string, string>]>)('signed %s is accepted', async (_name, change) => {
+    const { sent, fetchImpl } = recordingFetch(() => new Response(provisionApproved))
+    const secure = await realGateway(fetchImpl).payment(
+      MODEL.THREE_D_SECURE,
+      secureOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      resign({ ...secureCallback, ...change }),
+    )
+    expect(secure.status).toBe('approved')
+    expect(sent).toHaveLength(1)
+    const pay = await realGateway(recordingFetch().fetchImpl).payment(
+      MODEL.THREE_D_PAY,
+      payOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      resign({ ...payCallback, ...change }),
+    )
+    expect(pay.status).toBe('approved')
+  })
+
+  // addition: review ruling, on a signed 3D Pay callback procreturncode 00 comes exactly with response Approved
+  it.each([
+    ['00', ''],
+    ['00', 'Declined'],
+    ['00', 'Error'],
+    ['92', 'Approved'],
+    ['', 'Approved'],
+  ])('3D Pay: signed procreturncode %j with response %j raises HashMismatchError', async (procreturncode, response) => {
+    const cb = resign({ ...payCallback, procreturncode, response })
+    expect(new GarantiPosCrypt().check3DHash(createAccount(), cb)).toBe(true)
+    const err = await realGateway(recordingFetch().fetchImpl)
+      .payment(MODEL.THREE_D_PAY, payOrder, TX_TYPE.PAY_AUTH, null, cb)
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(HashMismatchError)
+    expect((err as Error).message).toBe('3D callback outcome fields are malformed')
+  })
+
+  /**
+   * A signed 3D Pay callback for order ORDERX0012300 without a provision outcome (hash computed with PHP built-ins:
+   * `strtoupper(hash("sha512", "30691298" . "ORDERX0012300" . "" . "" . "" . "1" . cavv . "02" . "MDVALUE123" . rnd
+   * . "12345678"))`).
+   */
+  const prefixCallback: Record<string, string> = {
+    ...payCallback,
+    oid: 'ORDERX0012300',
+    orderid: 'ORDERX0012300',
+    transid: 'ORDERX0012300',
+    authcode: '',
+    procreturncode: '',
+    response: '',
+    hash: 'C7E681AF31543CB0AF78BE85B66B893598EB826B4573C3CE90012D06A70102E2C6CC8C2B4A97BC93EBE82CF9388AF5F387C425EFD363A953A00690723EB2DA1F',
+  }
+
+  // addition: review finding, the tail of the signed oid read as authcode "X00123" plus procreturncode "00" would
+  // manufacture an approval for the shorter order id ORDER
+  it('3D Pay: oid "ORDER" + authcode "X00123" + procreturncode "00" (hash still valid) raises HashMismatchError', async () => {
+    expect(new GarantiPosCrypt().check3DHash(createAccount(), prefixCallback)).toBe(true)
+    const forged = {
+      ...prefixCallback,
+      oid: 'ORDER',
+      orderid: 'ORDER',
+      transid: 'ORDER',
+      authcode: 'X00123',
+      procreturncode: '00',
+    }
+    expect(new GarantiPosCrypt().check3DHash(createAccount(), forged)).toBe(true)
+    const err = await realGateway(recordingFetch().fetchImpl)
+      .payment(MODEL.THREE_D_PAY, { ...payOrder, id: 'ORDER' }, TX_TYPE.PAY_AUTH, null, forged)
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(HashMismatchError)
+    expect((err as Error).message).toBe('3D callback outcome fields are malformed')
+  })
+
+  // addition: the unshifted ORDERX0012300 callback is a legitimate, non-approved outcome
+  it('3D Pay: the signed ORDERX0012300 callback without an outcome is not approved', async () => {
+    const res = await realGateway(recordingFetch().fetchImpl).payment(
+      MODEL.THREE_D_PAY,
+      { ...payOrder, id: 'ORDERX0012300' },
+      TX_TYPE.PAY_AUTH,
+      null,
+      prefixCallback,
+    )
+    expect(res.status).toBe('declined')
+  })
 })
 
 describe('GarantiPos (end to end) other transactions', () => {
