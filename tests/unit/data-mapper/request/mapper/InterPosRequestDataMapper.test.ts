@@ -4,7 +4,7 @@ import { InterPosCrypt } from '../../../../../src/crypt/InterPosCrypt.js'
 import { InterPosRequestDataMapper } from '../../../../../src/data-mapper/request/mapper/InterPosRequestDataMapper.js'
 import { InterPosRequestValueFormatter } from '../../../../../src/data-mapper/request/value-formatter/InterPosRequestValueFormatter.js'
 import { InterPosRequestValueMapper } from '../../../../../src/data-mapper/request/value-mapper/InterPosRequestValueMapper.js'
-import { NotImplementedError, PosError } from '../../../../../src/errors.js'
+import { NotImplementedError, PosError, UnsupportedPaymentModelError } from '../../../../../src/errors.js'
 import { AccountFactory } from '../../../../../src/factory/AccountFactory.js'
 import { CreditCardFactory } from '../../../../../src/factory/CreditCardFactory.js'
 import {
@@ -332,6 +332,24 @@ describe('InterPosRequestDataMapper', () => {
       expect(Object.keys(form.inputs).at(-1)).toBe('Hash')
     })
 
+    // addition: a hook that adds or keeps a Hash input cannot make the posted hash anything but the computed one
+    it('ends with the computed Hash even when a hook leaves a Hash input', async () => {
+      const keep = (e: Before3DFormHashCalculatedEvent): void => {
+        e.formInputs = { Hash: 'forged', ...e.formInputs }
+      }
+      const form = await makeMapper(real, [keep]).create3DFormData(
+        D,
+        formOrder,
+        MODEL.THREE_D_SECURE,
+        TX_TYPE.PAY_AUTH,
+        'https://test.inter-vpos.com.tr/mpi/Default.aspx',
+      )
+
+      expect(form.inputs.Hash).not.toBe('forged')
+      expect(Object.keys(form.inputs).filter((k) => k === 'Hash')).toHaveLength(1)
+      expect(Object.keys(form.inputs).at(-1)).toBe('Hash')
+    })
+
     it('signs what the hooks left, not what was built', async () => {
       const bump = (e: Before3DFormHashCalculatedEvent): void => {
         e.formInputs.PurchAmount = '999'
@@ -441,9 +459,35 @@ describe('InterPosRequestDataMapper', () => {
       expect(() => mapper.createRefundRequestData(D, o, TX_TYPE.REFUND)).toThrow(PosError)
     })
 
+    // addition: only text or a finite number is an order id; String() would turn these into valid-looking ids
+    it.each([['abc'], true, {}, Number.NaN, Number.POSITIVE_INFINITY, null])('rejects the non-scalar id %j', (id) => {
+      expect(() => mapper.createStatusRequestData(D, { id: id as never })).toThrow(PosError)
+    })
+
     it('accepts a numeric id and a 64 character id', () => {
       expect(mapper.createStatusRequestData(D, { id: 33554969 as never }).orgOrderId).toBe('33554969')
       expect(mapper.createStatusRequestData(D, { id: 'x'.repeat(64) }).orgOrderId).toBe('x'.repeat(64))
+    })
+  })
+
+  describe('payment model and currency', () => {
+    // addition: the form is only for 3D models
+    it.each([MODEL.NON_SECURE])('rejects the %s model for the 3D form', async (model) => {
+      crypt.create3DHash.mockReturnValue('h')
+      crypt.generateRandomString.mockReturnValue('r')
+
+      await expect(
+        mapper.create3DFormData(D, formOrder, model as PaymentModel, TX_TYPE.PAY_AUTH, 'https://x.test'),
+      ).rejects.toThrow(UnsupportedPaymentModelError)
+    })
+
+    // addition: unknown and prototype-chain currency names never reach the bank
+    it.each(['XXX', 'toString', 'constructor', '__proto__'])('rejects the currency %j', (currency) => {
+      const o = { ...formOrder, currency: currency as never }
+
+      expect(() => mapper.createStatusRequestData(D, o)).not.toThrow()
+      expect(() => mapper.createNonSecurePostAuthPaymentRequestData(D, o)).toThrow(PosError)
+      expect(() => mapper.create3DPaymentRequestData(D, o, TX_TYPE.PAY_AUTH, callback)).toThrow(PosError)
     })
   })
 

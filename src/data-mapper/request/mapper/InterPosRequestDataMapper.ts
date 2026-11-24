@@ -1,5 +1,10 @@
 import type { InterPosCrypt } from '../../../crypt/InterPosCrypt.js'
-import { NotImplementedError, PosError, UnsupportedTransactionTypeError } from '../../../errors.js'
+import {
+  NotImplementedError,
+  PosError,
+  UnsupportedPaymentModelError,
+  UnsupportedTransactionTypeError,
+} from '../../../errors.js'
 import type { InterPosAccount } from '../../../model/account/InterPosAccount.js'
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
@@ -179,6 +184,10 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
       throw new PosError('An order is required to create the 3D form.')
     }
     this.assertPaymentTxType(txType)
+    if (paymentModel === MODEL.NON_SECURE) {
+      // A non-secure payment has no 3D form; the bank would otherwise be asked for a form it never answers.
+      throw new UnsupportedPaymentModelError(`Unsupported payment model for the 3D form: ${String(paymentModel)}`)
+    }
     const orderId = this.orderId(order)
     const amount = this.amount(order)
     const okUrl = this.url(order, 'success_url')
@@ -218,11 +227,13 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
       GATEWAY_CLASS,
     )
 
+    // A Hash input left by a hook is dropped first, so the computed hash is always the last (and only) one.
+    const { Hash: _ignored, ...signed } = inputs
     // The caller fills in the gateway URL.
     return {
       gateway: gatewayURL,
       method: 'POST',
-      inputs: { ...inputs, Hash: this.crypt.create3DHash(account, inputs) },
+      inputs: { ...signed, Hash: this.crypt.create3DHash(account, signed) },
     }
   }
 
@@ -242,7 +253,11 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
   }
 
   private orderId(order: PosOrder): string {
-    const id = String(required(order, 'id'))
+    const raw: unknown = required(order, 'id')
+    if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isFinite(raw))) {
+      throw new PosError('The order id must be text or a number.')
+    }
+    const id = String(raw)
     if (!ORDER_ID_PATTERN.test(id)) {
       throw new PosError('The order id may only hold letters, digits, underscores and hyphens (at most 64).')
     }

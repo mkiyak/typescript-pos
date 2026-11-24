@@ -86,7 +86,7 @@ Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://g
 - [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Diğer işlemler: `pos.cancel(order)`, `pos.refund(order)` (`order.order_amount` verilmiş ve `order.amount` ondan
-küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti ve Akbank), 3D Secure'suz ödeme için
+küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti, Akbank ve PayFor), 3D Secure'suz ödeme için
 `pos.payment(MODEL.NON_SECURE, ...)` ve ön/son provizyon için `TX_TYPE.PAY_PRE_AUTH` / `TX_TYPE.PAY_POST_AUTH`.
 
 ### Test ve canlı yapılandırma

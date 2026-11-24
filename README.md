@@ -85,7 +85,7 @@ Complete, compile-checked versions with error handling live in [`examples/`](htt
 - [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Other operations: `pos.cancel(order)`, `pos.refund(order)` (partial when `order.order_amount` is set and
-`order.amount` is lower), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti and Akbank), `pos.payment(MODEL.NON_SECURE, ...)`
+`order.amount` is lower), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti, Akbank and PayFor), `pos.payment(MODEL.NON_SECURE, ...)`
 for payments without 3D Secure, and `TX_TYPE.PAY_PRE_AUTH` / `TX_TYPE.PAY_POST_AUTH` for pre- and post-authorization.
 
 ### Test vs production configuration

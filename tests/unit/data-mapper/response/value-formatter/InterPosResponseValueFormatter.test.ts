@@ -18,6 +18,11 @@ describe('InterPosResponseValueFormatter', () => {
     expect(formatter.formatAmount(amount, txType)).toBe(expected)
   })
 
+  // addition: a dotted amount with two decimals reads as thousands (display only, the amount is never sent back)
+  it("formatAmount('1.01') reads the dot as a thousands separator and gives 101", () => {
+    expect(formatter.formatAmount('1.01', 'pay')).toBe(101)
+  })
+
   // deviation: F30 NotImplementedError instead of a plain not-implemented exception
   it('formatInstallment is not supported', () => {
     expect(() => formatter.formatInstallment()).toThrow(NotImplementedError)

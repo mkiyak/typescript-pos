@@ -3,7 +3,10 @@ import { PosHttpError } from '../errors.js'
 /** Bank field names are plain identifiers; anything else (markup, prose, spaces) means this is not a record list. */
 const KEY = /^[A-Za-z][A-Za-z0-9_]*$/
 
-/** Keys that would reach the prototype chain of a plain object are refused outright. */
+/**
+ * Keys that would reach the prototype chain of a plain object are refused outright. The key pattern already rejects
+ * `__proto__` (it starts with an underscore); this set guards `constructor` and `prototype`, which the pattern allows.
+ */
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 function malformed(reason: string): PosHttpError {

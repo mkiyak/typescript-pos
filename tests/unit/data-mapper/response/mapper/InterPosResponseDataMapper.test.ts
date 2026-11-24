@@ -30,7 +30,7 @@ function expectSameSorted(actual: Data, expected: Data): void {
   expect(actual).toStrictEqual(expected)
 }
 
-/** `assertArrayHasKey` + `assertIsArray` + `assertNotEmpty`, then `unset`. */
+/** Checks that the key holds a non-empty object, then removes it so the rest can be compared exactly. */
 function takeNonEmpty(actual: Data, key: string): void {
   expect(actual).toHaveProperty(key)
   const value = actual[key]
@@ -287,6 +287,15 @@ describe('InterPosResponseDataMapper', () => {
         ).toBe('declined')
       },
     )
+
+    // addition: a code that is not text is not read at all
+    it.each([0, 99, null, ['00'], { a: '00' }])('ProcReturnCode %j maps to null', (code) => {
+      const m = realMapper()
+      expect(m.mapPaymentResponse({ ProcReturnCode: code, OrderId: 'o1' }, 'pay', order).proc_return_code).toBeNull()
+      expect(m.mapCancelResponse({ ProcReturnCode: code }).proc_return_code).toBeNull()
+      expect(m.mapRefundResponse({ ProcReturnCode: code }).proc_return_code).toBeNull()
+      expect(m.mapStatusResponse({ ProcReturnCode: code }).proc_return_code).toBeNull()
+    })
 
     // addition: the unpadded code approves (guards the cases above against a vacuous harness)
     it('the exact code 00 approves every path', () => {
