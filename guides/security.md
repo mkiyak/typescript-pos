@@ -24,6 +24,14 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
   switched off; the signed order id, amount and currency are bound to your order (`OrderMismatchError`), and every
   approved 3D Pay / 3D Host result is confirmed with a status request before it is returned. An unsigned callback can
   only become a decline.
+- **Kuveyt Türk (`KuveytPos`).** The callback's `HashData` is always verified and an approval must carry it; the signed
+  order id must be your order's, the provision is built from your order (never from the callback) and the bank's
+  answer must name your order, amount and currency (`OrderMismatchError`, with `paymentMayHaveCompleted`). An empty or
+  unclear answer after a provision or sale throws instead of being read as a decline: keep the order pending and
+  check `pos.status`.
+- **Vakıf Katılım (`VakifKatilimPos`).** The same for 3D Secure. Every approved 3D Host payment is confirmed with one
+  status request, because the 3D Host form carries the hashed API password and anyone who loaded it can sign callbacks:
+  restrict the API to your server IP addresses, and re-query `pos.status` before acting on a 3D Host alert.
 - **POSNET (`PosNetPos`).** The 3D result is decrypted by the bank and its MAC is verified before any money moves;
   the bank-resolved order id, amount, currency and installment count must equal your order's (`OrderMismatchError`,
   nothing charged). The check cannot be disabled.
@@ -36,7 +44,7 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
   order id ends in a signed callback.
 - **Strict 3D.** PayFlex accepts only a fully authenticated result (Status `Y`, ECI `02`/`05`, CAVV, `MdStatus` 1).
 - **Manual-review flag.** When a bank authorized money although 3D failed, the response is `declined` with
-  `requires_manual_review: true` (Asseco, Garanti, Akbank 3D Pay/Host, PayFor and InterPos; for an unsigned PayFor callback and for InterPos only
+  `requires_manual_review: true` (Asseco, Garanti, Akbank 3D Pay/Host, PayFor and InterPos; Kuveyt Türk and Vakıf Katılım flag the result attached to an `OrderMismatchError` the same way, and a Vakıf Katılım 3D Host alert can be provoked by a forger, so re-query `status` first; for an unsigned PayFor callback and for InterPos only
   when the bank's own record shows the payment). When a signed Asseco or Garanti callback reports a completed payment but does not belong to
   the order, `OrderMismatchError.paymentMayHaveCompleted` is `true`.
 - **Masking.** Everything handed to your logger, error snippets and `OrderMismatchError.response.all` goes through
