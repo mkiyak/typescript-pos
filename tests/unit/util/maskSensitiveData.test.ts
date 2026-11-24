@@ -164,4 +164,26 @@ describe('maskSensitiveData', () => {
     expect(form).toContain('cardexpiredateyear=***')
     expect(form).toContain('cardcvv2=***')
   })
+
+  // addition: JSON API field names, auth header and numeric JSON values
+  it('masks the JSON API card, header and secret fields', () => {
+    expect(
+      maskSensitiveData({ creditCard: '4355093000315232', expiredDate: '1135', cvv: '665', 'auth-hash': 'abc' }),
+    ).toEqual({ creditCard: '***', expiredDate: '***', cvv: '***', 'auth-hash': '***' })
+
+    const json = maskSensitiveData(
+      '{"card":{"cardNumber":"4355093000315232","cvv2":123,"expireDate":"1135"},"secretKey":"s3"}',
+    )
+    expect(json).toContain('"cvv2":"***"')
+    expect(json).toContain('"expireDate":"***"')
+    expect(json).toContain('"secretKey":"***"')
+    expect(json).toContain('435509****5232')
+    expect(json).not.toContain('123')
+    expect(json).not.toContain('s3')
+
+    const form = maskSensitiveData('creditCard=4355093000315232&expiredDate=1135&cvv=665')
+    expect(form).toContain('creditCard=***')
+    expect(form).toContain('expiredDate=***')
+    expect(form).toContain('cvv=***')
+  })
 })

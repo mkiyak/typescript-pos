@@ -67,6 +67,21 @@ describe('errors', () => {
       expect(new E.OrderMismatchError('amount', '1', '2').paymentMayHaveCompleted).toBe(false)
     })
 
+    // addition: a response flagged for manual review always counts as possibly completed
+    it.each([
+      [true, true],
+      [false, false],
+    ])('declined VPS-1005 with requires_manual_review %s -> %s', (flag, expected) => {
+      const response = {
+        ...base,
+        status: 'declined' as const,
+        proc_return_code: 'VPS-1005',
+        requires_manual_review: flag,
+      }
+      const e = new E.OrderMismatchError('order_id', 'a', 'b', response)
+      expect(e.paymentMayHaveCompleted).toBe(expected)
+    })
+
     it.each([
       ['approved', '00', true],
       ['approved', null, true],

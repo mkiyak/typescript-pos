@@ -31,6 +31,10 @@ const SENSITIVE_KEYS = new Set([
   'cardexpiredateyear',
   'refundpassword',
   'refund_password',
+  'auth-hash',
+  'authhash',
+  'creditcard',
+  'expireddate',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -54,11 +58,19 @@ const SENSITIVE_TAGS = [
   'cardcvv2',
   'cardexpiredatemonth',
   'cardexpiredateyear',
+  'expiredDate',
+  'creditCard',
+  'SecretKey',
+  'StoreKey',
 ]
 const XML_PATTERN = new RegExp(`(<(${SENSITIVE_TAGS.join('|')})(?:\\s[^>]*)?>)[^<]*(</\\2\\s*>)`, 'gi')
 const QUERY_PATTERN = new RegExp(`(?<![A-Za-z0-9_])(${SENSITIVE_TAGS.join('|')})=[^&\\s"']*`, 'gi')
-// JSON-encoded pairs inside strings: "Password" : "value" (escaped quotes allowed in the value).
-const JSON_PATTERN = new RegExp(`"(${SENSITIVE_TAGS.join('|')})"\\s*:\\s*"(?:[^"\\\\]|\\\\.)*"`, 'gi')
+// JSON-encoded pairs inside strings: "Password" : "value" (escaped quotes allowed in the value) or a bare number
+// such as "cvv2":123.
+const JSON_PATTERN = new RegExp(
+  `"(${SENSITIVE_TAGS.join('|')})"\\s*:\\s*(?:"(?:[^"\\\\]|\\\\.)*"|-?\\d[\\d.eE+-]*)`,
+  'gi',
+)
 
 function maskString(value: string): string {
   return value

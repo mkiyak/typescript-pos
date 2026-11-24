@@ -2,6 +2,7 @@ import { inspect } from 'node:util'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { MissingAccountInfoError, type OrderMismatchField, PosError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
+import { AkbankPosAccount } from '../../../src/model/account/AkbankPosAccount.js'
 import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js'
 import { GarantiPosAccount } from '../../../src/model/account/GarantiPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
@@ -126,6 +127,38 @@ describe('createGarantiPosAccount', () => {
     expect(CARD_CLASS.CREDIT).toBe('credit')
     expect(CARD_CLASS.DEBIT).toBe('debit')
   })
+
+  it('createAkbankPosAccount with sub merchant', () => {
+    const a = AccountFactory.createAkbankPosAccount('akbank-pos', '1', 'APIUSER', 'kdsnsksl', 'SUB1')
+    expect(a).toBeInstanceOf(AkbankPosAccount)
+    expect(a.getBankName()).toBe('akbank-pos')
+    expect(a.getMerchantId()).toBe('1')
+    expect(a.getTerminalId()).toBe('APIUSER')
+    expect(a.getSecretKey()).toBe('kdsnsksl')
+    expect(a.getSubMerchantId()).toBe('SUB1')
+  })
+
+  it('createAkbankPosAccount without sub merchant', () => {
+    const a = AccountFactory.createAkbankPosAccount('akbank-pos', '1', 'APIUSER', 'kdsnsksl')
+    expect(a.getSubMerchantId()).toBeNull()
+  })
+
+  // addition: empty or blank credentials are missing, not signed as empty strings
+  it.each([
+    ['merchant', ['', 'T', 'S']],
+    ['merchant', ['  ', 'T', 'S']],
+    ['terminal', ['M', '', 'S']],
+    ['terminal', ['M', '  ', 'S']],
+    ['secret', ['M', 'T', '']],
+    ['secret', ['M', 'T', '  ']],
+  ] as const)('createAkbankPosAccount rejects a blank %s', (_n, [m, t, s]) => {
+    expect(() => AccountFactory.createAkbankPosAccount('akbank-pos', m, t, s)).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: a blank sub merchant id is no sub merchant
+  it.each(['', '  '])('createAkbankPosAccount maps sub merchant %j to null', (sub) => {
+    expect(AccountFactory.createAkbankPosAccount('akbank-pos', 'M', 'T', 'S', sub).getSubMerchantId()).toBeNull()
+  })
 })
 
 describe('account credential leakage', () => {
@@ -146,13 +179,15 @@ describe('account credential leakage', () => {
           'refund-pass',
         ),
     ],
+    ['Akbank', () => AccountFactory.createAkbankPosAccount('akbank-pos', 'mid', 'APIUSER', 'kdsnsksl', 'SUB1')],
   ] as const
 
   it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
     const a = make()
     const outputs = [JSON.stringify(a), JSON.stringify(maskSensitiveData(a)), inspect(a, { depth: 5 })]
     for (const out of outputs) {
-      for (const secret of ['PW1', 'SK1', 'USER1', 'TERM1', 'PROVRFN', 'refund-pass']) expect(out).not.toContain(secret)
+      for (const secret of ['PW1', 'SK1', 'USER1', 'TERM1', 'PROVRFN', 'refund-pass', 'kdsnsksl', 'APIUSER'])
+        expect(out).not.toContain(secret)
     }
     expect(JSON.stringify(a)).toContain('mid')
   })

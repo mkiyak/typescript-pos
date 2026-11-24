@@ -60,4 +60,13 @@ describe('AbstractQueryRequestDataMapper', () => {
     expect(Object.keys(input)).toEqual(['b', 'Password', 'N', 'Z'])
     expect(input.N).toBeUndefined()
   })
+
+  // addition: a "__proto__" key from parsed JSON stays an own data property
+  it('keeps a __proto__ key as own data and never touches the prototype', () => {
+    const result = mapper.merge(JSON.parse('{"__proto__":{"x":1},"a":1}'), { t: '2' })
+    expect(Object.hasOwn(result, '__proto__')).toBe(true)
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype)
+    expect((result as { x?: unknown }).x).toBeUndefined()
+    expect(result.t).toBe('2')
+  })
 })

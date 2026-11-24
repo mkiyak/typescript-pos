@@ -1,9 +1,10 @@
 import { MissingAccountInfoError } from '../errors.js'
+import { AkbankPosAccount } from '../model/account/AkbankPosAccount.js'
 import { AssecoPosAccount } from '../model/account/AssecoPosAccount.js'
 import { GarantiPosAccount } from '../model/account/GarantiPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 
-/** Account factories for the Asseco, PayFlex and Garanti gateways. */
+/** Account factories for the Asseco, PayFlex, Garanti and Akbank gateways. */
 export const AccountFactory = {
   createAssecoPosAccount(
     bank: string,
@@ -52,5 +53,15 @@ export const AccountFactory = {
       refundUsername,
       refundPassword,
     )
+  },
+
+  createAkbankPosAccount(
+    bank: string,
+    merchantSafeId: string,
+    terminalSafeId: string,
+    secretKey: string,
+    subMerchantId: string | null = null,
+  ): AkbankPosAccount {
+    return new AkbankPosAccount(bank, merchantSafeId, terminalSafeId, secretKey, subMerchantId)
   },
 } as const

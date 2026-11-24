@@ -44,7 +44,8 @@ export class OrderMismatchError extends PosError {
   readonly response?: PosResponse
   /**
    * `true` when the bank reported the callback as a completed payment (`status === 'approved'` or
-   * `proc_return_code === '00'`) although it does not belong to this order: the card may have been charged.
+   * `proc_return_code === '00'`), or when the mapped response is already flagged `requires_manual_review` (the host
+   * approved although the API declined), although it does not belong to this order: the card may have been charged.
    * Alert, then void or refund it. `response.requires_manual_review` is also `true` in that case.
    * Always `false` when no response is attached.
    */
@@ -56,7 +57,8 @@ export class OrderMismatchError extends PosError {
     this.expected = expected
     this.actual = actual
     this.paymentMayHaveCompleted =
-      response !== undefined && (response.status === 'approved' || response.proc_return_code === '00')
+      response !== undefined &&
+      (response.status === 'approved' || response.proc_return_code === '00' || response.requires_manual_review === true)
     if (response !== undefined) {
       this.response = { ...response, all: maskSensitiveData(response.all) }
       if (this.paymentMayHaveCompleted) this.response.requires_manual_review = true

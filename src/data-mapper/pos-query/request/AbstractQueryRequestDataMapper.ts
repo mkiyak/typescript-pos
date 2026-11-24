@@ -11,6 +11,11 @@ function unsupported(queryType: QueryType): UnsupportedTransactionTypeError {
   return new UnsupportedTransactionTypeError(`Query type [${queryType}] is not supported.`)
 }
 
+/** Plain assignment would turn a parsed `__proto__` key into a prototype change; this always creates an own property. */
+function define(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
+}
+
 /**
  * Base query request mapper. It takes no hooks: the query class dispatches them, so the mapper only
  * builds data. Concrete classes also declare `static supports(gatewayClass: string): boolean`.
@@ -73,11 +78,11 @@ export abstract class AbstractQueryRequestDataMapper<A extends AbstractPosAccoun
     const result: Record<string, unknown> = {}
     for (const key of Object.keys(requestData)) {
       const value = requestData[key]
-      if (value !== undefined) result[key] = value
-      else if (Object.hasOwn(accountData, key)) result[key] = accountData[key]
+      if (value !== undefined) define(result, key, value)
+      else if (Object.hasOwn(accountData, key)) define(result, key, accountData[key])
     }
     for (const key of Object.keys(accountData)) {
-      if (!Object.hasOwn(result, key)) result[key] = accountData[key]
+      if (!Object.hasOwn(result, key)) define(result, key, accountData[key])
     }
     return result
   }
