@@ -70,6 +70,7 @@ Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://g
 - [Asseco 3D Pay Hosting](https://github.com/mkiyak/typescript-pos/blob/main/guides/asseco-3d-payment.md)
 - [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
 - [VakıfBank Ortak Ödeme (3D Host / 3D Pay)](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-cp-payment.md)
+- [Sorgular (özel banka istekleri)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
 - [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Diğer işlemler: `pos.cancel(order)`, `pos.refund(order)` (`order.order_amount` verilmiş ve `order.amount` ondan
@@ -137,6 +138,21 @@ PayFlex notları (ayrıntılar [PayFlex kılavuzunda](https://github.com/mkiyak/
 iptal ve iade, `order.ip` verilmezse `ClientIp` alanını boş gönderir (bu alanı verin); boş bir `MdStatus` hiç
 gönderilmemiş sayılır; birden fazla kayıt dönen bir durum sorgusu (`Search`) cevabı `declined` ve boş alanlarla
 eşlenir, bu siparişleri kendi kayıtlarınızla mutabık kılın.
+
+## Sorgular
+
+Tek bir siparişe bağlı olmayan istekler, durumsuz bir sorgu nesnesinden geçer. Gateway gibi oluşturulur; kimlik bilgileri sizin yerinize eklenir.
+
+```ts
+import { PosQueryFactory } from 'typescript-pos'
+
+const query = PosQueryFactory.createPosQuery(account, posProductionConfig)
+const answer = await query.customQuery({ TransactionId: transactionId }) // çözülmüş, normalize edilmemiş
+```
+
+Özel URL'ler `https:` olmalı ve yapılandırılmış bir banka origin'inde (ya da `allowedApiOrigins` ile verdiğiniz bir origin'de)
+olmalıdır. Mevcut gateway'lerde (Asseco, PayFlex V4, VakıfBank Ortak Ödeme) yalnız `customQuery` sunulur; `history`, taksit ve
+BIN sorguları `UnsupportedTransactionTypeError` ile reddedilir. Ayrıntı için [sorgular kılavuzuna](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md) bakın.
 
 ## Tasarım
 

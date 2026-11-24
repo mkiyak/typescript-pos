@@ -69,6 +69,7 @@ Complete, compile-checked versions with error handling live in [`examples/`](htt
 - [Asseco 3D Pay Hosting](https://github.com/mkiyak/typescript-pos/blob/main/guides/asseco-3d-payment.md)
 - [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
 - [VakıfBank Common Payment (3D Host / 3D Pay)](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-cp-payment.md)
+- [Queries (custom bank requests)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
 - [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Other operations: `pos.cancel(order)`, `pos.refund(order)` (partial when `order.order_amount` is set and
@@ -134,6 +135,21 @@ PayFlex notes (details in the [PayFlex guide](https://github.com/mkiyak/typescri
 cancel and refund send `ClientIp` empty without `order.ip` (pass it); an empty `MdStatus` counts as absent; a status
 `Search` answer with several records is mapped as `declined` with empty fields, so reconcile those from your own
 records.
+
+## Queries
+
+Requests that are not tied to one order go through a stateless query object. Create it like a gateway; credentials are added for you.
+
+```ts
+import { PosQueryFactory } from 'typescript-pos'
+
+const query = PosQueryFactory.createPosQuery(account, posProductionConfig)
+const answer = await query.customQuery({ TransactionId: transactionId }) // decoded, not normalized
+```
+
+Custom URLs must be `https:` on a configured bank origin (or one you list in `allowedApiOrigins`). For the current gateways
+(Asseco, PayFlex V4, VakıfBank Common Payment) only `customQuery` is offered; `history`, installment and BIN queries reject
+with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md).
 
 ## Design
 
