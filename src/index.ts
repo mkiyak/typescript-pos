@@ -3,6 +3,15 @@ export type { ShippedPosConfig } from './config/freezeConfig.js'
 export { type PosProductionBank, posProductionConfig } from './config/posProductionConfig.js'
 export { type PosTestBank, posTestConfig } from './config/posTestConfig.js'
 export type { CryptInterface } from './crypt/CryptInterface.js'
+export type { QueryRequestDataMapperInterface } from './data-mapper/pos-query/request/QueryRequestDataMapperInterface.js'
+export type {
+  BinListResponse,
+  InstallmentPricesResponse,
+  InstallmentRatesResponse,
+  PosQueryHistoryResponse,
+  QueryResponseDataMapperInterface,
+  QueryStatus,
+} from './data-mapper/pos-query/response/QueryResponseDataMapperInterface.js'
 export type { RequestDataMapperInterface } from './data-mapper/request/mapper/RequestDataMapperInterface.js'
 export type { RequestValueFormatterInterface } from './data-mapper/request/value-formatter/RequestValueFormatterInterface.js'
 export type {
@@ -31,6 +40,7 @@ export {
 export { AccountFactory } from './factory/AccountFactory.js'
 export { type AbstractGatewayLike, CreditCardFactory } from './factory/CreditCardFactory.js'
 export { type PosConfig, PosFactory, type PosFactoryOptions } from './factory/PosFactory.js'
+export { PosQueryFactory, type PosQueryFactoryOptions } from './factory/PosQueryFactory.js'
 export {
   AbstractGateway,
   type GatewayConfig,
@@ -61,12 +71,19 @@ export {
   TX_TYPE,
   type TxType,
 } from './PosInterface.js'
+export { AbstractMappedPosQuery, type MappedPosQueryDeps } from './pos-query/AbstractMappedPosQuery.js'
+export { AbstractPosQuery, type PosQueryDeps } from './pos-query/AbstractPosQuery.js'
+export { AssecoPosQuery } from './pos-query/AssecoPosQuery.js'
+export { PayFlexCPV4PosQuery } from './pos-query/PayFlexCPV4PosQuery.js'
+export { PayFlexV4PosQuery } from './pos-query/PayFlexV4PosQuery.js'
+export { type PosQueryInterface, QUERY_TYPE, type QueryType } from './pos-query/PosQueryInterface.js'
 export type { EncodedData } from './serializer/EncodedData.js'
 export type {
   Before3DFormHashCalculatedEvent,
   GatewayResponseData,
   PosHooks,
   PosOrder,
+  PosQueryRequestDataPreparedEvent,
   PosResponse,
   RequestDataPreparedEvent,
   ThreeDFormData,

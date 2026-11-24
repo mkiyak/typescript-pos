@@ -6,7 +6,11 @@ import type {
   EncodedData,
   GatewayConfig,
   GatewayDeps,
+  PosHooks,
+  PosQueryDeps,
+  PosQueryRequestDataPreparedEvent,
   PosTestBank,
+  QueryRequestDataMapperInterface,
   RecurringFrequency,
   RequestDataMapperInterface,
   RequestTxTypeMappings,
@@ -58,6 +62,13 @@ describe('public index', () => {
         'noopLogger',
         'maskSensitiveData',
         'VERSION',
+        'QUERY_TYPE',
+        'PosQueryFactory',
+        'AbstractPosQuery',
+        'AbstractMappedPosQuery',
+        'AssecoPosQuery',
+        'PayFlexV4PosQuery',
+        'PayFlexCPV4PosQuery',
       ]),
     )
   })
@@ -91,5 +102,25 @@ describe('public index', () => {
       mod.posTestConfig,
     )
     expect(gatewayLike.getCardTypeMapping()).toBeTypeOf('object')
+  })
+
+  it('PosQueryFactory creates queries from the shipped test config', () => {
+    const cp = mod.AccountFactory.createPayFlexPosAccount('vakifbank-cp', 'm', 'p', 't')
+    expect(mod.PosQueryFactory.createPosQuery(cp, mod.posTestConfig)).toBeInstanceOf(mod.PayFlexCPV4PosQuery)
+    const asseco = mod.AccountFactory.createAssecoPosAccount('asseco', 'c', 'u', 'p', 'k')
+    expect(mod.PosQueryFactory.createPosQuery(asseco, mod.posTestConfig)).toBeInstanceOf(mod.AssecoPosQuery)
+  })
+
+  it('exports the query types', () => {
+    expectTypeOf<PosQueryDeps['requestDataMapper']>().toEqualTypeOf<QueryRequestDataMapperInterface>()
+    expectTypeOf<NonNullable<PosHooks['onPosQueryRequestDataPrepared']>[number]>()
+      .parameter(0)
+      .toEqualTypeOf<PosQueryRequestDataPreparedEvent>()
+  })
+
+  it('keeps gateway orderHistory and query history apart', () => {
+    expect('history' in mod.AbstractGateway.prototype).toBe(false)
+    expect('orderHistory' in mod.AbstractPosQuery.prototype).toBe(false)
+    expect('orderHistory' in mod.AbstractGateway.prototype).toBe(true)
   })
 })
