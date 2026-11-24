@@ -3,6 +3,7 @@ import { AkbankPosHttpClient } from '../../../src/client/AkbankPosHttpClient.js'
 import { AssecoPosHttpClient } from '../../../src/client/AssecoPosHttpClient.js'
 import { GarantiPosHttpClient } from '../../../src/client/GarantiPosHttpClient.js'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
+import { InterPosHttpClient } from '../../../src/client/InterPosHttpClient.js'
 import { PayFlexCPV4PosHttpClient } from '../../../src/client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClient.js'
@@ -36,6 +37,15 @@ const payForConfig: GatewayConfig = {
     payment_api: 'https://vpostest.qnb.com.tr/Gateway/XMLGate.aspx',
     gateway_3d: 'https://vpostest.qnb.com.tr/Gateway/Default.aspx',
     gateway_3d_host: 'https://vpostest.qnb.com.tr/Gateway/3DHost.aspx',
+  },
+}
+
+const interConfig: GatewayConfig = {
+  name: 'Denizbank-InterPos',
+  class: 'InterPos',
+  gateway_endpoints: {
+    payment_api: 'https://test.inter-vpos.com.tr/mpi/Default.aspx',
+    gateway_3d: 'https://test.inter-vpos.com.tr/mpi/3DHost.aspx',
   },
 }
 
@@ -107,6 +117,25 @@ describe('PosHttpClientStrategyFactory', () => {
     const strategy = PosHttpClientStrategyFactory.createForGateway('PayForPos', payForConfig, transport, noopLogger)
     expect(strategy.getClient('3d_form_build', '3d')).toBeInstanceOf(PayForPos3DFormHttpClient)
     expect(strategy.getClient('status', 'regular')).toBeInstanceOf(PayForPosHttpClient)
+  })
+
+  it('wires InterPos with its payment client', () => {
+    expect(classesOf('InterPos', interConfig)).toEqual([InterPosHttpClient])
+    expect(InterPosHttpClient.supports('InterPos', 'payment_api')).toBe(true)
+  })
+
+  // addition: the payment endpoint is required, never a request to "undefined"
+  it('requires the payment_api endpoint of InterPos', () => {
+    const config = { ...interConfig, gateway_endpoints: { gateway_3d: 'https://x.example/3d' } as never }
+    expect(() => classesOf('InterPos', config)).toThrow(PosError)
+    expect(() => classesOf('InterPos', config)).toThrow(/Endpoint \[payment_api\] is required for/)
+  })
+
+  // addition: the strategy routes every InterPos transaction to the one client
+  it('routes InterPos transactions to its client', () => {
+    const strategy = PosHttpClientStrategyFactory.createForGateway('InterPos', interConfig, transport, noopLogger)
+    expect(strategy.getClient('status', 'regular')).toBeInstanceOf(InterPosHttpClient)
+    expect(strategy.getClient('pay', '3d')).toBeInstanceOf(InterPosHttpClient)
   })
 
   it('wires AkbankPos with its signing payment client', () => {

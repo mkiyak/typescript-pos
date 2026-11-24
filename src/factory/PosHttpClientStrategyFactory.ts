@@ -3,6 +3,7 @@ import { AssecoPosHttpClient } from '../client/AssecoPosHttpClient.js'
 import { GarantiPosHttpClient } from '../client/GarantiPosHttpClient.js'
 import { HttpClientStrategy } from '../client/HttpClientStrategy.js'
 import type { HttpTransport } from '../client/HttpTransport.js'
+import { InterPosHttpClient } from '../client/InterPosHttpClient.js'
 import { PayFlexCPV4PosHttpClient } from '../client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../client/PayFlexV4PosHttpClient.js'
@@ -100,6 +101,10 @@ export const PosHttpClientStrategyFactory = {
             logger,
             new PosNetV1PosRequestValueMapper(),
           ),
+        ])
+      case 'InterPos':
+        return new HttpClientStrategy([
+          new InterPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
         ])
       case 'AkbankPos': {
         const account = signing?.account
