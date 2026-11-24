@@ -10,6 +10,9 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
     without `Hash` is rejected only with `require_3d_hash: true`; otherwise (and for declined callbacks, which are
     mapped without a provision request) the defence is the strict 3D rule, the order-binding guard and the bank's
     own CAVV / MpiTransactionId checks at provision time.
+- **Garanti.** The callback signature cannot be disabled and signed callbacks must carry the bank's fixed field list;
+  an approved payment is never accepted from an unsigned callback (`require_3d_hash: true` also rejects unsigned
+  declines), and the callback's terminal id and order id must equal your account and order (`OrderMismatchError`).
 - **Order binding.** Asseco 3D callbacks must carry your order id, amount and the storetype of the payment model they
   are completed with; PayFlex callbacks must carry your amount, currency and merchant id (`OrderMismatchError`
   otherwise).

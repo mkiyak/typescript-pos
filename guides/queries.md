@@ -31,6 +31,7 @@ replaces the other.
 | `AssecoPosQuery` | yes | no | no | no | no |
 | `PayFlexV4PosQuery` | yes | no | no | no | no |
 | `PayFlexCPV4PosQuery` | yes | no | no | no | no |
+| `GarantiPosQuery` | yes | yes | no | no | yes |
 
 A query the bank class does not offer rejects with `UnsupportedTransactionTypeError`; it never throws synchronously.
 Check first when the choice is dynamic:
@@ -52,6 +53,7 @@ the bank's field names back.
 | `AssecoPos` | `Name`, `Password`, `ClientId` | `CC5Request` XML (ISO-8859-9) | `payment_api` |
 | `PayFlexV4Pos` | `MerchantId`, `Password`, `TerminalNo` | `VposRequest` XML in the `prmstr` form field | `payment_api` |
 | `PayFlexCPV4Pos` | `HostMerchantId`, `MerchantId`, `Password` | JSON | `payment_api` + `/GetVposTransaction` |
+| `GarantiPos` | `Mode`, `Version`, `Terminal` and `Terminal.HashData` (each only when missing) | `GVPSRequest` XML | `payment_api` |
 
 For a sub-dealer account `MerchantId` is the sub-merchant id, otherwise `'1'`.
 
@@ -69,6 +71,24 @@ const card = await assecoQuery.customQuery({
 ```
 
 The optional second argument targets another URL, see the next section.
+
+## Garanti: `history` and `getBinList`
+
+```ts
+const query = PosQueryFactory.createPosQuery(garantiAccount, posProductionConfig)
+
+// Transactions of a date range (at most 30 days apart)
+const list = await query.history({ ip: '203.0.113.10', start_date: new Date('2026-11-01T00:00:00+03:00'), end_date: new Date('2026-11-15T00:00:00+03:00') })
+// list.status, list.trans_count, list.transactions[]: order_id, ref_ret_num, auth_code, proc_return_code, order_status,
+// transaction_type, payment_model, currency, first_amount, masked_number, transaction_time, ...
+
+// BIN records, optionally filtered
+const bins = await query.getBinList({ ip: '203.0.113.10', bin: '424242', card_class: CARD_CLASS.CREDIT })
+// bins.status, bins.bin_list[]: bin, bank_code, bank_name, card_type, card_class
+```
+
+A declined answer has `status: 'declined'`, an empty list and the bank's message in `error_message`. The raw decoded
+answer is always in `all`.
 
 ## Custom URLs are restricted
 

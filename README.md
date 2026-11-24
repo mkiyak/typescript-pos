@@ -16,6 +16,7 @@ ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
 | `AssecoPos`    | İş Bankası, Ziraat (Asseco), Akbank (Asseco), Halkbank, TEB, Şekerbank, QNB Finansbank (Asseco) | Unit-tested; the 3D hash is differential-tested against PHP (0 mismatches in 1000 random sets).                                                                                                      |
 | `PayFlexV4Pos` | VakıfBank (port 8443), Ziraat (PayFlex)                                                       | Unit-tested. VakıfBank public TEST environment, verified live on 2026-11-23: 3D enrollment (Status `Y`), non-3D Sale (`0000`) and Cancel (`0000`). |
 | `PayFlexCPV4Pos` | VakıfBank (Common Payment hosted page, port 8443) | Unit-tested. |
+| `GarantiPos` | Garanti BBVA | Unit-tested; hashes and amount format differential-tested against PHP. |
 
 ## Install
 
@@ -69,6 +70,7 @@ Complete, compile-checked versions with error handling live in [`examples/`](htt
 - [Asseco 3D Pay Hosting](https://github.com/mkiyak/typescript-pos/blob/main/guides/asseco-3d-payment.md)
 - [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
 - [VakıfBank Common Payment (3D Host / 3D Pay)](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-cp-payment.md)
+- [Garanti BBVA 3D payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/garanti-3d-payment.md)
 - [Queries (custom bank requests)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
 - [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
@@ -147,8 +149,8 @@ const query = PosQueryFactory.createPosQuery(account, posProductionConfig)
 const answer = await query.customQuery({ TransactionId: transactionId }) // decoded, not normalized
 ```
 
-Custom URLs must be `https:` on a configured bank origin (or one you list in `allowedApiOrigins`). For the current gateways
-(Asseco, PayFlex V4, VakıfBank Common Payment) only `customQuery` is offered; `history`, installment and BIN queries reject
+Custom URLs must be `https:` on a configured bank origin (or one you list in `allowedApiOrigins`). `GarantiPos` also supports `history` and `getBinList`. For Asseco, PayFlex V4 and
+VakıfBank Common Payment only `customQuery` is offered; the other queries reject
 with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md).
 
 ## Design
