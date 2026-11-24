@@ -11,6 +11,8 @@ import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
+import { PosNetPos } from '../../../src/gateway/PosNetPos.js'
+import { PosNetV1Pos } from '../../../src/gateway/PosNetV1Pos.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../src/PosInterface.js'
 import type { PosHooks, PosOrder } from '../../../src/types.js'
 
@@ -20,6 +22,8 @@ const payFlexAccount = (bank = 'vakifbank') =>
 
 const garantiAccount = (bank = 'garanti') =>
   AccountFactory.createGarantiPosAccount(bank, '7000679', 'PROVAUT', '123qweASD/', '30691297', '12345678')
+
+const posNetAccount = (bank = 'yapikredi') => AccountFactory.createPosNetPosAccount(bank, 'm', 't', 'p', 'k')
 
 const akbankAccount = (bank = 'akbank-pos') => AccountFactory.createAkbankPosAccount(bank, 'm', 't', 'k')
 
@@ -83,6 +87,60 @@ describe('PosFactory.createPosGateway', () => {
     expect(gateway.getAccount()).toBe(account)
     expect(gateway.getCardTypeMapping()).toStrictEqual({}) // GarantiPos has no card type mapping
     expect(gateway.isTestMode()).toBe(true)
+  })
+
+  it.each([
+    ['yapikredi', PosNetPos],
+    ['albaraka', PosNetV1Pos],
+  ] as const)('creates the %s PosNet gateway from the shipped test config', (bank, gatewayClass) => {
+    const account = posNetAccount(bank)
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(gatewayClass)
+    expect(gateway.getAccount()).toBe(account)
+    expect(gateway.getCardTypeMapping()).toStrictEqual({})
+    expect(gateway.getCurrencies()).toHaveLength(6)
+  })
+
+  // addition: the account type must fit the gateway
+  it.each([
+    ['yapikredi', 'PosNetPos'],
+    ['albaraka', 'PosNetV1Pos'],
+  ])('rejects a non-PosNet account for %s', (bank, name) => {
+    expect(() => PosFactory.createPosGateway(assecoAccount(bank), posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(assecoAccount(bank), posTestConfig)).toThrow(
+      new RegExp(`configured for ${name} and needs a PosNetPosAccount`),
+    )
+  })
+
+  // addition: the PosNet client posts the reverse request to the configured endpoint
+  it('sends a PosNetPos cancel to the test endpoint with a 24 character order id', async () => {
+    const calls: { url: string; body: string }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), body: Buffer.from(init?.body as Uint8Array).toString('latin1') })
+      return new Response('<posnetResponse><approved>0</approved></posnetResponse>', { status: 200 })
+    }) as unknown as typeof fetch
+    const gateway = PosFactory.createPosGateway(posNetAccount(), posTestConfig, { fetch: fetchImpl })
+    await gateway.cancel({ id: '1', payment_model: 'regular' } as never)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe('https://setmpos.ykb.com/PosnetWebService/XML')
+    expect(calls[0]?.body).toContain('xmldata=')
+    expect(calls[0]?.body).toContain(
+      '<reverse><transaction>sale</transaction><orderID>000000000000000000000001</orderID></reverse>',
+    )
+  })
+
+  // addition: the PosNetV1 client names the URL after the transaction
+  it('sends a PosNetV1Pos status to the TransactionInquiry URL', async () => {
+    const urls: string[] = []
+    const fetchImpl = (async (url: unknown) => {
+      urls.push(String(url))
+      return new Response('{}', { status: 200 })
+    }) as unknown as typeof fetch
+    const gateway = PosFactory.createPosGateway(posNetAccount('albaraka'), posTestConfig, { fetch: fetchImpl })
+    await gateway.status({ id: '1' } as never).catch(() => undefined)
+    expect(urls).toEqual([
+      'https://epostest.albarakaturk.com.tr/ALBMerchantService/MerchantJSONAPI.svc/TransactionInquiry',
+    ])
   })
 
   it('creates an AkbankPos gateway from the shipped test config', () => {
@@ -311,6 +369,8 @@ describe('PosFactory.createPosGateway', () => {
       PayFlexCPV4Pos: (bank: string) => payFlexAccount(bank),
       AkbankPos: (bank: string) => AccountFactory.createAkbankPosAccount(bank, 'm', 't', 'k'),
       GarantiPos: (bank: string) => AccountFactory.createGarantiPosAccount(bank, 'm', 'u', 'p', 't', 'k'),
+      PosNetPos: (bank: string) => AccountFactory.createPosNetPosAccount(bank, 'm', 't', 'p', 'k'),
+      PosNetV1Pos: (bank: string) => AccountFactory.createPosNetPosAccount(bank, 'm', 't', 'p', 'k'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

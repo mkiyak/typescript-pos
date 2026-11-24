@@ -1,10 +1,18 @@
 import { freezeConfig, type ShippedPosConfig } from './freezeConfig.js'
 
 /** Bank keys of `posTestConfig`. */
-export type PosTestBank = 'akbank-pos' | 'asseco' | 'garanti' | 'vakifbank' | 'vakifbank-cp' | 'ziraat-vpos'
+export type PosTestBank =
+  | 'akbank-pos'
+  | 'albaraka'
+  | 'asseco'
+  | 'garanti'
+  | 'vakifbank'
+  | 'vakifbank-cp'
+  | 'yapikredi'
+  | 'ziraat-vpos'
 
 /**
- * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos and AkbankPos banks (the VakifBank test API
+ * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos and PosNetV1Pos banks (the VakifBank test API
  * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it (not AkbankPos: its entry sets neither `test_mode` nor `lang`, the language comes from `order.lang`); for the
  * Asseco and PayFlex gateways the environment is selected by the endpoint URLs. The `garanti` entry sets `test_mode: true`
  * because the Garanti test environment needs `Mode TEST` in every request.
@@ -21,6 +29,14 @@ export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
         payment_api: 'https://apipre.akbank.com/api/v1/payment/virtualpos',
         gateway_3d: 'https://virtualpospaymentgatewaypre.akbank.com/securepay',
         gateway_3d_host: 'https://virtualpospaymentgatewaypre.akbank.com/payhosting',
+      },
+    },
+    albaraka: {
+      name: 'Albaraka',
+      class: 'PosNetV1Pos',
+      gateway_endpoints: {
+        payment_api: 'https://epostest.albarakaturk.com.tr/ALBMerchantService/MerchantJSONAPI.svc',
+        gateway_3d: 'https://epostest.albarakaturk.com.tr/ALBSecurePaymentUI/SecureProcess/SecureVerification.aspx',
       },
     },
     asseco: {
@@ -55,6 +71,14 @@ export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
       class: 'PayFlexCPV4Pos',
       gateway_endpoints: {
         payment_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment',
+      },
+    },
+    yapikredi: {
+      name: 'Yapıkredi',
+      class: 'PosNetPos',
+      gateway_endpoints: {
+        payment_api: 'https://setmpos.ykb.com/PosnetWebService/XML',
+        gateway_3d: 'https://setmpos.ykb.com/3DSWebService/YKBPaymentService',
       },
     },
     'ziraat-vpos': {

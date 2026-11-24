@@ -57,6 +57,9 @@ describe('public index', () => {
         'PayFlexCPV4Pos',
         'GarantiPos',
         'AkbankPos',
+        'PosNetPos',
+        'PosNetV1Pos',
+        'PosNetPosAccount',
         'AssecoPosAccount',
         'AkbankPosAccount',
         'GarantiPosAccount',
@@ -95,6 +98,15 @@ describe('public index', () => {
     const account = mod.AccountFactory.createGarantiPosAccount('garanti', 'm', 'u', 'p', 't')
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.GarantiPos)
     expect(account).toBeInstanceOf(mod.GarantiPosAccount)
+  })
+
+  // addition: both PosNet gateways are reachable from the public entry point
+  it('PosFactory creates the PosNet gateways from the shipped test config', () => {
+    const yapikredi = mod.AccountFactory.createPosNetPosAccount('yapikredi', 'm', 't', 'p', 'k')
+    expect(mod.PosFactory.createPosGateway(yapikredi, mod.posTestConfig)).toBeInstanceOf(mod.PosNetPos)
+    expect(yapikredi).toBeInstanceOf(mod.PosNetPosAccount)
+    const albaraka = mod.AccountFactory.createPosNetPosAccount('albaraka', 'm', 't', 'p', 'k')
+    expect(mod.PosFactory.createPosGateway(albaraka, mod.posTestConfig)).toBeInstanceOf(mod.PosNetV1Pos)
   })
 
   it('PosFactory creates the Akbank gateway from the shipped test config', () => {

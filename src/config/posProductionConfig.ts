@@ -4,6 +4,7 @@ import { freezeConfig, type ShippedPosConfig } from './freezeConfig.js'
 export type PosProductionBank =
   | 'akbank'
   | 'akbank-pos'
+  | 'albaraka'
   | 'finansbank'
   | 'garanti'
   | 'halkbank'
@@ -14,9 +15,10 @@ export type PosProductionBank =
   | 'vakifbank-cp'
   | 'ziraat-vpos'
   | 'ziraat-asseco'
+  | 'yapikredi'
 
 /**
- * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos and AkbankPos banks (the VakifBank
+ * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos and PosNetV1Pos banks (the VakifBank
  * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default. The `akbank-pos` entry sets no `lang` or
  * `test_mode`: AkbankPos takes the language from `order.lang` and the environment from the endpoint URLs.
  *
@@ -32,6 +34,14 @@ export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeCo
         payment_api: 'https://api.akbank.com/api/v1/payment/virtualpos',
         gateway_3d: 'https://virtualpospaymentgateway.akbank.com/securepay',
         gateway_3d_host: 'https://virtualpospaymentgateway.akbank.com/payhosting',
+      },
+    },
+    albaraka: {
+      name: 'Albaraka',
+      class: 'PosNetV1Pos',
+      gateway_endpoints: {
+        payment_api: 'https://epos.albarakaturk.com.tr/ALBMerchantService/MerchantJSONAPI.svc',
+        gateway_3d: 'https://epos.albarakaturk.com.tr/ALBSecurePaymentUI/SecureProcess/SecureVerification.aspx',
       },
     },
     akbank: {
@@ -114,6 +124,14 @@ export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeCo
         payment_api: 'https://sanalpos.ziraatbank.com.tr/v4/v3/Vposreq.aspx',
         gateway_3d: 'https://mpi.ziraatbank.com.tr/Enrollment.aspx',
         query_api: 'https://sanalpos.ziraatbank.com.tr/v4/UIWebService/Search.aspx',
+      },
+    },
+    yapikredi: {
+      name: 'Yapıkredi',
+      class: 'PosNetPos',
+      gateway_endpoints: {
+        payment_api: 'https://posnet.yapikredi.com.tr/PosnetWebService/XML',
+        gateway_3d: 'https://posnet.yapikredi.com.tr/3DSWebService/YKBPaymentService',
       },
     },
     'ziraat-asseco': {
