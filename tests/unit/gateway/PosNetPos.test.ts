@@ -1354,6 +1354,8 @@ describe('PosNetPos (end to end) callback checks before any request', () => {
     ['amount that is not a number', { id: '2020110828BC', amount: 'abc' }],
     ['negative installment', { id: '2020110828BC', amount: 100.01, installment: -1 }],
     ['fractional installment', { id: '2020110828BC', amount: 100.01, installment: 1.5 }],
+    ['exponent installment', { id: '2020110828BC', amount: 100.01, installment: '1e1' as never }],
+    ['hex installment', { id: '2020110828BC', amount: 100.01, installment: '0x10' as never }],
   ] as Array<[string, Data]>)('rejects an %s (PosError, nothing sent)', async (_name, order) => {
     const { posted, fetchImpl } = fakeBank()
     await expectRejection(pay3D(realGateway(fetchImpl), order as PosOrder, callbackC), PosError)

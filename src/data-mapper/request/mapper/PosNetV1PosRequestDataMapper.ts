@@ -5,6 +5,7 @@ import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
 import { ownValue } from '../../../util/ownValue.js'
+import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
 import { isSet, required } from '../../../util/required.js'
 import type { PosNetV1PosRequestValueFormatter } from '../value-formatter/PosNetV1PosRequestValueFormatter.js'
@@ -19,7 +20,6 @@ const MERCHANT_MAC_PARAMS = 'MerchantNo:TerminalNo'
 const PROVISION_MAC_PARAMS = 'MerchantNo:TerminalNo:SecureTransactionId:CavvData:Eci:MdStatus'
 
 /** One or two digits, as text, or a small whole number: nothing that a numeric cast would turn into a count. */
-const INSTALLMENT_TEXT = /^\d{1,2}$/
 
 /** Creates request data for the POSNET JSON API (Albaraka). */
 export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosNetPosAccount> {
@@ -310,16 +310,8 @@ export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosN
     return kurus
   }
 
-  /** Installment count: absent means none; otherwise one or two digits as text, or a whole number from 0 to 99. */
   private installment(order: PosOrder): number {
-    const raw: unknown = order.installment ?? 0
-    if (typeof raw === 'string' && INSTALLMENT_TEXT.test(raw)) {
-      return Number.parseInt(raw, 10)
-    }
-    if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= 99) {
-      return raw
-    }
-    throw new PosError('The installment count must be a whole number from 0 to 99.')
+    return parseInstallment(order.installment)
   }
 
   /** A signed 3D session value from the callback: an own string (or, where allowed, `null` meaning empty). */

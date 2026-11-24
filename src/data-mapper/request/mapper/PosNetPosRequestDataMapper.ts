@@ -4,6 +4,7 @@ import type { PosNetPosAccount } from '../../../model/account/PosNetPosAccount.j
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
+import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
 import { isSet, required } from '../../../util/required.js'
 import type { PosNetPosRequestValueFormatter } from '../value-formatter/PosNetPosRequestValueFormatter.js'
@@ -259,12 +260,7 @@ export class PosNetPosRequestDataMapper extends AbstractRequestDataMapper<PosNet
   }
 
   private installment(order: PosOrder): string {
-    const raw: unknown = order.installment ?? 0
-    const count = typeof raw === 'number' || (typeof raw === 'string' && raw.trim() !== '') ? Number(raw) : Number.NaN
-    if (!Number.isInteger(count) || count < 0) {
-      throw new PosError('The installment count must be a non-negative whole number.')
-    }
-    return this.valueFormatter.formatInstallment(count)
+    return this.valueFormatter.formatInstallment(parseInstallment(order.installment))
   }
 
   private text(value: unknown, name: string): string {

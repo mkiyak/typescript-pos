@@ -405,6 +405,13 @@ describe('PosNetPosRequestDataMapper', () => {
       [1.5, 'installment'],
       [-1, 'installment'],
       ['x', 'installment'],
+      ['1e1', 'installment'],
+      [' 3 ', 'installment'],
+      ['0x10', 'installment'],
+      ['+3', 'installment'],
+      ['100', 'installment'],
+      [100, 'installment'],
+      [Number.NaN, 'installment'],
     ])('rejects %s as %s on every path', (value, field) => {
       const o = (): PosOrder => ({ ...baseOrder(), [field]: value as never, ref_ret_num: '1', id: 'A1' })
       const paths: Array<() => unknown> = [

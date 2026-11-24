@@ -21,6 +21,7 @@ import {
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
 import { ownValue } from '../util/ownValue.js'
+import { parseInstallment } from '../util/parseInstallment.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { required } from '../util/required.js'
 import { AbstractGateway, type GatewayConfig, type GatewayDeps, type SupportedTransactions } from './AbstractGateway.js'
@@ -35,9 +36,6 @@ const HEX_PACKET = /^[0-9A-Fa-f]{1,8192}$/
 const SIGNED_MD_STATUS = /^[1-4]$/
 const SIGNED_AMOUNT = /^\d{1,15}$/
 const SIGNED_CURRENCY = /^[A-Z]{2}$/
-
-/** Installment counts as the order may carry them as text. */
-const INSTALLMENT_TEXT = /^\d{1,3}$/
 
 /** Callback keys and bank values are not ours; only this much of one is echoed in errors and logs. */
 const MAX_ECHOED_LENGTH = 64
@@ -365,7 +363,7 @@ export class PosNetPos extends AbstractGateway<PosNetPosAccount> {
       xid: this.#orderIdFormatter.formatOrderId(orderId),
       amount: String(this.requestValueFormatter.formatAmount(amount)),
       currency: String(this.requestValueMapper.mapCurrency(order.currency ?? CURRENCY.TRY)),
-      installment: String(this.requestValueFormatter.formatInstallment(installmentCount(order))),
+      installment: String(this.requestValueFormatter.formatInstallment(parseInstallment(order.installment))),
     }
   }
 
@@ -423,16 +421,4 @@ export class PosNetPos extends AbstractGateway<PosNetPosAccount> {
     })
     throw new OrderMismatchError(field, expected, actual)
   }
-}
-
-/** The order's installment count: a whole number, 0 when absent. */
-function installmentCount(order: PosOrder): number {
-  const raw: unknown = order.installment ?? 0
-  const count =
-    typeof raw === 'number' ? raw : typeof raw === 'string' && INSTALLMENT_TEXT.test(raw) ? Number(raw) : Number.NaN
-  if (!Number.isInteger(count) || count < 0) {
-    throw new PosError('The installment count must be a non-negative whole number.')
-  }
-
-  return count
 }
