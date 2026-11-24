@@ -295,24 +295,11 @@ describe('AkbankPosCrypt', () => {
       })
 
       it('rejects a field list where the decisive code is not at a fixed offset', () => {
+        // the hash is the PHP-verified HMAC of the reordered fields, so only the offset rule can reject it
         const data = secureFixture()
         data.hashParams =
           'responseMessage+txnCode+responseCode+txnDateTime+merchantSafeId+terminalSafeId+orderId+secureId+secureEcomInd+secureData+secureMd'
-        data.hash = hmac(
-          [
-            data.responseMessage,
-            data.txnCode,
-            data.responseCode,
-            data.txnDateTime,
-            data.merchantSafeId,
-            data.terminalSafeId,
-            data.orderId,
-            data.secureId,
-            data.secureEcomInd,
-            data.secureData,
-            data.secureMd,
-          ].join(''),
-        )
+        data.hash = '1TQ3IjIrlerWTTrkkarFO2Wl2DzrfDkZBnH2vZcqP1xGoDAhoDJbcHRNkFliKjQa+aeXbXvgPHFeqt/OE1nS3w=='
         expect(crypt.check3DHash(account, data)).toBe(false)
       })
 
@@ -327,16 +314,35 @@ describe('AkbankPosCrypt', () => {
         expect(crypt.check3DHash(account, data)).toBe(false)
       })
 
+      // each case below is signed over the text a naive implementation would build, so only the own non-empty
+      // string check on the named fields can reject it
       it('rejects a named field that is missing', () => {
-        const data = secureFixture()
-        delete data.secureMd
+        const data = declinedFixture()
+        data.hashParams = 'responseCode+responseMessage+orderId+authCode'
+        data.hash = hmac(`${data.responseCode}${data.responseMessage}${data.orderId}`)
         expect(crypt.check3DHash(account, data)).toBe(false)
       })
 
-      it('rejects a nested value', () => {
+      it('rejects a named field that is empty', () => {
         const data = declinedFixture()
-        data.orderId = { a: 1 } as never
+        data.hashParams = 'txnCode+responseCode+responseMessage+orderId'
+        data.hash = hmac(`${data.responseCode}${data.responseMessage}${data.orderId}`)
+        expect(data.txnCode).toBe('')
         expect(crypt.check3DHash(account, data)).toBe(false)
+      })
+
+      it.each([
+        ['an object', { a: '1' }, '[object Object]'],
+        ['an array', ['1'], '1'],
+      ])('rejects %s as a named field value', (_name, value, naive) => {
+        const data = declinedFixture()
+        data.orderId = value as never
+        data.hash = hmac(`${data.responseCode}${data.responseMessage}${naive}`)
+        expect(crypt.check3DHash(account, data)).toBe(false)
+      })
+
+      it('has no recursive hash helper', () => {
+        expect(() => crypt.hashFromParams(account, declinedFixture(), 'responseCode', '+')).toThrow(NotImplementedError)
       })
 
       it.each([

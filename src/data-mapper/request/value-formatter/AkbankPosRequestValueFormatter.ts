@@ -14,6 +14,9 @@ export class AkbankPosRequestValueFormatter implements RequestValueFormatterInte
 
   /** 0 => 1, 1 => 1, 2 => 2 */
   formatInstallment(installment: number): number {
+    if (!Number.isInteger(installment) || installment < 0) {
+      throw new PosError(`Invalid installment: ${installment}`)
+    }
     return Math.max(installment, 1)
   }
 

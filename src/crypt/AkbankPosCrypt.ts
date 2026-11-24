@@ -97,6 +97,16 @@ export class AkbankPosCrypt extends AbstractCrypt<AkbankPosAccount> {
     throw new NotImplementedError('AkbankPos requests are signed through hashString.')
   }
 
+  /** The inherited helper appends the secret and searches nested data; both are wrong for this bank. */
+  override hashFromParams(
+    _account: AkbankPosAccount,
+    _data: Record<string, unknown>,
+    _hashParamsValue: string,
+    _paramSeparator = ':',
+  ): string {
+    throw new NotImplementedError('AkbankPos callbacks are verified through check3DHash.')
+  }
+
   /** Base64 of the HMAC-SHA512 of `str` under the secret key. */
   override hashString(str: string, encryptionKey: string | null = null): string {
     const key = this.requireKey(encryptionKey)

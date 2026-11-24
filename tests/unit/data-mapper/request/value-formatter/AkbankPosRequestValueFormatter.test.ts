@@ -26,6 +26,11 @@ describe('AkbankPosRequestValueFormatter', () => {
     expect(formatter.formatInstallment(installment)).toBe(expected)
   })
 
+  // addition: a malformed installment is rejected instead of being sent
+  it.each([Number.NaN, 1.5, -1, Number.POSITIVE_INFINITY])('formatInstallment rejects %s', (installment) => {
+    expect(() => formatter.formatInstallment(installment)).toThrow(PosError)
+  })
+
   it.each([
     [1.1, '1.10'],
     [1.0, '1.00'],
