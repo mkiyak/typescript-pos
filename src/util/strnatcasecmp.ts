@@ -1,5 +1,5 @@
 /**
- * Port of PHP's strnatcasecmp().
+ * Same result as PHP's strnatcasecmp().
  *
  * Reference: php-src ext/standard/strnatcmp.c (PHP 8.x), functions
  * compare_right(), compare_left() and strnatcmp_ex(a, b, fold_case = 1).

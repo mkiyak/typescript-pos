@@ -3,7 +3,7 @@
 Gateway `PayFlexV4Pos`. Complete compile-checked code: [`examples/payflex-3d-secure.ts`](https://github.com/mkiyak/typescript-pos/blob/main/examples/payflex-3d-secure.ts).
 
 Status: unit-tested. Verified live against the VakıfBank public TEST environment (port 8443) on 2026-11-23:
-3D enrollment (Status `Y`), non-3D Sale (`0000`) and Cancel (`0000`). Test it with your own merchant before going live.
+3D enrollment (Status `Y`), non-3D Sale (`0000`) and Cancel (`0000`).
 
 ## PCI scope
 
