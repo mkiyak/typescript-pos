@@ -7,6 +7,7 @@ import { PayFlexCPV4PosHttpClient } from '../../../src/client/PayFlexCPV4PosHttp
 import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../../../src/client/PayFlexV4PosSearchApiHttpClient.js'
+import { PosNetPosHttpClient } from '../../../src/client/PosNetPosHttpClient.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { AkbankPosCrypt } from '../../../src/crypt/AkbankPosCrypt.js'
 import { AssecoPosCrypt } from '../../../src/crypt/AssecoPosCrypt.js'
@@ -40,6 +41,15 @@ const akbankAccount = AccountFactory.createAkbankPosAccount(
   '2023090417500284633D137A249DBBEB',
   '3230323330393034313735303032363031353172675f357637355f3273387373745f7233725f73323333383737335f323272383774767276327672323531355f',
 )
+
+const posNetConfig: GatewayConfig = {
+  name: 'Yapıkredi',
+  class: 'PosNetPos',
+  gateway_endpoints: {
+    payment_api: 'https://setmpos.ykb.com/PosnetWebService/XML',
+    gateway_3d: 'https://setmpos.ykb.com/3DSWebService/YKBPaymentService',
+  },
+}
 
 // addition: the client wiring moved out of PosFactory, so its order and errors are pinned here
 describe('PosHttpClientStrategyFactory', () => {
@@ -132,6 +142,19 @@ describe('PosHttpClientStrategyFactory', () => {
     const { query_api: _omitted, ...endpoints } = posTestConfig.banks.vakifbank.gateway_endpoints
     expect(() => classesOf('PayFlexV4Pos', { ...posTestConfig.banks.vakifbank, gateway_endpoints: endpoints })).toThrow(
       /Endpoint \[query_api\] is required for/,
+    )
+  })
+
+  it('wires PosNetPos with its payment client', () => {
+    expect(classesOf('PosNetPos', posNetConfig)).toEqual([PosNetPosHttpClient])
+    expect(PosNetPosHttpClient.supports('PosNetPos', 'payment_api')).toBe(true)
+  })
+
+  // addition: a missing endpoint is a PosError, never a request to "undefined"
+  it('requires the payment_api endpoint of PosNetPos', () => {
+    expect(() => classesOf('PosNetPos', { ...posNetConfig, gateway_endpoints: {} as never })).toThrow(PosError)
+    expect(() => classesOf('PosNetPos', { ...posNetConfig, gateway_endpoints: {} as never })).toThrow(
+      /Endpoint \[payment_api\] is required for/,
     )
   })
 

@@ -7,6 +7,7 @@ import { PayFlexCPV4PosHttpClient } from '../client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../client/PayFlexV4PosSearchApiHttpClient.js'
+import { PosNetPosHttpClient } from '../client/PosNetPosHttpClient.js'
 import { AkbankPosCrypt } from '../crypt/AkbankPosCrypt.js'
 import type { CryptInterface } from '../crypt/CryptInterface.js'
 import { GatewayClassNotConfiguredError, PosError } from '../errors.js'
@@ -76,6 +77,10 @@ export const PosHttpClientStrategyFactory = {
       case 'GarantiPos':
         return new HttpClientStrategy([
           new GarantiPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+        ])
+      case 'PosNetPos':
+        return new HttpClientStrategy([
+          new PosNetPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
         ])
       case 'AkbankPos': {
         const account = signing?.account

@@ -53,6 +53,9 @@ export type GatewayConfig = {
    *
    * AkbankPos: no effect. The bank signs every callback; a 3D Pay / 3D Host callback without a valid hash is always
    * rejected, and an unsigned 3D Secure callback is accepted only as a decline (nothing is provisioned).
+   *
+   * PosNetPos: no effect. The browser callback carries only the bank's encrypted packets, which nothing on the
+   * merchant side can verify; the data the bank resolves from them is always MAC-verified before a provision.
    */
   require_3d_hash?: boolean
 }
