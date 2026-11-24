@@ -2,7 +2,7 @@ import { createHash, createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
-import { GatewayClassNotConfiguredError, PosError } from '../../../src/errors.js'
+import { GatewayClassNotConfiguredError, PosError, UnsupportedTransactionTypeError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import type { PosConfig } from '../../../src/factory/PosFactory.js'
 import { PosQueryFactory } from '../../../src/factory/PosQueryFactory.js'
@@ -13,12 +13,14 @@ import { AbstractPosQuery } from '../../../src/pos-query/AbstractPosQuery.js'
 import { AkbankPosQuery } from '../../../src/pos-query/AkbankPosQuery.js'
 import { AssecoPosQuery } from '../../../src/pos-query/AssecoPosQuery.js'
 import { GarantiPosQuery } from '../../../src/pos-query/GarantiPosQuery.js'
+import { InterPosQuery } from '../../../src/pos-query/InterPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../../../src/pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../../../src/pos-query/PayFlexV4PosQuery.js'
 import { PayForPosQuery } from '../../../src/pos-query/PayForPosQuery.js'
 import { PosNetPosQuery } from '../../../src/pos-query/PosNetPosQuery.js'
 import { PosNetV1PosQuery } from '../../../src/pos-query/PosNetV1PosQuery.js'
 import { XmlEncoder } from '../../../src/serializer/XmlEncoder.js'
+import type { PosHooks } from '../../../src/types.js'
 
 const assecoConfig: PosConfig = {
   banks: {
@@ -581,5 +583,95 @@ describe('PosQueryFactory with PayForPos', () => {
     expect(all).not.toContain(PAN)
     expect(all).not.toContain('"Expiry":"0125"')
     expect(all).not.toContain('"Cvv2":"123"')
+  })
+})
+
+describe('PosQueryFactory with InterPos', () => {
+  const USER_PASS = 'pw-Zk7Q'
+  const PAN = '5555444433332222'
+  const account = () => AccountFactory.createInterPosAccount('denizbank', '3123', 'InterTestApi', USER_PASS, 'gDg1N')
+  const ENDPOINT = 'https://test.inter-vpos.com.tr/mpi/Default.aspx'
+  const inquiry = { TxnType: 'StatusHistory', orgOrderId: 'o1', SecureType: 'NonSecure', Pan: PAN }
+  const ANSWER = 'ProcReturnCode=00;;Response=Approved;;ErrorMessage='
+
+  function e2e(answer = ANSWER, logger?: PosLogger, hooks?: PosHooks) {
+    const calls: Array<{ url: string; body: string; contentType: string | null }> = []
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({
+        url: String(url),
+        body: String(init?.body),
+        contentType: new Headers(init?.headers).get('content-type'),
+      })
+      return new Response(answer, { status: 200 })
+    }) as unknown as typeof fetch
+    const q = PosQueryFactory.createPosQuery(account(), posTestConfig, { fetch: fetchFn, logger, hooks })
+    return { q, calls, fetchFn }
+  }
+
+  it('creates the query class from the shipped test config', () => {
+    expect(PosQueryFactory.createPosQuery(account(), posTestConfig)).toBeInstanceOf(InterPosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('InterPos')).toBe(InterPosQuery)
+  })
+
+  it('rejects a PayForPosAccount for the denizbank bank', () => {
+    const wrong = AccountFactory.createPayForPosAccount('denizbank', 'm', 'u', 'p', 'k')
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(PosError)
+  })
+
+  it('history rejects as unsupported and sends nothing', async () => {
+    const { q, fetchFn } = e2e()
+    await expect(q.history({ transaction_date: new Date() })).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('custom query posts the form with the account fields after the caller fields and decodes the answer', async () => {
+    const { q, calls } = e2e()
+    const result = await q.customQuery(inquiry)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(ENDPOINT)
+    expect(calls[0]?.contentType).toContain('application/x-www-form-urlencoded')
+    expect(calls[0]?.body).toBe(
+      `TxnType=StatusHistory&orgOrderId=o1&SecureType=NonSecure&Pan=${PAN}&UserCode=InterTestApi&UserPass=${USER_PASS}&ShopCode=3123`,
+    )
+    expect(result).toEqual({ ProcReturnCode: '00', Response: 'Approved', ErrorMessage: '' })
+  })
+
+  it('a URL on a foreign origin rejects before anything is sent', async () => {
+    const { q, fetchFn } = e2e()
+    await expect(q.customQuery(inquiry, 'https://evil.example/x')).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('a plain http URL rejects before anything is sent', async () => {
+    const { q, fetchFn } = e2e()
+    await expect(q.customQuery(inquiry, 'http://test.inter-vpos.com.tr/mpi/Default.aspx')).rejects.toBeInstanceOf(
+      PosError,
+    )
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('masks the user password and the card number in the logged request data', async () => {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    const logger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
+    // a hook that changes the data makes the query log the initial and the updated request data
+    const hook = (e: { requestData: Record<string, unknown> }) => {
+      e.requestData.Note = 'changed'
+    }
+    const { q, calls } = e2e(ANSWER, logger, { onPosQueryRequestDataPrepared: [hook] })
+    await q.customQuery(inquiry)
+
+    // the real values did go to the bank
+    expect(calls[0]?.body).toContain(`UserPass=${USER_PASS}`)
+    expect(calls[0]?.body).toContain(`Pan=${PAN}`)
+
+    const all = JSON.stringify(lines)
+    expect(all).toContain('Request data is changed via listeners')
+    expect(all).toContain('"UserPass":"***"')
+    expect(all).toContain('"Pan":"***"')
+    expect(all).not.toContain(`"UserPass":"${USER_PASS}"`)
+    expect(all).not.toContain(USER_PASS)
+    expect(all).not.toContain(PAN)
   })
 })

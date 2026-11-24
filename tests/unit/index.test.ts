@@ -82,6 +82,7 @@ describe('public index', () => {
         'AkbankPosQuery',
         'AssecoPosQuery',
         'GarantiPosQuery',
+        'InterPosQuery',
         'PayFlexV4PosQuery',
         'PayFlexCPV4PosQuery',
         'PayForPosQuery',
@@ -173,6 +174,8 @@ describe('public index', () => {
     expect(mod.PosQueryFactory.createPosQuery(albaraka, mod.posTestConfig)).toBeInstanceOf(mod.PosNetV1PosQuery)
     const payfor = mod.AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'm', 'u', 'p', 'k')
     expect(mod.PosQueryFactory.createPosQuery(payfor, mod.posTestConfig)).toBeInstanceOf(mod.PayForPosQuery)
+    const inter = mod.AccountFactory.createInterPosAccount('denizbank', 's', 'u', 'p', 'k')
+    expect(mod.PosQueryFactory.createPosQuery(inter, mod.posTestConfig)).toBeInstanceOf(mod.InterPosQuery)
   })
 
   it('exports the query types', () => {

@@ -3,6 +3,7 @@ import { AkbankPosCrypt } from '../crypt/AkbankPosCrypt.js'
 import { AssecoPosCrypt } from '../crypt/AssecoPosCrypt.js'
 import type { CryptInterface } from '../crypt/CryptInterface.js'
 import { GarantiPosCrypt } from '../crypt/GarantiPosCrypt.js'
+import { InterPosCrypt } from '../crypt/InterPosCrypt.js'
 import { PayFlexCPV4PosCrypt } from '../crypt/PayFlexCPV4PosCrypt.js'
 import { PayFlexV4PosCrypt } from '../crypt/PayFlexV4PosCrypt.js'
 import { PayForPosCrypt } from '../crypt/PayForPosCrypt.js'
@@ -11,6 +12,7 @@ import { PosNetV1PosCrypt } from '../crypt/PosNetV1PosCrypt.js'
 import { AkbankPosRequestValueFormatter } from '../data-mapper/request/value-formatter/AkbankPosRequestValueFormatter.js'
 import { AssecoPosRequestValueFormatter } from '../data-mapper/request/value-formatter/AssecoPosRequestValueFormatter.js'
 import { GarantiPosRequestValueFormatter } from '../data-mapper/request/value-formatter/GarantiPosRequestValueFormatter.js'
+import { InterPosRequestValueFormatter } from '../data-mapper/request/value-formatter/InterPosRequestValueFormatter.js'
 import { PayFlexCPV4PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayFlexCPV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
 import { PayForPosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayForPosRequestValueFormatter.js'
@@ -20,6 +22,7 @@ import type { RequestValueFormatterInterface } from '../data-mapper/request/valu
 import { AkbankPosRequestValueMapper } from '../data-mapper/request/value-mapper/AkbankPosRequestValueMapper.js'
 import { AssecoPosRequestValueMapper } from '../data-mapper/request/value-mapper/AssecoPosRequestValueMapper.js'
 import { GarantiPosRequestValueMapper } from '../data-mapper/request/value-mapper/GarantiPosRequestValueMapper.js'
+import { InterPosRequestValueMapper } from '../data-mapper/request/value-mapper/InterPosRequestValueMapper.js'
 import { PayFlexCPV4PosRequestValueMapper } from '../data-mapper/request/value-mapper/PayFlexCPV4PosRequestValueMapper.js'
 import { PayFlexV4PosRequestValueMapper } from '../data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
 import { PayForPosRequestValueMapper } from '../data-mapper/request/value-mapper/PayForPosRequestValueMapper.js'
@@ -29,11 +32,13 @@ import type { RequestValueMapperInterface } from '../data-mapper/request/value-m
 import { AssecoPosResponseValueFormatter } from '../data-mapper/response/value-formatter/AssecoPosResponseValueFormatter.js'
 import { BasicResponseValueFormatter } from '../data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
 import { GarantiPosResponseValueFormatter } from '../data-mapper/response/value-formatter/GarantiPosResponseValueFormatter.js'
+import { InterPosResponseValueFormatter } from '../data-mapper/response/value-formatter/InterPosResponseValueFormatter.js'
 import { PosNetPosResponseValueFormatter } from '../data-mapper/response/value-formatter/PosNetPosResponseValueFormatter.js'
 import type { ResponseValueFormatterInterface } from '../data-mapper/response/value-formatter/ResponseValueFormatterInterface.js'
 import { AkbankPosResponseValueMapper } from '../data-mapper/response/value-mapper/AkbankPosResponseValueMapper.js'
 import { AssecoPosResponseValueMapper } from '../data-mapper/response/value-mapper/AssecoPosResponseValueMapper.js'
 import { GarantiPosResponseValueMapper } from '../data-mapper/response/value-mapper/GarantiPosResponseValueMapper.js'
+import { InterPosResponseValueMapper } from '../data-mapper/response/value-mapper/InterPosResponseValueMapper.js'
 import { PayFlexCPV4PosResponseValueMapper } from '../data-mapper/response/value-mapper/PayFlexCPV4PosResponseValueMapper.js'
 import { PayFlexV4PosResponseValueMapper } from '../data-mapper/response/value-mapper/PayFlexV4PosResponseValueMapper.js'
 import { PayForPosResponseValueMapper } from '../data-mapper/response/value-mapper/PayForPosResponseValueMapper.js'
@@ -47,6 +52,7 @@ import type { AbstractPosAccount } from '../model/account/AbstractPosAccount.js'
 import { AkbankPosAccount } from '../model/account/AkbankPosAccount.js'
 import { AssecoPosAccount } from '../model/account/AssecoPosAccount.js'
 import { GarantiPosAccount } from '../model/account/GarantiPosAccount.js'
+import { InterPosAccount } from '../model/account/InterPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
@@ -55,6 +61,7 @@ import type { AbstractPosQuery, PosQueryDeps } from '../pos-query/AbstractPosQue
 import { AkbankPosQuery } from '../pos-query/AkbankPosQuery.js'
 import { AssecoPosQuery } from '../pos-query/AssecoPosQuery.js'
 import { GarantiPosQuery } from '../pos-query/GarantiPosQuery.js'
+import { InterPosQuery } from '../pos-query/InterPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../pos-query/PayFlexV4PosQuery.js'
 import { PayForPosQuery } from '../pos-query/PayForPosQuery.js'
@@ -74,6 +81,7 @@ const QUERY_CLASSES = [
   AkbankPosQuery,
   AssecoPosQuery,
   GarantiPosQuery,
+  InterPosQuery,
   PayFlexCPV4PosQuery,
   PayFlexV4PosQuery,
   PayForPosQuery,
@@ -161,6 +169,17 @@ export const PosQueryFactory = {
         crypt = new GarantiPosCrypt(logger)
         responseValueFormatter = new GarantiPosResponseValueFormatter()
         responseValueMapper = new GarantiPosResponseValueMapper()
+        break
+      }
+      case 'InterPos': {
+        if (!(account instanceof InterPosAccount)) {
+          throw new PosError(`Bank [${bankName}] is configured for InterPos and needs an InterPosAccount.`)
+        }
+        requestValueMapper = new InterPosRequestValueMapper()
+        requestValueFormatter = new InterPosRequestValueFormatter()
+        crypt = new InterPosCrypt(logger)
+        responseValueFormatter = new InterPosResponseValueFormatter()
+        responseValueMapper = new InterPosResponseValueMapper()
         break
       }
       case 'PayFlexV4Pos': {
