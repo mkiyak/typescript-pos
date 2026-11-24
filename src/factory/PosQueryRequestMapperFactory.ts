@@ -9,6 +9,7 @@ import { PayForPosQueryRequestDataMapper } from '../data-mapper/pos-query/reques
 import { PosNetPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PosNetPosQueryRequestDataMapper.js'
 import { PosNetV1PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PosNetV1PosQueryRequestDataMapper.js'
 import type { QueryRequestDataMapperInterface } from '../data-mapper/pos-query/request/QueryRequestDataMapperInterface.js'
+import { VakifKatilimPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/VakifKatilimPosQueryRequestDataMapper.js'
 import type { RequestValueFormatterInterface } from '../data-mapper/request/value-formatter/RequestValueFormatterInterface.js'
 import type { RequestValueMapperInterface } from '../data-mapper/request/value-mapper/RequestValueMapperInterface.js'
 import { GatewayClassNotConfiguredError } from '../errors.js'
@@ -25,6 +26,7 @@ const REQUEST_MAPPERS = [
   PayForPosQueryRequestDataMapper,
   PosNetPosQueryRequestDataMapper,
   PosNetV1PosQueryRequestDataMapper,
+  VakifKatilimPosQueryRequestDataMapper,
 ]
 
 /** Picks the query request mapper of a gateway class. Internal: not part of the public API. */

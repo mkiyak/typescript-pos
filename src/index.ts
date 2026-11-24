@@ -99,6 +99,7 @@ export { PayForPosQuery } from './pos-query/PayForPosQuery.js'
 export { PosNetPosQuery } from './pos-query/PosNetPosQuery.js'
 export { PosNetV1PosQuery } from './pos-query/PosNetV1PosQuery.js'
 export { type PosQueryInterface, QUERY_TYPE, type QueryType } from './pos-query/PosQueryInterface.js'
+export { VakifKatilimPosQuery } from './pos-query/VakifKatilimPosQuery.js'
 export type { EncodedData } from './serializer/EncodedData.js'
 export type {
   Before3DFormHashCalculatedEvent,

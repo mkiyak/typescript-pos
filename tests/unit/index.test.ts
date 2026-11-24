@@ -91,6 +91,7 @@ describe('public index', () => {
         'PayForPosQuery',
         'PosNetPosQuery',
         'PosNetV1PosQuery',
+        'VakifKatilimPosQuery',
       ]),
     )
   })
@@ -192,6 +193,8 @@ describe('public index', () => {
     expect(mod.PosQueryFactory.createPosQuery(payfor, mod.posTestConfig)).toBeInstanceOf(mod.PayForPosQuery)
     const inter = mod.AccountFactory.createInterPosAccount('denizbank', 's', 'u', 'p', 'k')
     expect(mod.PosQueryFactory.createPosQuery(inter, mod.posTestConfig)).toBeInstanceOf(mod.InterPosQuery)
+    const vakifKatilim = mod.AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'u', 'c', 'k')
+    expect(mod.PosQueryFactory.createPosQuery(vakifKatilim, mod.posTestConfig)).toBeInstanceOf(mod.VakifKatilimPosQuery)
   })
 
   it('exports the query types', () => {

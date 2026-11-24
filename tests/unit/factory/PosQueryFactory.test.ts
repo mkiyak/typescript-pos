@@ -19,6 +19,7 @@ import { PayFlexV4PosQuery } from '../../../src/pos-query/PayFlexV4PosQuery.js'
 import { PayForPosQuery } from '../../../src/pos-query/PayForPosQuery.js'
 import { PosNetPosQuery } from '../../../src/pos-query/PosNetPosQuery.js'
 import { PosNetV1PosQuery } from '../../../src/pos-query/PosNetV1PosQuery.js'
+import { VakifKatilimPosQuery } from '../../../src/pos-query/VakifKatilimPosQuery.js'
 import { XmlEncoder } from '../../../src/serializer/XmlEncoder.js'
 import type { PosHooks } from '../../../src/types.js'
 
@@ -673,5 +674,143 @@ describe('PosQueryFactory with InterPos', () => {
     expect(all).not.toContain(`"UserPass":"${USER_PASS}"`)
     expect(all).not.toContain(USER_PASS)
     expect(all).not.toContain(PAN)
+  })
+})
+
+describe('PosQueryFactory with VakifKatilimPos', () => {
+  const PASSWORD = 'kdsnsksl'
+  const account = () => AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'APIUSER', '11111', PASSWORD)
+  const BASE = 'https://boa.vakifkatilim.com.tr/VirtualPOS.Gateway/Home'
+  const ONE_RECORD =
+    '<VPosMessageContract><ResponseCode>00</ResponseCode><ResponseMessage></ResponseMessage><VPosOrderData><OrderContract><OrderId>1</OrderId><MerchantOrderId>A1</MerchantOrderId><ResponseCode>00</ResponseCode><FEC>0949</FEC><FirstAmount>10.01</FirstAmount></OrderContract></VPosOrderData></VPosMessageContract>'
+
+  function e2e(answer: string, logger?: PosLogger, hooks?: PosHooks) {
+    const calls: Array<{ url: string; body: string }> = []
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), body: Buffer.from(init?.body as Uint8Array).toString('latin1') })
+      return new Response(answer, { status: 200 })
+    }) as unknown as typeof fetch
+    const q = PosQueryFactory.createPosQuery(account(), posTestConfig, { fetch: fetchFn, logger, hooks })
+    return { q, calls, fetchFn }
+  }
+
+  it('creates the query class from the shipped test config', () => {
+    expect(PosQueryFactory.createPosQuery(account(), posTestConfig)).toBeInstanceOf(VakifKatilimPosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('VakifKatilimPos')).toBe(VakifKatilimPosQuery)
+  })
+
+  it('rejects an InterPosAccount for the vakif-katilim bank', () => {
+    const wrong = AccountFactory.createInterPosAccount('vakif-katilim', 'm', 'u', 'p', 'k')
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(PosError)
+  })
+
+  // K11: the Kuveyt gateway has no query class
+  it('has no query for kuveytpos', () => {
+    const kuveyt = AccountFactory.createBoaPosAccount('kuveytpos', '496', 'apiuser', '400235', 'Key1')
+    expect(() => PosQueryFactory.createPosQuery(kuveyt, posTestConfig)).toThrow(GatewayClassNotConfiguredError)
+    expect(() => PosQueryFactory.createPosQuery(kuveyt, posTestConfig)).toThrow(
+      'PosQuery not found for gateway KuveytPos',
+    )
+    expect(PosQueryFactory.getPosQueryClassForGateway('KuveytPos')).toBeNull()
+  })
+
+  it('history posts the signed window to SelectOrder and maps a two-record answer', async () => {
+    const two =
+      '<VPosMessageContract><ResponseCode>00</ResponseCode><VPosOrderData><OrderContract><OrderId>1</OrderId><MerchantOrderId>A1</MerchantOrderId><ResponseCode>00</ResponseCode><FirstAmount>10.01</FirstAmount></OrderContract><OrderContract><OrderId>2</OrderId><MerchantOrderId>A2</MerchantOrderId><ResponseCode>00</ResponseCode><FirstAmount>5.00</FirstAmount></OrderContract></VPosOrderData></VPosMessageContract>'
+    const { q, calls } = e2e(two)
+    const result = await q.history({
+      start_date: new Date('2024-03-30T00:00:00+03:00'),
+      end_date: new Date('2024-03-31T00:00:00+03:00'),
+    })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(`${BASE}/SelectOrder`)
+    const body = calls[0]?.body ?? ''
+    expect(body).toContain('<StartDate>2024-03-30</StartDate><EndDate>2024-03-31</EndDate>')
+    expect(body).toMatch(/<HashData>[A-Za-z0-9+/]{27}=<\/HashData>/)
+    expect(result.status).toBe('approved')
+    expect(result.trans_count).toBe(2)
+    const orders = (result.transactions as Array<Record<string, unknown>>).map((t) => t.order_id)
+    expect(orders).toEqual(['A2', 'A1'])
+  })
+
+  it('history maps a one-record answer', async () => {
+    const { q } = e2e(ONE_RECORD)
+    const result = await q.history({
+      start_date: new Date('2024-03-30T00:00:00+03:00'),
+      end_date: new Date('2024-03-31T00:00:00+03:00'),
+    })
+    expect(result.trans_count).toBe(1)
+  })
+
+  it('custom query posts the data unchanged to the given url and returns the decoded answer', async () => {
+    const { q, calls } = e2e('<VPosMessageContract><ResponseCode>00</ResponseCode></VPosMessageContract>')
+    const result = await q.customQuery({ MerchantOrderId: 'x' }, `${BASE}/SelectOrderByMerchantOrderId`)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(`${BASE}/SelectOrderByMerchantOrderId`)
+    expect(calls[0]?.body).toContain('<MerchantOrderId>x</MerchantOrderId>')
+    expect(calls[0]?.body).not.toContain('UserName')
+    expect(calls[0]?.body).not.toContain('HashData')
+    expect(calls[0]?.body).not.toContain('MerchantId>')
+    expect(result.ResponseCode).toBe('00')
+  })
+
+  it('a custom query without a url rejects and sends nothing', async () => {
+    const { q, fetchFn } = e2e('<a/>')
+    await expect(q.customQuery({ MerchantOrderId: 'x' })).rejects.toBeInstanceOf(PosError)
+    await expect(q.customQuery({ MerchantOrderId: 'x' }, null)).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a foreign origin', 'https://evil.example/x'],
+    ['plain http', 'http://boa.vakifkatilim.com.tr/VirtualPOS.Gateway/Home/SelectOrder'],
+    ['embedded credentials', 'https://u:p@boa.vakifkatilim.com.tr/VirtualPOS.Gateway/Home/SelectOrder'],
+    ['a look-alike host', 'https://boa.vakifkatilim.com.tr.evil.example/x'],
+    ['text that is no url', 'not a url'],
+  ])('a custom query url on %s rejects and sends nothing', async (_name, url) => {
+    const { q, fetchFn } = e2e('<a/>')
+    await expect(q.customQuery({ MerchantOrderId: 'x' }, url)).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('the other queries reject as unsupported and send nothing', async () => {
+    const { q, fetchFn } = e2e('<a/>')
+    await expect(q.getBinList({})).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
+    await expect(q.getInstallmentRates({})).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
+    await expect(q.getInstallmentPrices({})).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  // the hook changes the data, so the query logs the initial and the updated request data
+  it('masks the password hash and the signature in the logged request data', async () => {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    const logger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
+    const hook = (e: { requestData: Record<string, unknown> }) => {
+      e.requestData.Note = 'changed'
+    }
+    const { q } = e2e(ONE_RECORD, logger, { onPosQueryRequestDataPrepared: [hook] })
+    await q.history({
+      start_date: new Date('2024-03-30T00:00:00+03:00'),
+      end_date: new Date('2024-03-31T00:00:00+03:00'),
+    })
+    await q.customQuery(
+      { MerchantOrderId: 'x', HashPassword: 'abc-hashed-pw', HashData: 'sig-value-1', CardNumber: '4155650100416111' },
+      `${BASE}/SelectOrderByMerchantOrderId`,
+    )
+
+    const all = JSON.stringify(lines)
+    expect(all).toContain('Request data is changed via listeners')
+    expect(all).toContain('"HashData":"***"')
+    expect(all).toContain('"HashPassword":"***"')
+    expect(all).not.toContain('"HashPassword":"abc-hashed-pw"')
+    expect(all).not.toContain('"HashData":"sig-value-1"')
+    expect(all).not.toContain('abc-hashed-pw')
+    expect(all).not.toContain('sig-value-1')
+    expect(all).not.toContain('4155650100416111')
+    expect(all).not.toContain(PASSWORD)
+    expect(all).not.toMatch(/"HashData":"[A-Za-z0-9+/]{27}="/)
   })
 })
