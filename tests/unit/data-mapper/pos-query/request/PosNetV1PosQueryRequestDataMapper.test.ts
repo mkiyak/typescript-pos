@@ -24,6 +24,8 @@ function stub() {
   return { crypt: { hashFromParams }, hashFromParams }
 }
 
+// deviation: the fixtures (account, key, MACParams lists) are the ones of the POSNET request tests, reused so both
+// mappers sign the same inputs.
 describe('PosNetV1PosQueryRequestDataMapper', () => {
   it('testSupports', () => {
     expect(PosNetV1PosQueryRequestDataMapper.supports('PosNetV1Pos')).toBe(true)

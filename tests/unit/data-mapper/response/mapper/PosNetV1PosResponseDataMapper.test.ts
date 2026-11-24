@@ -457,7 +457,8 @@ describe('PosNetV1PosResponseDataMapper', () => {
       expect(actual).not.toHaveProperty('requires_manual_review')
     })
 
-    // addition: the callback transaction type can only select a pay or pre-auth flow
+    // deviation: the callback transaction type can only select a pay or pre-auth flow (hardening, the other kinds
+    // are ignored instead of being mapped through)
     it('a callback TranType of another kind keeps the requested transaction type', () => {
       const actual: Data = realMapper().map3DPaymentData(
         { ...SUCCESS_3D_CALLBACK, TranType: 'TransactionInquiry' },
@@ -471,6 +472,7 @@ describe('PosNetV1PosResponseDataMapper', () => {
       expect(actual.amount).toBe(1.75)
     })
 
+    // deviation: same restriction as above
     it('a callback TranType of Auth selects the pre-authorisation type', () => {
       const actual: Data = realMapper().map3DPaymentData(
         { ...SUCCESS_3D_CALLBACK, TranType: 'Auth' },

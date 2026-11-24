@@ -852,6 +852,37 @@ describe('PosNetV1Pos (end to end) forged callbacks', () => {
   })
 })
 
+// addition: a bank answer without a MdErrorMessage is accepted when the signature covers the empty value
+describe('PosNetV1Pos (end to end) callback shape', () => {
+  it.each([
+    ['null', null],
+    ['absent', undefined],
+  ])('accepts a success callback with a %s MdErrorMessage', async (_name, message) => {
+    const callback: Data = { ...SUCCESS_CALLBACK }
+    if (message === undefined) {
+      delete callback.MdErrorMessage
+    } else {
+      callback.MdErrorMessage = message
+    }
+    callback.Mac = signCallback(callback)
+    const { posted, fetchImpl } = fakeBank(() => SUCCESS_PAYMENT_RESPONSE)
+
+    const result = await pay3D(realGateway(fetchImpl), SUCCESS_ORDER, callback)
+
+    expect(result.status).toBe('approved')
+    expect(posted).toHaveLength(1)
+  })
+
+  it('refuses a nested value hidden in a non-enumerable property before any request', async () => {
+    const callback: Data = { ...SUCCESS_CALLBACK }
+    Object.defineProperty(callback, 'Hidden', { value: { a: 1 }, enumerable: false })
+    const { posted, fetchImpl } = fakeBank(null)
+
+    await expectRejection(pay3D(realGateway(fetchImpl), SUCCESS_ORDER, callback), PosError)
+    expect(posted).toHaveLength(0)
+  })
+})
+
 describe('PosNetV1Pos (end to end) order binding', () => {
   const expectMismatch = async (callback: Data, order: PosOrder, field: string, account = createAccount()) => {
     const { posted, fetchImpl } = fakeBank()

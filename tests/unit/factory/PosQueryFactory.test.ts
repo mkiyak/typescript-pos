@@ -329,9 +329,11 @@ describe('PosQueryFactory with AkbankPos', () => {
 })
 
 describe('PosQueryFactory with PosNetPos and PosNetV1Pos', () => {
-  const yAccount = () => AccountFactory.createPosNetPosAccount('yapikredi', '6706598320', '67005551', '27426', 'k1')
+  const Y_KEY = 'yapikredi-secret-key-7f3a91'
+  const A_KEY = 'albaraka-secret-key-c42e08'
+  const yAccount = () => AccountFactory.createPosNetPosAccount('yapikredi', '6706598320', '67005551', '27426', Y_KEY)
   const aAccount = () =>
-    AccountFactory.createPosNetPosAccount('albaraka', '6700950031', '67540050', '1010028724242434', 'k2')
+    AccountFactory.createPosNetPosAccount('albaraka', '6700950031', '67540050', '1010028724242434', A_KEY)
   const ALBARAKA_SALE = 'https://epostest.albarakaturk.com.tr/ALBMerchantService/MerchantJSONAPI.svc/Sale'
 
   it('creates the query classes from the shipped test config', () => {
@@ -408,7 +410,7 @@ describe('PosQueryFactory with PosNetPos and PosNetV1Pos', () => {
     expect(sent.MerchantNo).toBe('6700950031')
     expect(sent.TerminalNo).toBe('67540050')
     const signed = '67009500316754005040480900000000'.concat('01')
-    expect(sent.MAC).toBe(createHash('sha256').update(`${signed}k2`, 'utf8').digest('base64'))
+    expect(sent.MAC).toBe(createHash('sha256').update(`${signed}${A_KEY}`, 'utf8').digest('base64'))
     expect(result).toEqual({ approved: '1' })
   })
 
@@ -432,7 +434,7 @@ describe('PosQueryFactory with PosNetPos and PosNetV1Pos', () => {
   it('never logs the key, the card number or the expiry', async () => {
     const lines: unknown[] = []
     const record = (...a: unknown[]) => void lines.push(a)
-    const logger = { debug: record, info: record, warning: record, error: record } as unknown as PosLogger
+    const logger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
     const y = e2e(yAccount(), xmlAnswer, logger)
     await y.q.customQuery(pointUsage)
     const a = e2e(aAccount(), '{"approved":"1"}', logger)
@@ -442,7 +444,7 @@ describe('PosQueryFactory with PosNetPos and PosNetV1Pos', () => {
     )
     expect(lines.length).toBeGreaterThan(0)
     const text = JSON.stringify(lines)
-    for (const secret of ['k1', '"k2"', '4048090000000001', '2411']) {
+    for (const secret of [Y_KEY, A_KEY, '4048090000000001', '"ExpireDate":"2411"', '<expDate>2411<']) {
       expect(text).not.toContain(secret)
     }
   })

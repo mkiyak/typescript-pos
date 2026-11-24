@@ -24,6 +24,19 @@ function expectSame(actual: unknown, expected: unknown): void {
   expect(actual).toStrictEqual(expected)
 }
 
+/** Fails on an `undefined` anywhere in the value, including keys whose value is undefined (JSON would drop them). */
+function expectNoUndefined(value: unknown, path = 'value'): void {
+  expect(value, path).not.toBeUndefined()
+  if (typeof value === 'object' && value !== null) {
+    for (const [key, inner] of Object.entries(value)) {
+      expectNoUndefined(inner, `${path}.${key}`)
+    }
+  }
+  if (typeof value === 'string') {
+    expect(value, path).not.toContain('undefined')
+  }
+}
+
 const baseOrder = (): PosOrder => ({
   id: 'TST_190620093100_024',
   amount: '1.75' as never,
@@ -246,6 +259,7 @@ describe('PosNetPosRequestDataMapper', () => {
   })
 
   describe('3D form data', () => {
+    // deviation: shortened data1/data2 values (32 characters), the form only echoes them
     const extra = {
       data1: 'AEFE78BFC852867FF57078B723E284D1',
       data2: '69D04861340091B7014B15158CA3C834',
@@ -486,7 +500,7 @@ describe('PosNetPosRequestDataMapper', () => {
           mapper.createStatusRequestData(account, { id: 'A1' }),
         ]
         for (const output of outputs) {
-          expect(JSON.stringify(output)).not.toContain('undefined')
+          expectNoUndefined(output)
         }
       })
     })
@@ -516,9 +530,12 @@ describe('PosNetPosRequestDataMapper', () => {
     })
 
     it('does not mutate the input order', () => {
-      const order = baseOrder()
+      const order = { ...baseOrder(), ref_ret_num: '019676067890000191' }
       const copy = structuredClone(order)
       crypt.createHash.mockReturnValue(MAC)
+      mapper.createCancelRequestData(account, order)
+      mapper.createRefundRequestData(account, order, TX_TYPE.REFUND)
+      mapper.createNonSecurePostAuthPaymentRequestData(account, order)
       mapper.create3DFormInitializeRequestData(account, order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card)
       mapper.create3DResolveMerchantRequestData(account, order, packets)
       mapper.create3DPaymentRequestData(account, order, TX_TYPE.PAY_AUTH, packets)

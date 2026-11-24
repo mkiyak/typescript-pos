@@ -24,6 +24,19 @@ function sorted(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 }
 
+/** Fails on an `undefined` anywhere in the value, including keys whose value is undefined (JSON would drop them). */
+function expectNoUndefined(value: unknown, path = 'value'): void {
+  expect(value, path).not.toBeUndefined()
+  if (typeof value === 'object' && value !== null) {
+    for (const [key, inner] of Object.entries(value)) {
+      expectNoUndefined(inner, `${path}.${key}`)
+    }
+  }
+  if (typeof value === 'string') {
+    expect(value, path).not.toContain('undefined')
+  }
+}
+
 const common = {
   ApiType: 'JSON',
   ApiVersion: 'V100',
@@ -714,7 +727,7 @@ describe('PosNetV1PosRequestDataMapper with the real crypt', () => {
       mapper.createRefundRequestData(account, { id: '1', amount: 1, payment_model: MODEL.NON_SECURE }, TX_TYPE.REFUND),
       mapper.create3DPaymentRequestData(account, { id: '1', amount: 1 }, TX_TYPE.PAY_AUTH, callback()),
     ]
-    expect(JSON.stringify(all)).not.toContain('undefined')
+    expectNoUndefined(all)
     expect(JSON.stringify(all)).not.toContain('NaN')
   })
 

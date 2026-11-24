@@ -245,6 +245,17 @@ describe('PosNetV1PosCrypt', () => {
       ).toBe(false)
     })
 
+    // addition: a signed field that exists only on the prototype is not the callback's own value
+    it('ignores a prototype-inherited field', () => {
+      const own = success1()
+      const inheritedName = 'SecureTransactionId'
+      const inherited = own[inheritedName]
+      delete own[inheritedName]
+      const data = Object.assign(Object.create({ [inheritedName]: inherited }) as GatewayResponseData, own)
+      expect(data[inheritedName]).toBe(inherited)
+      expect(crypt.check3DHash(account, data)).toBe(false)
+    })
+
     it('rejects a tampered MdErrorMessage', () => {
       expect(crypt.check3DHash(account, { ...success1(), MdErrorMessage: 'Authenticated ' })).toBe(false)
     })

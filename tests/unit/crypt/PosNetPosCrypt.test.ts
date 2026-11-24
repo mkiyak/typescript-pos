@@ -146,6 +146,19 @@ describe('PosNetPosCrypt', () => {
       expect(crypt.check3DHash(account, { ...e1(), [field]: '' })).toBe(false)
     })
 
+    // addition: the MAC is recomputed over the empty field, so only the emptiness check can reject it
+    it.each(['mdStatus', 'xid', 'amount', 'currency'])('rejects an empty %s even with a matching MAC', (field) => {
+      const data = { ...e1(), [field]: '' }
+      data.mac = h(
+        `${data.mdStatus};${data.xid};${data.amount};${data.currency};${account.getMerchantId()};${firstHash}`,
+      )
+      expect(crypt.check3DHash(account, data)).toBe(false)
+    })
+
+    it('hashFromParams is not implemented', () => {
+      expect(() => crypt.hashFromParams(account, {}, 'a:b', ':')).toThrow(NotImplementedError)
+    })
+
     it('returns false for a non-string field and never throws', () => {
       expect(crypt.check3DHash(account, { ...e1(), mdStatus: 1 as never })).toBe(false)
       expect(crypt.check3DHash(account, { ...e1(), xid: { a: 1 } as never })).toBe(false)
