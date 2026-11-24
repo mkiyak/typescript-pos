@@ -1,17 +1,25 @@
 import type { CardType, Currency, PaymentModel, PaymentStatus, TxType } from '../../../PosInterface.js'
+import type { QueryType } from '../../../pos-query/PosQueryInterface.js'
 
 /** Maps bank values to library values. */
 export interface ResponseValueMapperInterface {
   mapTxType(txType: string | number, paymentModel?: PaymentModel | null): TxType | null
 
   /** @param apiRequestTxType transaction type of the API request */
-  mapSecureType(securityType: string | boolean | number, apiRequestTxType?: TxType | null): PaymentModel | null
+  mapSecureType(
+    securityType: string | boolean | number,
+    apiRequestTxType?: TxType | QueryType | null,
+  ): PaymentModel | null
 
   /** @param apiRequestTxType transaction type of the API request */
-  mapCurrency(currency: string | number, apiRequestTxType?: TxType | null): Currency | null
+  mapCurrency(currency: string | number, apiRequestTxType?: TxType | QueryType | null): Currency | null
 
   /** Maps the order status of status/history responses; unmapped values are returned as is. */
-  mapOrderStatus(orderStatus: string | number): PaymentStatus | string | number
+  mapOrderStatus(
+    orderStatus: string | number,
+    requestTxType?: TxType | QueryType | null,
+    txType?: TxType | null,
+  ): PaymentStatus | string | number
 
   mapCardType(cardType: string | null): CardType | null
 

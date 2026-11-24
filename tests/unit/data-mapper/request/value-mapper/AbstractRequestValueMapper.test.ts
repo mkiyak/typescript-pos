@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { AbstractRequestValueMapper } from '../../../../../src/data-mapper/request/value-mapper/AbstractRequestValueMapper.js'
 import { NotImplementedError, PosError, UnsupportedTransactionTypeError } from '../../../../../src/errors.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../../../src/PosInterface.js'
+import { QUERY_TYPE } from '../../../../../src/pos-query/PosQueryInterface.js'
 
 class MappedValueMapper extends AbstractRequestValueMapper {
   protected override txTypeMappings = {
@@ -14,11 +15,20 @@ class MappedValueMapper extends AbstractRequestValueMapper {
   protected override recurringOrderFrequencyMappings = { DAY: 'D' }
 }
 
+class QueryValueMapper extends AbstractRequestValueMapper {
+  protected override txTypeMappings = { [QUERY_TYPE.HISTORY]: 'orderlistinq' }
+}
+
 class EmptyValueMapper extends AbstractRequestValueMapper {}
 
 describe('AbstractRequestValueMapper', () => {
   const mapper = new MappedValueMapper()
   const empty = new EmptyValueMapper()
+
+  // addition: query types are valid mapping keys
+  it('maps query types', () => {
+    expect(new QueryValueMapper().mapTxType(QUERY_TYPE.HISTORY)).toBe('orderlistinq')
+  })
 
   it('maps string tx types', () => {
     expect(mapper.mapTxType(TX_TYPE.PAY_AUTH)).toBe('Auth')

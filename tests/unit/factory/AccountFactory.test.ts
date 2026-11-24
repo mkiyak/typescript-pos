@@ -1,9 +1,11 @@
 import { inspect } from 'node:util'
-import { describe, expect, it } from 'vitest'
-import { MissingAccountInfoError, PosError } from '../../../src/errors.js'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import { MissingAccountInfoError, type OrderMismatchField, PosError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js'
+import { GarantiPosAccount } from '../../../src/model/account/GarantiPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
+import { CARD_CLASS } from '../../../src/PosInterface.js'
 import { maskSensitiveData } from '../../../src/util/maskSensitiveData.js'
 
 describe('AccountFactory', () => {
@@ -85,17 +87,72 @@ describe('AccountFactory', () => {
   })
 })
 
+describe('createGarantiPosAccount', () => {
+  it('non-secure', () => {
+    const a = AccountFactory.createGarantiPosAccount('garanti', '7000679', 'PROVAUT', 'pass', '30691298')
+    expect(a).toBeInstanceOf(GarantiPosAccount)
+    expect(a.getBankName()).toBe('garanti')
+    expect(a.getMerchantId()).toBe('7000679')
+    expect(a.getUsername()).toBe('PROVAUT')
+    expect(a.getPassword()).toBe('pass')
+    expect(a.getTerminalId()).toBe('30691298')
+    expect(a.getRefundUsername()).toBeNull()
+    expect(a.getRefundPassword()).toBeNull()
+    // addition: the store key is optional and throws when read unset
+    expect(() => a.getSecretKey()).toThrow(MissingAccountInfoError)
+  })
+
+  it('3D secure with refund credentials', () => {
+    const a = AccountFactory.createGarantiPosAccount(
+      'garanti',
+      '7000679',
+      'PROVAUT',
+      'pass',
+      '30691298',
+      'store-key',
+      'PROVRFN',
+      'refund-pass',
+    )
+    expect(a.getSecretKey()).toBe('store-key')
+    expect(a.getRefundUsername()).toBe('PROVRFN')
+    expect(a.getRefundPassword()).toBe('refund-pass')
+  })
+
+  // addition: type-level contract of the core extensions
+  it('widens OrderMismatchField and exposes CARD_CLASS', () => {
+    expectTypeOf<'payment_model'>().toExtend<OrderMismatchField>()
+    expectTypeOf<'terminal_id'>().toExtend<OrderMismatchField>()
+    expect(CARD_CLASS.PREPAID).toBe('prepaid')
+    expect(CARD_CLASS.CREDIT).toBe('credit')
+    expect(CARD_CLASS.DEBIT).toBe('debit')
+  })
+})
+
 describe('account credential leakage', () => {
   const accounts = [
     ['Asseco', () => AccountFactory.createAssecoPosAccount('akbank', 'mid', 'USER1', 'PW1', 'SK1')],
     ['PayFlex', () => AccountFactory.createPayFlexPosAccount('vakifbank', 'mid', 'PW1', 'TERM1')],
+    [
+      'Garanti',
+      () =>
+        AccountFactory.createGarantiPosAccount(
+          'garanti',
+          'mid',
+          'USER1',
+          'PW1',
+          'TERM1',
+          'SK1',
+          'PROVRFN',
+          'refund-pass',
+        ),
+    ],
   ] as const
 
   it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
     const a = make()
     const outputs = [JSON.stringify(a), JSON.stringify(maskSensitiveData(a)), inspect(a, { depth: 5 })]
     for (const out of outputs) {
-      for (const secret of ['PW1', 'SK1', 'USER1', 'TERM1']) expect(out).not.toContain(secret)
+      for (const secret of ['PW1', 'SK1', 'USER1', 'TERM1', 'PROVRFN', 'refund-pass']) expect(out).not.toContain(secret)
     }
     expect(JSON.stringify(a)).toContain('mid')
   })

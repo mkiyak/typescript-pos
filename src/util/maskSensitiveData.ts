@@ -24,6 +24,13 @@ const SENSITIVE_KEYS = new Set([
   'expires',
   'expiremonth',
   'expireyear',
+  'cvv2',
+  'cardcvv2',
+  'expiredate',
+  'cardexpiredatemonth',
+  'cardexpiredateyear',
+  'refundpassword',
+  'refund_password',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -42,6 +49,11 @@ const SENSITIVE_TAGS = [
   'Password',
   'MerchantPassword',
   'Pan',
+  'CVV2',
+  'ExpireDate',
+  'cardcvv2',
+  'cardexpiredatemonth',
+  'cardexpiredateyear',
 ]
 const XML_PATTERN = new RegExp(`(<(${SENSITIVE_TAGS.join('|')})(?:\\s[^>]*)?>)[^<]*(</\\2\\s*>)`, 'gi')
 const QUERY_PATTERN = new RegExp(`(?<![A-Za-z0-9_])(${SENSITIVE_TAGS.join('|')})=[^&\\s"']*`, 'gi')

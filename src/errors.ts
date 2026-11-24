@@ -29,6 +29,8 @@ export type OrderMismatchField =
   | 'storetype'
   | 'transaction_id'
   | 'transaction_type'
+  | 'terminal_id'
+  | 'payment_model'
 
 export class OrderMismatchError extends PosError {
   readonly field: OrderMismatchField

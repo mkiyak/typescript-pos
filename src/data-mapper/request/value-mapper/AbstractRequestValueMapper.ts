@@ -8,6 +8,7 @@ import {
   type PaymentModel,
   type TxType,
 } from '../../../PosInterface.js'
+import type { QueryType } from '../../../pos-query/PosQueryInterface.js'
 import type { PosOrder } from '../../../types.js'
 import { ownValue } from '../../../util/ownValue.js'
 import type {
@@ -49,7 +50,11 @@ export abstract class AbstractRequestValueMapper implements RequestValueMapperIn
     return this.txTypeMappings
   }
 
-  mapTxType(txType: TxType, paymentModel: PaymentModel | null = null, _order: PosOrder | null = null): string {
+  mapTxType(
+    txType: TxType | QueryType,
+    paymentModel: PaymentModel | null = null,
+    _order: PosOrder | null = null,
+  ): string {
     if (!this.isSupportedTxType(txType, paymentModel)) {
       throw new UnsupportedTransactionTypeError(`Unsupported transaction type: ${txType}`)
     }
@@ -122,7 +127,7 @@ export abstract class AbstractRequestValueMapper implements RequestValueMapperIn
     throw new NotImplementedError('Card class mappings are not supported.')
   }
 
-  protected isSupportedTxType(txType: TxType, paymentModel: PaymentModel | null = null): boolean {
+  protected isSupportedTxType(txType: TxType | QueryType, paymentModel: PaymentModel | null = null): boolean {
     const mapping = ownValue(this.txTypeMappings, txType)
     if (mapping === undefined) {
       return false

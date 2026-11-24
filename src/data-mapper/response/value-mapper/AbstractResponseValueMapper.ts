@@ -1,5 +1,6 @@
 import { NotImplementedError } from '../../../errors.js'
 import type { CardType, Currency, PaymentModel, PaymentStatus, TxType } from '../../../PosInterface.js'
+import type { QueryType } from '../../../pos-query/PosQueryInterface.js'
 import { ownValue } from '../../../util/ownValue.js'
 import type { ResponseValueMapperInterface } from './ResponseValueMapperInterface.js'
 
@@ -39,7 +40,10 @@ export abstract class AbstractResponseValueMapper implements ResponseValueMapper
     return null
   }
 
-  mapSecureType(securityType: string | boolean | number, _apiRequestTxType: TxType | null = null): PaymentModel | null {
+  mapSecureType(
+    securityType: string | boolean | number,
+    _apiRequestTxType: TxType | QueryType | null = null,
+  ): PaymentModel | null {
     if (Object.keys(this.secureTypeMappings).length === 0) {
       throw new NotImplementedError('Secure type mapping is not supported')
     }
@@ -47,11 +51,15 @@ export abstract class AbstractResponseValueMapper implements ResponseValueMapper
     return ownValue(this.secureTypeMappings, phpKey(securityType)) ?? null
   }
 
-  mapCurrency(currency: string | number, _apiRequestTxType: TxType | null = null): Currency | null {
+  mapCurrency(currency: string | number, _apiRequestTxType: TxType | QueryType | null = null): Currency | null {
     return ownValue(this.currencyMappings, phpKey(currency)) ?? null
   }
 
-  mapOrderStatus(orderStatus: string | number): PaymentStatus | string | number {
+  mapOrderStatus(
+    orderStatus: string | number,
+    _requestTxType: TxType | QueryType | null = null,
+    _txType: TxType | null = null,
+  ): PaymentStatus | string | number {
     if (Object.keys(this.orderStatusMappings).length === 0) {
       throw new NotImplementedError('Order status mapping is not supported.')
     }

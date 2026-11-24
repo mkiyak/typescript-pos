@@ -138,4 +138,30 @@ describe('maskSensitiveData', () => {
     expect(out).not.toContain('3XTgER89as')
     expect(maskSensitiveData('{"Password" : "a\\"b"}')).toBe('{"Password":"***"}')
   })
+
+  // addition: card fields of XML requests and 3D forms
+  it('masks expiry, CVV2 and refund password', () => {
+    const out = maskSensitiveData({
+      Card: { Number: '5555444433332222', ExpireDate: '0122', CVV2: '123' },
+      refundPassword: 'r',
+    })
+    expect(out.Card.Number).toBe('***')
+    expect(out.Card.ExpireDate).toBe('***')
+    expect(out.Card.CVV2).toBe('***')
+    expect(out.refundPassword).toBe('***')
+
+    const xml = maskSensitiveData(
+      '<Card><Number>5555444433332222</Number><ExpireDate>0122</ExpireDate><CVV2>123</CVV2></Card>',
+    )
+    expect(xml).toContain('<ExpireDate>***</ExpireDate>')
+    expect(xml).toContain('<CVV2>***</CVV2>')
+    expect(xml).toContain('555544****2222')
+
+    const form = maskSensitiveData(
+      'cardnumber=5555444433332222&cardexpiredatemonth=01&cardexpiredateyear=22&cardcvv2=123',
+    )
+    expect(form).toContain('cardexpiredatemonth=***')
+    expect(form).toContain('cardexpiredateyear=***')
+    expect(form).toContain('cardcvv2=***')
+  })
 })

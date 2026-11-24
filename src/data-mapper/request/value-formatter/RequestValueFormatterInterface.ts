@@ -1,5 +1,6 @@
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import type { TxType } from '../../../PosInterface.js'
+import type { QueryType } from '../../../pos-query/PosQueryInterface.js'
 
 /** Formats values for the bank API. */
 export interface RequestValueFormatterInterface {
@@ -15,5 +16,5 @@ export interface RequestValueFormatterInterface {
   formatCardExpDate(card: CreditCard, fieldName: string): string
 
   /** @throws Error when the field name is not supported */
-  formatDateTime(dateTime: Date, fieldName?: string | null): string
+  formatDateTime(dateTime: Date, fieldName?: string | null, txType?: TxType | QueryType | null): string
 }

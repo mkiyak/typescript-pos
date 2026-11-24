@@ -54,6 +54,14 @@ export const FORM_FORMAT = {
 } as const
 export type FormFormat = (typeof FORM_FORMAT)[keyof typeof FORM_FORMAT]
 
+/** Funding class of a card. */
+export const CARD_CLASS = {
+  CREDIT: 'credit',
+  DEBIT: 'debit',
+  PREPAID: 'prepaid',
+} as const
+export type CardClass = (typeof CARD_CLASS)[keyof typeof CARD_CLASS]
+
 export const CARD_TYPE = {
   VISA: 'visa',
   MASTERCARD: 'master',

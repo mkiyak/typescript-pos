@@ -1,10 +1,11 @@
 import type { CardType, Currency, Lang, PaymentModel, TxType } from '../../../PosInterface.js'
+import type { QueryType } from '../../../pos-query/PosQueryInterface.js'
 import type { PosOrder } from '../../../types.js'
 
 export type RecurringFrequency = 'DAY' | 'WEEK' | 'MONTH' | 'YEAR'
 
 /** A bank value per tx type, or per tx type and payment model. */
-export type RequestTxTypeMappings = Partial<Record<TxType, string | Partial<Record<PaymentModel, string>>>>
+export type RequestTxTypeMappings = Partial<Record<TxType | QueryType, string | Partial<Record<PaymentModel, string>>>>
 
 /** Maps order values to bank values. */
 export interface RequestValueMapperInterface {
@@ -14,7 +15,7 @@ export interface RequestValueMapperInterface {
    * @throws UnsupportedTransactionTypeError when the tx type (or tx type + model) is not mapped
    * @throws Error when the mapping depends on the payment model and none was given
    */
-  mapTxType(txType: TxType, paymentModel?: PaymentModel | null, order?: PosOrder | null): string
+  mapTxType(txType: TxType | QueryType, paymentModel?: PaymentModel | null, order?: PosOrder | null): string
 
   mapSecureType(paymentModel: PaymentModel): string
 
