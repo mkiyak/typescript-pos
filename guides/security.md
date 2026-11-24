@@ -13,9 +13,10 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
 - **Garanti.** The callback signature cannot be disabled and signed callbacks must carry the bank's fixed field list;
   an approved payment is never accepted from an unsigned callback (`require_3d_hash: true` also rejects unsigned
   declines), and the callback's terminal id and order id must equal your account and order (`OrderMismatchError`).
-- **Order binding.** Garanti callbacks must carry your terminal id and order id, and the echoed amount, currency and payment model are compared too. Asseco 3D callbacks must carry your order id, amount and the storetype of the payment model they
+- **Order binding.** Signed Garanti callbacks must carry your terminal id and order id, and the echoed amount, currency and payment model are compared too. Asseco 3D callbacks must carry your order id, amount and the storetype of the payment model they
   are completed with; PayFlex callbacks must carry your amount, currency and merchant id (`OrderMismatchError`
-  otherwise).
+  otherwise). Prefer fixed-length order ids (zero-padded or UUID-based): they leave no ambiguity about where the
+  order id ends in a signed callback.
 - **Strict 3D.** PayFlex accepts only a fully authenticated result (Status `Y`, ECI `02`/`05`, CAVV, `MdStatus` 1).
 - **Manual-review flag.** When a bank authorized money although 3D failed, the response is `declined` with
   `requires_manual_review: true`. When a signed Asseco or Garanti callback reports a completed payment but does not belong to

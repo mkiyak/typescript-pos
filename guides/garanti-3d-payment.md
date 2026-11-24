@@ -51,14 +51,20 @@ const pos = PosFactory.createPosGateway(account, posTestConfig) // or posProduct
    The card is required for both 3D models.
 3. The customer authenticates; the bank POSTs the browser to your `success_url` or `fail_url`.
 4. Load the order by id on the server and call
-   `pos.payment(MODEL.THREE_D_PAY, order, TX_TYPE.PAY_AUTH, null, callbackBody)`. For 3D Secure pass the same card as
-   the fourth argument; the library then sends the provision request.
+   `pos.payment(MODEL.THREE_D_PAY, order, TX_TYPE.PAY_AUTH, null, callbackBody)`. For 3D Secure the call is the same
+   with `MODEL.THREE_D_SECURE`; the library then sends the provision request. Pass `null` as the card in both cases: the
+   card is not needed after the redirect, so do not keep it (store it neither in your session nor in your database)
+   once `get3DFormData` has built the form.
 
 ```ts
 const form = await pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card)
 // ...customer returns...
-const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, card, callbackBody)
+const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, null, callbackBody)
 ```
+
+Use fixed-length order ids (zero-padded numbers or UUID-based ids) rather than ids that can be a prefix of one
+another, such as `ORDER1` and `ORDER12`. The signed callback concatenates its fields, so ids of one length leave no
+ambiguity about where the order id ends.
 
 ## Callback handling
 
@@ -80,7 +86,9 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
 - **Approved but 3D failed.** When the bank authorized money although the 3D result is not successful, the response is
   `declined` with `requires_manual_review: true`. Do not ship the goods; reconcile in the bank panel.
 - **`md_status`.** `1` is full 3D authentication and `2` to `4` are half 3D Secure results; the library treats both as
-  3D success. Check `response.md_status === '1'` after `payment` if you accept only full authentication.
+  3D success. If you accept only full authentication, check that the callback's `mdstatus` (trimmed) equals `'1'`
+  before you call `payment`: on 3D Secure, `payment` sends the provision request, so a check on `response.md_status`
+  afterwards comes too late.
 
 A `PosHttpError` or timeout while completing a payment is not a failed payment: keep the order pending and re-check it
 with `pos.status(order)`.
@@ -111,5 +119,6 @@ password of the account. A refund is partial when `amount` is lower than `order_
 
 - Amounts are sent in kuruş (10,50 TL is `1050`), rounded like PHP `number_format`.
 - Bank times without a UTC offset are Türkiye time (UTC+03:00).
-- Payments need `id`, `amount` and `ip` on the order, and the 3D form needs `ip` too; a missing one is rejected with
-  `PosError` before any request. `status`, `cancel` and `refund` default `ip` to an empty string.
+- The order needs `id` and `amount`. The 3D form and the first payment request also need `ip`; a missing one is
+  rejected with `PosError` before any request. The 3D Secure provision takes the customer IP from the callback, and
+  `status`, `cancel`, `refund` and post-authorization default `ip` to an empty string.
