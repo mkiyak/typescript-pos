@@ -444,7 +444,7 @@ describe('PosQueryFactory with PosNetPos and PosNetV1Pos', () => {
     )
     expect(lines.length).toBeGreaterThan(0)
     const text = JSON.stringify(lines)
-    for (const secret of [Y_KEY, A_KEY, '4048090000000001', '"ExpireDate":"2411"', '<expDate>2411<']) {
+    for (const secret of [Y_KEY, A_KEY, '4048090000000001', '2411', '"ExpireDate":"2411"', '<expDate>2411<']) {
       expect(text).not.toContain(secret)
     }
   })

@@ -19,8 +19,6 @@ const REFERENCE_MAC_PARAMS = 'MerchantNo:TerminalNo:ReferenceCode:OrderId'
 const MERCHANT_MAC_PARAMS = 'MerchantNo:TerminalNo'
 const PROVISION_MAC_PARAMS = 'MerchantNo:TerminalNo:SecureTransactionId:CavvData:Eci:MdStatus'
 
-/** One or two digits, as text, or a small whole number: nothing that a numeric cast would turn into a count. */
-
 /** Creates request data for the POSNET JSON API (Albaraka). */
 export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosNetPosAccount> {
   static readonly API_VERSION = 'V100'

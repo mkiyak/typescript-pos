@@ -93,6 +93,8 @@ await pos.refund({ id: regularOrderId, amount: 25, currency: 'TRY', order_amount
 
 The bank's lookup of a 3D order has no amount field, so a partial refund of a 3D order is rejected with
 `UnsupportedTransactionTypeError` before any request is sent: refund the full amount instead.
+Because the refund request for a 3D order carries no amount, any refund without `order_amount` (treated as a full
+refund) returns the whole payment. Partial refunds work only for regular (non-3D) orders.
 
 ## Queries
 
