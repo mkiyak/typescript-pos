@@ -302,6 +302,8 @@ describe('GarantiPos (mocked collaborators)', () => {
    * callback also carries the terminal as clientid).
    */
   const boundEcho = (orderId: string): Data => ({
+    cavv: 'xgRlQDz4AAAAAAAAAAAAAAAAAAA=',
+    eci: '02',
     clientid: '30691298',
     oid: orderId,
     orderid: orderId,
@@ -650,7 +652,9 @@ describe('GarantiPos (mocked collaborators)', () => {
       clientStrategy.getClient.mockReturnValue(httpClient as unknown as AbstractHttpClient)
       httpClient.request.mockResolvedValue({})
       responseMapper.map3DPaymentData.mockReturnValue({ status: 'approved' })
-      await expect(run(callback({ cavv: null, txnstatus: null }))).resolves.toStrictEqual({ status: 'approved' })
+      await expect(run(callback({ mdstatus: '2', cavv: null, eci: null, txnstatus: null }))).resolves.toStrictEqual({
+        status: 'approved',
+      })
     })
 
     // addition: G5 the provision request takes orderid from the callback, so orderid must be present
@@ -678,7 +682,7 @@ describe('GarantiPos (mocked collaborators)', () => {
       [{ ...order, id: undefined }, 'order_id'],
       [{ ...order, amount: undefined }, 'amount'],
       [{ ...order, amount: Number.NaN }, 'amount'],
-      [{ ...order, amount: '1.01' as unknown as number }, 'amount'],
+      [{ ...order, amount: '1.01e0' as unknown as number }, 'amount'],
       [{ ...order, amount: 1e13 }, 'amount'],
     ] as Array<[PosOrder, string]>)('order %j fails closed on %s', async (o, field) => {
       const err = (await run(callback(), o)) as OrderMismatchError
@@ -1895,7 +1899,8 @@ describe('GarantiPos (end to end) signed order id, cavv and eci formats', () => 
       secureOrder,
       TX_TYPE.PAY_AUTH,
       null,
-      resign({ ...secureCallback, ...change }),
+      // half 3D Secure (mdstatus 2) carries no cavv or eci; with mdstatus 1 both are required
+      resign({ ...secureCallback, ...change, ...('eci' in change ? { mdstatus: '2' } : {}) }),
     )
     expect(secure.status).toBe('approved')
     expect(sent).toHaveLength(1)
@@ -1996,6 +2001,7 @@ describe('GarantiPos (end to end) signed order id, cavv and eci formats', () => 
     ['eci "02" with a blank cavv', false, { cavv: ' ', eci: '02' }],
     ['a cavv with an empty eci', true, { eci: '' }],
   ] as Array<[string, boolean, Record<string, string>]>)('signed %s accepted: %s', async (_name, accepted, change) => {
+    // 3D Pay only; a full 3D Secure callback needs both values (see the full 3D Secure describe)
     const secure = resign({ ...secureCallback, ...change })
     const pay = resign({ ...payCallback, ...change })
     for (const [model, cb, order] of [
@@ -2007,7 +2013,11 @@ describe('GarantiPos (end to end) signed order id, cavv and eci formats', () => 
       const result = await realGateway(fetchImpl)
         .payment(model, order, TX_TYPE.PAY_AUTH, null, cb)
         .catch((e: unknown) => e)
-      if (accepted) {
+      if (accepted && model === MODEL.THREE_D_SECURE) {
+        // deviation: a full 3D Secure callback (mdstatus 1) without an eci is refused before provisioning
+        expect(result).toBeInstanceOf(HashMismatchError)
+        expect(sent).toHaveLength(0)
+      } else if (accepted) {
         expect((result as Data).status).toBe('approved')
       } else {
         expect(result).toBeInstanceOf(HashMismatchError)
@@ -2135,5 +2145,104 @@ describe('GarantiPos (end to end) other transactions', () => {
     expect(a.order_id).toBe('A')
     expect(b.order_id).toBe('B')
     expect('isSuccess' in pos).toBe(false)
+  })
+})
+
+describe('GarantiPos (end to end) full 3D Secure needs cavv and eci', () => {
+  const md = secureCallback.md as string
+  const base: Record<string, string> = {
+    ...secureCallback,
+    oid: 'ORDER',
+    orderid: 'ORDER',
+    transid: 'ORDER',
+    txnamount: '999900',
+  }
+  const order: PosOrder = { id: 'ORDER', amount: 9999, currency: CURRENCY.TRY, ip: '1.2.3.4' }
+  const run = async (cb: Record<string, string>) => {
+    const { sent, fetchImpl } = recordingFetch(() => new Response(provisionApproved))
+    const result = await realGateway(fetchImpl)
+      .payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, null, cb as unknown as GatewayResponseData)
+      .catch((e: unknown) => e)
+    return { sent, result }
+  }
+
+  // addition: a bank-signed callback of ORDER1 with empty mdstatus, cavv and eci is re-split as oid ORDER and
+  // mdstatus 1 (signature computed with the PHP built-in hash over clientid, oid, mdstatus, cavv, eci, md, rnd and the store key)
+  it('rejects a signed ORDER1 callback re-split into oid ORDER and mdstatus 1, nothing sent', async () => {
+    const forged = {
+      ...base,
+      mdstatus: '1',
+      cavv: '',
+      eci: '',
+      hash: 'C5285A022D430D9656DD388F8D77541E7FA7560830821FBEC1BADBF2C355C426D5EBB7869CEC3E6405B3B82B8EFB5343A70DD310E82DCF44A84FF4DB16EB2716',
+    }
+    expect(md).toBeTruthy()
+    expect(new GarantiPosCrypt().check3DHash(createAccount(), forged)).toBe(true)
+    const { sent, result } = await run(forged)
+    expect(result).toBeInstanceOf(HashMismatchError)
+    expect(sent).toHaveLength(0)
+  })
+
+  // addition: mdstatus 1 with a cavv but no eci is not a complete full 3D Secure authentication
+  it('rejects mdstatus 1 with a cavv and an empty eci, nothing sent', async () => {
+    const { sent, result } = await run({
+      ...base,
+      eci: '',
+      hash: 'C9F0905BFD65BD9BC022A4D77BBC7FA00E80CD9F9B6D90FFA066F1CE112E68D9DB06A3C2D0F1CD76DECC6016179DD03589EA570479E4368C9F005B6B764374B5',
+    })
+    expect(result).toBeInstanceOf(HashMismatchError)
+    expect(sent).toHaveLength(0)
+  })
+
+  // addition: the complete full 3D Secure callback still provisions
+  it('provisions mdstatus 1 with cavv and eci', async () => {
+    const { sent, result } = await run({
+      ...base,
+      hash: 'DA0F1BC07696674EEEA25E73B349FEC5099EFFC8EF57A78945B1D671661FB8BA64DB62D93BA99F794BF1839310CC8231EA2600A051AA2A04BAF3F483355100FE',
+    })
+    expect((result as Data).status).toBe('approved')
+    expect(sent).toHaveLength(1)
+  })
+
+  // addition: half 3D Secure (mdstatus 2 to 4) carries no cavv or eci and is unchanged
+  it('provisions half 3D Secure mdstatus 2 with empty cavv and eci', async () => {
+    const { sent, result } = await run({
+      ...base,
+      mdstatus: '2',
+      cavv: '',
+      eci: '',
+      hash: 'CEDE4E8F117A981D0C0634D5BD0D24D946C19252EBE31F69AF69AE94B717B7835DEA007FED63F80B70464D8C5BC8AA6555F9A55D7821E3F6FE33521B451ABA8B',
+    })
+    expect((result as Data).status).toBe('approved')
+    expect(sent).toHaveLength(1)
+  })
+})
+
+describe('GarantiPos (end to end) order amount as text', () => {
+  const run = async (amount: unknown) => {
+    const { sent, fetchImpl } = recordingFetch()
+    const result = await realGateway(fetchImpl)
+      .payment(
+        MODEL.THREE_D_PAY,
+        { ...payOrder, amount } as unknown as PosOrder,
+        TX_TYPE.PAY_AUTH,
+        null,
+        payCallback as unknown as GatewayResponseData,
+      )
+      .catch((e: unknown) => e)
+    return { sent, result }
+  }
+
+  // addition: a merchant that rebuilds the order from stored text still binds
+  it('3D Pay binds an order amount given as a decimal string', async () => {
+    const { sent, result } = await run('100.25')
+    expect((result as Data).status).toBe('approved')
+    expect(sent).toHaveLength(0)
+  })
+
+  it.each(['abc', '1e3', ''])('3D Pay rejects the order amount %j with OrderMismatchError amount', async (amount) => {
+    const { result } = await run(amount)
+    expect(result).toBeInstanceOf(OrderMismatchError)
+    expect((result as OrderMismatchError).field).toBe('amount')
   })
 })

@@ -19,6 +19,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
+import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { phpTrim } from '../util/phpTrim.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
 
@@ -171,6 +172,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     this.assertTextFields(gatewayResponseData)
     this.assertSignedOrderId(gatewayResponseData, asText(order.id))
     this.assertSignedOutcomeFormat(gatewayResponseData)
+    this.assertFullAuthenticationEvidence(gatewayResponseData)
     this.assertNoOutcomeBeforeProvision(gatewayResponseData)
     this.assert3DSecureCallbackMatchesOrder(gatewayResponseData, order, txType)
 
@@ -337,6 +339,27 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
   }
 
   /**
+   * A fully authenticated 3D Secure callback (`mdstatus` 1) always carries the authentication value and its
+   * indicator. A signed callback whose `mdstatus` is empty could otherwise have its order id's last character read as
+   * `mdstatus` 1 with the hash still valid, so both must be present before the provision request.
+   */
+  private assertFullAuthenticationEvidence(callback: GatewayResponseData): void {
+    if (phpTrim(asText(own(callback, 'mdstatus'))) !== '1') {
+      return
+    }
+    const cavv = phpTrim(asText(own(callback, 'cavv')))
+    const eci = phpTrim(asText(own(callback, 'eci')))
+    if (cavv === '' || eci === '') {
+      this.logger.error('3D Secure callback with mdstatus 1 lacks its authentication value', {
+        order_id: asText(own(callback, 'oid')),
+        cavv_length: cavv.length,
+        eci_length: eci.length,
+      })
+      throw new HashMismatchError('3D Secure callback with mdstatus 1 lacks its authentication value')
+    }
+  }
+
+  /**
    * The signed `oid` must be present and name the order. Were it allowed to be missing, its characters could be moved
    * into the following signed fields with the hash still valid, and the unsigned `orderid` could then name any order.
    */
@@ -497,8 +520,8 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
 
   /** The order amount in kuruş as the bank echoes it; null when the order has no usable amount. */
   private expectedAmount(order: PosOrder): string | null {
-    const amount: unknown = order.amount
-    if (typeof amount !== 'number' || !Number.isFinite(amount)) {
+    const amount = parseOrderAmount(order.amount)
+    if (Number.isNaN(amount)) {
       return null
     }
     try {
