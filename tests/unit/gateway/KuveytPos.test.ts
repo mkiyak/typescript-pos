@@ -829,7 +829,7 @@ describe('KuveytPos (mocked collaborators)', () => {
   })
 
   // addition: B9 a provision answer mapped approved needs its own ResponseCode 00
-  it.each([[{ ResponseCode: '05' }], [{ ResponseCode: ['00'] }], [{}]])(
+  it.each([[{ ResponseCode: '05' }], [{ ResponseCode: '' }], [{ ResponseCode: NIL }]])(
     'a provision answer %j mapped as approved is rejected (PosError)',
     async (provision) => {
       approvePath(provision, { status: 'approved' })
@@ -839,6 +839,21 @@ describe('KuveytPos (mocked collaborators)', () => {
       expect(httpClient.request).toHaveBeenCalledTimes(1)
     },
   )
+
+  // addition: ruling (final fix wave) supersedes the earlier `['00']` and `{}` rows above: once the provision was
+  // sent, an answer without data or with a response code that is not one plain value is an unknown outcome
+  it('a provision answer {} is PosHttpError, a list ResponseCode is OrderMismatchError order_status', async () => {
+    approvePath({}, { status: 'approved' })
+    await expect(
+      pos.make3DPayment(cb({ AuthenticationResponse: authResponse(tdv2()) }), tdv2Order(), 'pay'),
+    ).rejects.toThrow(PosHttpError)
+
+    approvePath({ ResponseCode: ['00'] }, { status: 'declined' })
+    const err = await mismatch(
+      pos.make3DPayment(cb({ AuthenticationResponse: authResponse(tdv2()) }), tdv2Order(), 'pay'),
+    )
+    expect([err.field, err.paymentMayHaveCompleted]).toStrictEqual(['order_status', true])
+  })
 
   // addition: Task 3 a provision answer with ResponseCode 00 is the bank's booking: it is bound to the order even
   // when the mapper declines it, and a mapper decline of a bound booking is never a plain decline
@@ -1627,6 +1642,34 @@ describe('KuveytPos (end to end) 3D Secure', () => {
   ])('a provision answered with %s is PosHttpError', async (_n, answer) => {
     const { sent, promise } = run(tdv2(), tdv2Order(), { provision: () => answer })
     await expect(promise).rejects.toThrow(PosHttpError)
+    expect(sent).toHaveLength(1)
+  })
+
+  // addition: ruling (final fix wave), after the provision was sent an empty answer is an unknown outcome, not a
+  // decline
+  it.each([
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['a root element without fields', () => provisionXml({ ...NS })],
+  ])('a provision answered with %s is PosHttpError', async (_n, answer) => {
+    const { sent, promise } = run(tdv2(), tdv2Order(), { provision: answer })
+    const err = await promise.catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect((err as PosHttpError).message).toBe('Bank answered the provision without any data; its outcome is unknown')
+    expect(sent).toHaveLength(1)
+  })
+
+  // addition: ruling (final fix wave), a response code that is not one plain value may hide a booking
+  it.each([
+    ['ResponseCode 00 twice', { ResponseCode: ['00', '00'] }],
+    ['ResponseCode 00 and 05', { ResponseCode: ['05', '00'] }],
+    ['ResponseCode with a child element', { ResponseCode: { a: '00' } }],
+  ])('a provision answer with %s is OrderMismatchError order_status, flagged', async (_n, over) => {
+    const { sent, promise } = run(tdv2(), tdv2Order(), { provision: (f) => provisionXml(provisionFor(f, over)) })
+    const err = await mismatch(promise)
+    expect(err.field).toBe('order_status')
+    expect(err.paymentMayHaveCompleted).toBe(true)
+    expect(err.response?.requires_manual_review).toBe(true)
+    expect(err.response?.status).toBe('declined')
     expect(sent).toHaveLength(1)
   })
 

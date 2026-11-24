@@ -14,13 +14,15 @@ import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
 import { PosNetPos } from '../../../src/gateway/PosNetPos.js'
 import { PosNetV1Pos } from '../../../src/gateway/PosNetV1Pos.js'
+import { VakifKatilimPos } from '../../../src/gateway/VakifKatilimPos.js'
 
 const accountFor = (gatewayClass: string, key: string) => {
   if (gatewayClass === 'AssecoPos') return AccountFactory.createAssecoPosAccount(key, 'c', 'u', 'p', 'k')
   if (gatewayClass === 'AkbankPos') return AccountFactory.createAkbankPosAccount(key, 'm', 't', 'k')
   if (gatewayClass === 'GarantiPos') return AccountFactory.createGarantiPosAccount(key, 'm', 'u', 'p', 't', 'k')
   if (gatewayClass === 'InterPos') return AccountFactory.createInterPosAccount(key, 's', 'u', 'p', 'k')
-  if (gatewayClass === 'KuveytPos') return AccountFactory.createBoaPosAccount(key, 'm', 'u', 'c', 'k')
+  if (gatewayClass === 'KuveytPos' || gatewayClass === 'VakifKatilimPos')
+    return AccountFactory.createBoaPosAccount(key, 'm', 'u', 'c', 'k')
   if (gatewayClass === 'PayForPos') return AccountFactory.createPayForPosAccount(key, 'm', 'u', 'p', 'k')
   if (gatewayClass === 'PosNetPos' || gatewayClass === 'PosNetV1Pos')
     return AccountFactory.createPosNetPosAccount(key, 'm', 't', 'p', 'k')
@@ -32,7 +34,7 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos and KuveytPos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos and VakifKatilimPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
       expect([
@@ -46,6 +48,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         'PayForPos',
         'InterPos',
         'KuveytPos',
+        'VakifKatilimPos',
       ]).toContain(bank.class)
     }
   })
@@ -64,6 +67,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
       PayForPos,
       InterPos,
       KuveytPos,
+      VakifKatilimPos,
     }[
       bank.class as
         | 'AssecoPos'
@@ -76,6 +80,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         | 'PayForPos'
         | 'InterPos'
         | 'KuveytPos'
+        | 'VakifKatilimPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -411,6 +416,36 @@ describe('KuveytPos endpoints', () => {
       expect(cfg.banks.kuveytpos).not.toHaveProperty('disable_3d_hash_check')
       expect(cfg.banks.kuveytpos).not.toHaveProperty('require_3d_hash')
       expect(cfg.banks.kuveytpos.gateway_endpoints).not.toHaveProperty('gateway_3d')
+    }
+  })
+})
+
+// addition: V13 shipped VakifKatilimPos entries (production and test are the same hosts; no lang, test_mode,
+// gateway_3d or hash-check switch)
+describe('VakifKatilimPos endpoints', () => {
+  const expected = {
+    name: 'Vakıf Katılım',
+    class: 'VakifKatilimPos',
+    gateway_endpoints: {
+      payment_api: 'https://boa.vakifkatilim.com.tr/VirtualPOS.Gateway/Home',
+      gateway_3d_host: 'https://boa.vakifkatilim.com.tr/VirtualPOS.Gateway/CommonPaymentPage/CommonPaymentPage',
+    },
+  }
+
+  it('production and test use the same hosts', () => {
+    expect(posProductionConfig.banks['vakif-katilim']).toStrictEqual(expected)
+    expect(posTestConfig.banks['vakif-katilim']).toStrictEqual(expected)
+  })
+
+  it('both entries are deeply frozen and carry no lang, test_mode, gateway_3d or hash-check switch', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      const entry = cfg.banks['vakif-katilim']
+      expect(Object.isFrozen(entry)).toBe(true)
+      expect(Object.isFrozen(entry.gateway_endpoints)).toBe(true)
+      expect(entry).not.toHaveProperty('lang')
+      expect(entry).not.toHaveProperty('test_mode')
+      expect(entry).not.toHaveProperty('require_3d_hash')
+      expect(entry.gateway_endpoints).not.toHaveProperty('gateway_3d')
     }
   })
 })

@@ -77,6 +77,13 @@ export type GatewayConfig = {
    * false: without it an unsigned callback is accepted only as a decline whose result carries the order's id and
    * bounded decline reasons (nothing is provisioned or flagged for review); an unsigned callback with response code
    * `00` is always rejected. A present `HashData` is always verified.
+   *
+   * VakifKatilimPos: reject any 3D Secure or 3D Host callback that carries no `HashData` (`HashMismatchError`),
+   * declines included. Default false: without it an unsigned callback is accepted only as a decline whose result
+   * carries the order's id and bounded decline reasons (nothing is provisioned, confirmed or flagged for review); an
+   * unsigned callback with response code `00` is always rejected. A present `HashData` is always verified. A signed
+   * 3D Host approval still proves nothing by itself (the browser receives the hashed password with the form), so it
+   * is always confirmed with the bank's status record.
    */
   require_3d_hash?: boolean
 }

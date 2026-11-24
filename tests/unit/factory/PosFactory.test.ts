@@ -16,6 +16,7 @@ import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
 import { PosNetPos } from '../../../src/gateway/PosNetPos.js'
 import { PosNetV1Pos } from '../../../src/gateway/PosNetV1Pos.js'
+import { VakifKatilimPos } from '../../../src/gateway/VakifKatilimPos.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../src/PosInterface.js'
 import type { PosHooks, PosOrder } from '../../../src/types.js'
 
@@ -250,6 +251,45 @@ describe('PosFactory.createPosGateway', () => {
     expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
       'Bank [kuveytpos] is configured for KuveytPos and needs a BoaPosAccount.',
     )
+  })
+
+  it('creates the vakif-katilim VakifKatilimPos gateway from the shipped test config', () => {
+    const account = AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'APIUSER', '11111', 'kdsnsksl')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(VakifKatilimPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(gateway.getCardTypeMapping()).toStrictEqual({})
+    expect(gateway.getCurrencies()).toHaveLength(6)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-BOA account for a VakifKatilimPos bank', () => {
+    const wrong = AccountFactory.createInterPosAccount('vakif-katilim', 's', 'u', 'p', 'k')
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
+      'Bank [vakif-katilim] is configured for VakifKatilimPos and needs a BoaPosAccount.',
+    )
+  })
+
+  // addition: V6 status goes to the Vakıf Katılım gateway path, signed with the account's hashed password
+  it('sends a VakifKatilimPos status to SelectOrderByMerchantOrderId', async () => {
+    const calls: { url: string; body: string }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), body: Buffer.from(init?.body as Uint8Array).toString('latin1') })
+      return new Response('<VPosOrderDataResponse><ResponseCode>NonResult</ResponseCode></VPosOrderDataResponse>', {
+        status: 200,
+      })
+    }) as unknown as typeof fetch
+    const account = AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'APIUSER', '11111', 'kdsnsksl')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    const result = await gateway.status({ id: '2023070849CD' } as never)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(
+      `${posTestConfig.banks['vakif-katilim'].gateway_endpoints.payment_api}/SelectOrderByMerchantOrderId`,
+    )
+    expect(calls[0]?.body).toContain('<MerchantOrderId>2023070849CD</MerchantOrderId>')
+    expect(calls[0]?.body).not.toContain('kdsnsksl')
+    expect(result.status).toBe('declined')
   })
 
   // addition: K6 status goes to the SOAP query endpoint, signed with the account's hashed password
@@ -506,6 +546,7 @@ describe('PosFactory.createPosGateway', () => {
       PayForPos: (bank: string) => AccountFactory.createPayForPosAccount(bank, 'm', 'u', 'p', 'k'),
       InterPos: (bank: string) => AccountFactory.createInterPosAccount(bank, 's', 'u', 'p', 'k'),
       KuveytPos: (bank: string) => AccountFactory.createBoaPosAccount(bank, '1', 'u', '2', 'p'),
+      VakifKatilimPos: (bank: string) => AccountFactory.createBoaPosAccount(bank, '1', 'u', '2', 'p'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

@@ -4,6 +4,7 @@ import {
   OrderMismatchError,
   type OrderMismatchField,
   PosError,
+  PosHttpError,
   UnsupportedFormFormatError,
   UnsupportedPaymentModelError,
   UnsupportedTransactionTypeError,
@@ -25,27 +26,25 @@ import { parseInstallment } from '../util/parseInstallment.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { toKurus } from '../util/toKurus.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
-
-/** The response code of an authenticated card and of an approved payment. */
-const SUCCESS_CODE = '00'
-
-/** Order ids are plain ASCII so that the signed bytes are unambiguous. */
-const ORDER_ID = /^[A-Za-z0-9_-]{1,64}$/
-
-/** The bank's own order id: a positive whole number without leading zeros. */
-const BANK_ORDER_ID = /^[1-9]\d{0,18}$/
-
-/** The 3D session value the provision request carries: base64 text. */
-const MD = /^[A-Za-z0-9+/=]{1,1024}$/
-
-/** An amount in kuruş as the bank writes it. */
-const KURUS = /^(?:0|[1-9]\d{0,14})$/
-
-/** A numeric currency code, with or without the leading zero. */
-const CURRENCY_CODE = /^\d{1,4}$/
-
-/** An installment count as the bank writes it. */
-const INSTALLMENT_TEXT = /^\d{1,2}$/
+import {
+  asText,
+  BANK_ORDER_ID,
+  boaOrderId,
+  echo,
+  INSTALLMENT_TEXT,
+  isCurrencyCode,
+  isRecord,
+  MD,
+  normalizedInstallment,
+  own,
+  ownText,
+  provisionMismatch,
+  redactHashPassword,
+  SUCCESS_CODE,
+  textOf,
+  unknownProvisionOutcome,
+  unsignedDeclineResult,
+} from './boaCallback.js'
 
 /** The bank's name of a sale and its security level of the 3D model. */
 const SALE = 'Sale'
@@ -53,84 +52,6 @@ const THREE_D_SECURITY = '3'
 
 /** Callback fields that must be plain text whenever they are sent. */
 const TEXT_FIELDS = ['ResponseCode', 'MerchantOrderId', 'OrderId', 'HashData', 'MD'] as const
-
-/** Informational decline fields an unsigned declined callback may keep, as bounded plain text. */
-const DECLINE_REASON_FIELDS = ['proc_return_code', 'error_code', 'error_message', 'md_error_message'] as const
-
-/** The longest decline reason kept from an unsigned callback. */
-const MAX_DECLINE_REASON_LENGTH = 256
-
-/** Callback values are attacker controlled; only this much of one is echoed in errors and logs. */
-const MAX_ECHOED_LENGTH = 64
-
-/** Keys of a mapped result that an unsigned callback keeps as they are (the decision and the raw data). */
-const KEPT_UNSIGNED_KEYS = new Set(['status', 'all', '3d_all'])
-
-/** Raw bank data keys whose `HashPassword` echoes are replaced before a result is returned. */
-const RAW_DATA_KEYS = ['all', '3d_all'] as const
-
-const REDACTED = '***'
-
-/** Deeper raw data than the decoders accept is not walked. */
-const MAX_RAW_DEPTH = 64
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-/** An own value; `null` counts as absent like a missing key. */
-function own(data: Record<string, unknown>, key: string): unknown {
-  const value: unknown = Object.hasOwn(data, key) ? data[key] : undefined
-  return value === null ? undefined : value
-}
-
-/** An own value when it is a string, otherwise undefined. */
-function ownText(data: Record<string, unknown>, key: string): string | undefined {
-  const value = own(data, key)
-  return typeof value === 'string' ? value : undefined
-}
-
-/** An element the bank marks as having no value (`xsi:nil="true"` and no text). */
-function isNil(value: unknown): boolean {
-  if (!isRecord(value) || value['@xsi:nil'] !== 'true') return false
-  return Object.keys(value).every((key) => key === '@xsi:nil' || (key === '#' && value[key] === ''))
-}
-
-/**
- * A bank or callback value read for a comparison: `undefined` when it is absent (missing, null or a nil element),
- * the text when it is a string, and `null` for anything else (a list from a repeated element, a record from an
- * element with attributes or children, a number), which never equals the order's value.
- */
-function textOf(data: Record<string, unknown> | null, key: string): string | null | undefined {
-  if (data === null) return undefined
-  const value = own(data, key)
-  if (value === undefined || isNil(value)) return undefined
-  return typeof value === 'string' ? value : null
-}
-
-/** A scalar value as text; anything else as an empty string. */
-function asText(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-  return ''
-}
-
-/** A copy of raw bank data with every echoed `HashPassword` value replaced. */
-function withoutHashPassword(value: unknown, depth = 0): unknown {
-  if (depth > MAX_RAW_DEPTH) return REDACTED
-  if (Array.isArray(value)) return value.map((item) => withoutHashPassword(item, depth + 1))
-  if (!isRecord(value)) return value
-
-  const copy: Record<string, unknown> = {}
-  for (const key of Object.keys(value)) {
-    const item = value[key]
-    copy[key] =
-      key.toLowerCase() === 'hashpassword' && item !== '' && item !== null && item !== undefined
-        ? REDACTED
-        : withoutHashPassword(item, depth + 1)
-  }
-  return copy
-}
 
 /**
  * KuveytPos virtual POS (Kuveyt Turk): XML requests, a SOAP service for status, cancel and refund, 3D Secure (the
@@ -177,7 +98,9 @@ function withoutHashPassword(value: unknown, depth = 0): unknown {
  *   the mapper reads: it must name this order id (also inside its message, when present), the order's amount in
  *   kuruş and the order's currency, and it must map as approved; otherwise `OrderMismatchError` with the result
  *   attached and flagged for manual review. An approval reports the 3D model, and its card mask comes from the
- *   bank's answer only.
+ *   bank's answer only. Once the provision was sent, an answer without any data is a `PosHttpError` and an answer
+ *   whose response code is not one plain value (repeated, or with children) an `OrderMismatchError` on
+ *   `order_status` flagged for manual review: neither tells whether the payment was booked.
  * - Every result has the hashed password the bank echoes (`HashPassword`) replaced in `all` and `3d_all`.
  */
 export class KuveytPos extends AbstractGateway<BoaPosAccount> {
@@ -225,7 +148,7 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
       }
       const declined = this.responseDataMapper.map3DPaymentData(callback, null, txType, order)
 
-      return this.unsignedResult(declined, order, txType, paymentModel)
+      return unsignedDeclineResult(declined, boaOrderId(order), txType, paymentModel)
     }
 
     if (responseCode !== SUCCESS_CODE || !mapperSuccess) {
@@ -233,16 +156,16 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
       if (declined.status !== TX_DECLINED) {
         // Never report a payment that skipped the order binding and the provision.
         this.logger.error('3D callback without approval was mapped as approved', {
-          order_id: this.echo(declined.order_id),
-          status: this.echo(declined.status),
+          order_id: echo(declined.order_id),
+          status: echo(declined.status),
         })
         throw new PosError('3D callback without approval was mapped as approved')
       }
 
-      return this.redacted(declined)
+      return redactHashPassword(declined)
     }
 
-    const orderId = this.orderIdOf(order)
+    const orderId = boaOrderId(order)
     this.assertSignedFieldsBound(callback, orderId)
     this.assertSessionValue(callback, orderId)
     this.assertEchoesMatchOrder(callback, order, orderId)
@@ -255,7 +178,7 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
     )
     const provision = await this.sendRequest(txType, paymentModel, requestData, order)
 
-    const response = this.redacted(this.responseDataMapper.map3DPaymentData(callback, provision, txType, order))
+    const response = redactHashPassword(this.responseDataMapper.map3DPaymentData(callback, provision, txType, order))
     this.logger.debug('finished 3D payment', { mapped_response: response })
 
     return this.checkProvision(provision, response, order, orderId)
@@ -322,7 +245,7 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
   }
 
   override async makeRegularPayment(order: PosOrder, card: CreditCard, txType: TxType): Promise<PosResponse> {
-    return this.redacted(await super.makeRegularPayment(order, card, txType))
+    return redactHashPassword(await super.makeRegularPayment(order, card, txType))
   }
 
   /** @throws UnsupportedPaymentModelError this bank has no pre-authorization */
@@ -331,15 +254,15 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
   }
 
   override async status(order: PosOrder): Promise<PosResponse> {
-    return this.redacted(await super.status(order))
+    return redactHashPassword(await super.status(order))
   }
 
   override async cancel(order: PosOrder): Promise<PosResponse> {
-    return this.redacted(await super.cancel(order))
+    return redactHashPassword(await super.cancel(order))
   }
 
   override async refund(order: PosOrder): Promise<PosResponse> {
-    return this.redacted(await super.refund(order))
+    return redactHashPassword(await super.refund(order))
   }
 
   override async orderHistory(_order: PosOrder): Promise<PosResponse> {
@@ -396,22 +319,22 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
     const mdStatus = this.responseDataMapper.extractMdStatus(callback)
     const success = this.responseDataMapper.is3dAuthSuccess(mdStatus)
     if (success) {
-      this.logger.info('3d auth success', { md_status: this.echo(mdStatus) })
+      this.logger.info('3d auth success', { md_status: echo(mdStatus) })
     } else {
-      this.logger.error('3d auth fail', { md_status: this.echo(mdStatus) })
+      this.logger.error('3d auth fail', { md_status: echo(mdStatus) })
     }
 
     return success
   }
 
   private rejectUnsigned(callback: Record<string, unknown>): never {
-    this.logger.error('3D callback has no HashData', { order_id: this.echo(ownText(callback, 'MerchantOrderId')) })
+    this.logger.error('3D callback has no HashData', { order_id: echo(ownText(callback, 'MerchantOrderId')) })
     throw new HashMismatchError('3D callback has no HashData')
   }
 
   private malformed(callback: Record<string, unknown>, fields: string[]): never {
     this.logger.error('3D callback fields are malformed', {
-      order_id: this.echo(ownText(callback, 'MerchantOrderId')),
+      order_id: echo(ownText(callback, 'MerchantOrderId')),
       fields,
     })
     throw new HashMismatchError('3D callback fields are malformed')
@@ -436,7 +359,7 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
   private assertSessionValue(callback: Record<string, unknown>, orderId: string): void {
     if (!MD.test(ownText(callback, 'MD') ?? '')) {
       this.logger.error('3D callback authentication values are malformed', {
-        order_id: this.echo(orderId),
+        order_id: echo(orderId),
         fields: ['MD'],
       })
       throw new PosError('3D callback authentication values are malformed')
@@ -464,13 +387,13 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
     check('MerchantOrderId', 'order_id', orderId, (text) => text === orderId)
     check('Amount', 'amount', expectedAmount, (text) => text === expectedAmount)
     const expectedCurrency = this.orderCurrency(order)
-    check('CurrencyCode', 'currency', expectedCurrency, (text) => this.isCurrency(text, expectedCurrency))
-    const installment = this.normalizedInstallment(parseInstallment(order.installment))
+    check('CurrencyCode', 'currency', expectedCurrency, (text) => isCurrencyCode(text, expectedCurrency))
+    const installment = normalizedInstallment(parseInstallment(order.installment))
     check(
       'InstallmentCount',
       'installment',
       String(installment),
-      (text) => INSTALLMENT_TEXT.test(text) && this.normalizedInstallment(Number(text)) === installment,
+      (text) => INSTALLMENT_TEXT.test(text) && normalizedInstallment(Number(text)) === installment,
     )
     check('TransactionSecurity', 'payment_model', THREE_D_SECURITY, (text) => text === THREE_D_SECURITY)
     check('TransactionType', 'transaction_type', SALE, (text) => text === SALE)
@@ -482,7 +405,8 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
 
   /**
    * The provision answer is the bank's record of the booking. An approval needs the bank's own `00`; an answer with
-   * `00` is a booking whatever the mapper reads, so it must belong to the order and map as approved.
+   * `00` is a booking whatever the mapper reads, so it must belong to the order and map as approved. An answer that
+   * cannot say whether anything was booked is never a decline.
    */
   private checkProvision(
     provision: Record<string, unknown>,
@@ -490,69 +414,47 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
     order: PosOrder,
     orderId: string,
   ): PosResponse {
+    const evidence: PosResponse = { ...response, requires_manual_review: true }
+    const unknown = unknownProvisionOutcome(provision)
+    if (unknown === 'empty') {
+      this.logger.error('3D provision answer has no data', { order_id: echo(orderId) })
+      throw new PosHttpError('Bank answered the provision without any data; its outcome is unknown', { url: '' })
+    }
+    if (unknown === 'ambiguous') {
+      this.fail('order_status', SUCCESS_CODE, 'ambiguous response code', orderId, evidence)
+    }
+
     const booked = textOf(provision, 'ResponseCode') === SUCCESS_CODE
     if (response.status === TX_APPROVED && !booked) {
-      this.logger.error('3D provision answer without approval was mapped as approved', { order_id: this.echo(orderId) })
+      this.logger.error('3D provision answer without approval was mapped as approved', { order_id: echo(orderId) })
       throw new PosError('3D provision answer without approval was mapped as approved')
     }
     if (!booked) {
       return response
     }
 
-    const evidence: PosResponse = { ...response, requires_manual_review: true }
-    const message = this.assertProvisionMatchesOrder(provision, order, orderId, evidence)
+    const mismatch = provisionMismatch(
+      provision,
+      orderId,
+      this.orderKurus(order),
+      this.orderCurrency(order),
+      ['CurrencyCode'],
+      true,
+    )
+    if (mismatch !== null) {
+      this.fail(...mismatch, orderId, evidence)
+    }
     if (response.status !== TX_APPROVED) {
       this.fail('order_status', TX_APPROVED, asText(response.status), orderId, evidence)
     }
 
-    const cardNumber = textOf(message, 'CardNumber')
+    const value = own(provision, 'VPosMessage')
+    const cardNumber = textOf(isRecord(value) ? value : null, 'CardNumber')
     return {
       ...response,
       payment_model: MODEL.THREE_D_SECURE,
       masked_number: typeof cardNumber === 'string' && cardNumber !== '' ? cardNumber : null,
     }
-  }
-
-  /**
-   * A booking must name this order id (top level and, when present, inside its message), the order's amount in
-   * kuruş and the order's currency. Returns the booking's message.
-   */
-  private assertProvisionMatchesOrder(
-    provision: Record<string, unknown>,
-    order: PosOrder,
-    orderId: string,
-    evidence: PosResponse,
-  ): Record<string, unknown> | null {
-    const bookedOrderId = textOf(provision, 'MerchantOrderId')
-    if (bookedOrderId !== orderId) {
-      this.fail('order_id', orderId, bookedOrderId ?? '', orderId, evidence)
-    }
-
-    const value = own(provision, 'VPosMessage')
-    const message = isRecord(value) ? value : null
-    const expectedAmount = this.orderKurus(order)
-    const amount = textOf(message, 'Amount')
-    if (typeof amount !== 'string' || !KURUS.test(amount) || amount !== expectedAmount) {
-      this.fail('amount', expectedAmount, amount ?? '', orderId, evidence)
-    }
-
-    const messageOrderId = textOf(message, 'MerchantOrderId')
-    if (messageOrderId !== undefined && messageOrderId !== orderId) {
-      this.fail('order_id', orderId, messageOrderId ?? '', orderId, evidence)
-    }
-
-    const expectedCurrency = this.orderCurrency(order)
-    const currency = textOf(message, 'CurrencyCode')
-    if (typeof currency !== 'string' || !this.isCurrency(currency, expectedCurrency)) {
-      this.fail('currency', expectedCurrency, currency ?? '', orderId, evidence)
-    }
-
-    return message
-  }
-
-  /** A numeric currency code, the leading zero optional, equal to the order's. */
-  private isCurrency(text: string, expected: string): boolean {
-    return CURRENCY_CODE.test(text) && text.padStart(4, '0') === expected
   }
 
   /** The order amount in kuruş as text; an amount the bank cannot be sent is a `PosError`. */
@@ -564,73 +466,6 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
     return String(this.requestValueMapper.mapCurrency(order.currency ?? CURRENCY.TRY))
   }
 
-  /** One installment is a single payment, like none. */
-  private normalizedInstallment(count: number): number {
-    return count > 1 ? count : 0
-  }
-
-  /**
-   * The result of an unsigned declined callback, built from trusted data only: every value the callback could have
-   * chosen is dropped (null) and replaced by the order's id and the call's transaction type and payment model. Its
-   * decline reasons grant nothing and a merchant needs them for a genuine decline, so they stay as informational
-   * plain text of bounded length (anything but a string becomes null). The raw data is kept, without the echoed
-   * hashed password.
-   */
-  private unsignedResult(
-    response: PosResponse,
-    order: PosOrder,
-    txType: TxType,
-    paymentModel: PaymentModel,
-  ): PosResponse {
-    const orderId = this.orderIdOf(order)
-    const result: PosResponse = { ...response }
-    delete result.requires_manual_review
-    for (const key of Object.keys(result)) {
-      if (!KEPT_UNSIGNED_KEYS.has(key)) result[key] = null
-    }
-    for (const key of DECLINE_REASON_FIELDS) {
-      if (!Object.hasOwn(response, key)) continue
-      const reason: unknown = response[key]
-      result[key] = typeof reason === 'string' ? reason.slice(0, MAX_DECLINE_REASON_LENGTH) : null
-    }
-
-    return this.redacted({
-      ...result,
-      status: TX_DECLINED,
-      order_id: orderId,
-      transaction_type: txType,
-      payment_model: paymentModel,
-    })
-  }
-
-  /** The response with the hashed password the bank echoes replaced in its raw data. */
-  private redacted(response: PosResponse): PosResponse {
-    let result = response
-    for (const key of RAW_DATA_KEYS) {
-      if (Object.hasOwn(response, key) && response[key] !== null && typeof response[key] === 'object') {
-        result = { ...result, [key]: withoutHashPassword(response[key]) }
-      }
-    }
-
-    return result
-  }
-
-  /** The order id every binding compares with: letters, digits, `_` and `-`, at most 64 characters. */
-  private orderIdOf(order: PosOrder): string {
-    const id: unknown = order.id
-    const text = typeof id === 'string' || (typeof id === 'number' && Number.isFinite(id)) ? String(id) : ''
-    if (!ORDER_ID.test(text)) {
-      throw new PosError('The order id may only hold letters, digits, underscores and hyphens (at most 64).')
-    }
-
-    return text
-  }
-
-  /** A callback value shortened for logs. */
-  private echo(value: unknown): string {
-    return asText(value).slice(0, MAX_ECHOED_LENGTH)
-  }
-
   private fail(
     field: OrderMismatchField,
     expected: string,
@@ -640,10 +475,10 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
   ): never {
     this.logger.error(`3D callback ${field} does not match the order`, {
       field,
-      expected: this.echo(expected),
-      actual: this.echo(actual),
-      order_id: this.echo(orderId),
+      expected: echo(expected),
+      actual: echo(actual),
+      order_id: echo(orderId),
     })
-    throw new OrderMismatchError(field, this.echo(expected), this.echo(actual), response)
+    throw new OrderMismatchError(field, echo(expected), echo(actual), response)
   }
 }
