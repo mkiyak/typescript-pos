@@ -45,8 +45,8 @@ const pos = PosFactory.createPosGateway(account, posTestConfig) // or posProduct
 
 ## Flow
 
-1. Persist the order (`id`, `amount`, `currency`, `installment`) on your server and tie it to the customer's
-   session before redirecting.
+1. Persist the order (`id`, `amount`, `currency`, `installment`) on your server and store it under an
+   unguessable token you put in the callback URL before redirecting.
 2. `pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card)` sends the card from **your server** to
    the bank and returns `{ gateway, method: 'POST', inputs }`. Your server handles card data at this step, so PCI DSS
    scope applies; never store the card (not in your session, not in your database). A card is always required: this
@@ -98,7 +98,9 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
 await pos.status({ id: orderId })
 await pos.cancel({ id: orderId, payment_model: 'regular' })
 await pos.refund({ id: orderId, amount: 25, currency: 'TRY', order_amount: 100 }) // partial: amount < order_amount
-await pos.payment(MODEL.NON_SECURE, { id: orderId, amount: 100, currency: 'TRY' }, TX_TYPE.PAY_POST_AUTH, null)
+// capture a pre-authorization: `preAuthResponse` is the response of the pre-authorization
+const capture = { id: orderId, amount: 100, currency: 'TRY', ref_ret_num: preAuthResponse.ref_ret_num }
+await pos.payment(MODEL.NON_SECURE, capture, TX_TYPE.PAY_POST_AUTH, null)
 ```
 
 ## Queries

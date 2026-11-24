@@ -39,7 +39,7 @@ export async function startPayment(orderId: string, amount: number) {
     amount, // major unit: 10.5 = 10,50 TL
     currency: 'TRY',
     installment: 0,
-    success_url: 'https://shop.example.com/pos/callback',
+    success_url: 'https://shop.example.com/pos/callback?token=<unguessable-token>',
   }
   // Persist `order` (id and amount!) and tie it to an unguessable token in the callback URL before redirecting.
   return pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, null, true) // createWithoutCard

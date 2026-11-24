@@ -40,8 +40,8 @@ ignored. Public HTTPS URLs without `localhost` are usually required.
 
 ## Flow
 
-1. Persist the order (`id`, `amount`, `currency`, `installment`) on your server and tie it to the customer's
-   session before redirecting.
+1. Persist the order (`id`, `amount`, `currency`, `installment`) on your server and store it under an
+   unguessable token you put in the callback URL before redirecting.
 2. Build the form. Two variants:
    - **Recommended: the bank page collects the card.**
      `pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, null, true)` (the last argument is
