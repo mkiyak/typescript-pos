@@ -91,6 +91,7 @@ describe('AkbankPosResponseDataMapper', () => {
     expect(mapper.extractMdStatus(responseData)).toBe(expected)
   })
 
+  // deviation: A22 status queries are not supported by this gateway
   it('mapStatusResponse is not supported', () => {
     expect(() => mapper.mapStatusResponse({})).toThrow(NotImplementedError)
   })
@@ -396,6 +397,136 @@ describe('AkbankPosResponseDataMapper', () => {
       )
       const logged = JSON.stringify([...logger.debug.mock.calls, ...logger.warn.mock.calls])
       expect(logged).not.toMatch(/\d{16}/)
+    })
+    // addition: objects, lists and non-numeric values never reach string-typed keys and never approve
+    describe('non-scalar bank values', () => {
+      const bad: unknown[] = [{ a: 1 }, ['a', 'b'], {}, [], true, Number.NaN]
+
+      it.each(bad.map((value) => [JSON.stringify(value) ?? String(value), value]))(
+        'payment response with %s values',
+        (_label, value) => {
+          valueMapper.mapTxType.mockReturnValue(TX_TYPE.PAY_AUTH)
+          const actual = mapper.mapPaymentResponse(
+            {
+              responseCode: value,
+              txnCode: value,
+              responseMessage: value,
+              hostMessage: value,
+              order: { orderId: value, orderTrackId: value },
+              transaction: { authCode: value, rrn: value, batchNumber: value },
+            },
+            TX_TYPE.PAY_AUTH,
+            order,
+          ) as Data
+          expect(actual.status).toBe('declined')
+          for (const key of ['proc_return_code', 'error_code', 'error_message', 'order_id', 'recurring_id']) {
+            expect(actual[key]).toBeNull()
+          }
+          for (const key of ['auth_code', 'ref_ret_num', 'batch_num']) {
+            expect(actual[key]).toBeNull()
+          }
+        },
+      )
+
+      it.each(bad.map((value) => [JSON.stringify(value) ?? String(value), value]))(
+        '3D Pay, 3D Host and 3D Secure responses with %s values',
+        (_label, value) => {
+          const raw = {
+            responseCode: value,
+            responseMessage: value,
+            orderId: value,
+            authCode: value,
+            rrn: value,
+            batchNumber: value,
+            secureEcomInd: value,
+          }
+          for (const method of ['map3DPayResponseData', 'map3DHostResponseData'] as const) {
+            const actual = realMapper()[method](raw, TX_TYPE.PAY_AUTH, order) as Data
+            expect(actual.status).toBe('declined')
+            expect(actual.proc_return_code).toBeNull()
+            expect(actual.order_id).toBeNull()
+            expect(actual.md_error_message).toBeNull()
+            expect(actual.auth_code).toBeNull()
+          }
+          const secure = realMapper().map3DPaymentData(raw, null, TX_TYPE.PAY_AUTH, order) as Data
+          expect(secure.status).toBe('declined')
+          expect(secure.order_id).toBeNull()
+          expect(secure.md_error_message).toBeNull()
+          expect(secure.eci).toBeNull()
+        },
+      )
+
+      it.each(bad.map((value) => [JSON.stringify(value) ?? String(value), value]))(
+        'refund, cancel and history responses with %s values',
+        (_label, value) => {
+          const raw = {
+            responseCode: value,
+            responseMessage: value,
+            order: { orderId: value, orderTrackId: value },
+            transaction: { authCode: value, rrn: value },
+          }
+          for (const actual of [realMapper().mapRefundResponse(raw), realMapper().mapCancelResponse(raw)] as Data[]) {
+            expect(actual.status).toBe('declined')
+            for (const key of ['proc_return_code', 'error_code', 'error_message', 'order_id', 'recurring_id']) {
+              expect(actual[key]).toBeNull()
+            }
+          }
+          const history = realMapper().mapOrderHistoryResponse({ ...raw, txnDetailList: value }) as Data
+          expect(history.status).toBe('declined')
+          expect(history.error_message).toBeNull()
+          expect(history.transactions).toStrictEqual([])
+        },
+      )
+
+      it.each(bad.map((value) => [JSON.stringify(value) ?? String(value), value]))(
+        'history transactions with %s values',
+        (_label, value) => {
+          const tx = {
+            responseCode: 'VPS-0000',
+            txnCode: value,
+            txnStatus: value,
+            preAuthStatus: value,
+            currencyCode: value,
+            installCount: value,
+            amount: value,
+            preAuthCloseAmount: value,
+            maskedCardNumber: value,
+            rrn: value,
+            batchNumber: value,
+            authCode: value,
+            orderId: value,
+            recurringOrder: value,
+          }
+          const actual = realMapper().mapOrderHistoryResponse({
+            responseCode: 'VPS-0000',
+            txnDetailList: [tx, { ...tx, requestType: 'R', requestStatus: value }],
+          }) as Data
+          expect(actual.order_id).toBeNull()
+          for (const t of actual.transactions as Data[]) {
+            for (const key of [
+              'order_status',
+              'first_amount',
+              'masked_number',
+              'ref_ret_num',
+              'batch_num',
+              'auth_code',
+              'currency',
+              'transaction_type',
+              'recurring_order',
+            ]) {
+              expect(t[key] ?? null).toBeNull()
+            }
+          }
+        },
+      )
+
+      it.each(['abc', '', '  '])('history amount %j maps to null, not 0', (amount) => {
+        const actual = realMapper().mapOrderHistoryResponse({
+          responseCode: 'VPS-0000',
+          txnDetailList: [{ responseCode: 'VPS-0000', txnCode: '1000', txnStatus: 'N', amount }],
+        }) as Data
+        expect(actual.transactions[0].first_amount).toBeNull()
+      })
     })
   })
 })

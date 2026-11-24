@@ -29,7 +29,7 @@ describe('AkbankPosResponseValueMapper', () => {
     expect(mapper.mapTxType(txType)).toBe(expected)
   })
 
-  // deviation: A20 the reference logic lives in mapOrderStatusDetailed, the interface method has no pre-auth/recurring arguments
+  // deviation: A20 pre-auth and recurring handling live in mapOrderStatusDetailed; the interface method takes neither
   it.each([
     ['N', null, false, PAYMENT_STATUS.PAYMENT_COMPLETED],
     ['N', 'O', false, PAYMENT_STATUS.PRE_AUTH_COMPLETED],
@@ -78,6 +78,7 @@ describe('AkbankPosResponseValueMapper', () => {
     expect(mapper.mapCurrency(currency, txType as never)).toBe(expected)
   })
 
+  // deviation: A22 the reference throws a LogicException; this gateway has no secure type table
   it('mapSecureType is not supported', () => {
     expect(() => mapper.mapSecureType('3D', TX_TYPE.PAY_AUTH)).toThrow(NotImplementedError)
   })

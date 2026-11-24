@@ -7,7 +7,7 @@ import { TX_APPROVED, TX_DECLINED } from './ResponseDataMapperInterface.js'
 type Raw = Record<string, unknown>
 
 /** PHP `$data[$key] ?? null` on a value that may also be null, a scalar or a list. */
-function field(data: unknown, key: string | number): unknown {
+function node(data: unknown, key: string | number): unknown {
   if (data !== null && typeof data === 'object' && Object.hasOwn(data, key)) {
     return (data as Raw)[key as string] ?? null
   }
@@ -16,26 +16,44 @@ function field(data: unknown, key: string | number): unknown {
 }
 
 /** Walks nested keys; any missing or non-object step yields null instead of a TypeError. */
-function path(data: unknown, ...keys: string[]): unknown {
+function walk(data: unknown, ...keys: string[]): unknown {
   let current: unknown = data
   for (const key of keys) {
-    current = field(current, key)
+    current = node(current, key)
   }
 
   return current
 }
 
-/** A bank field as a string, or null when missing; JSON numbers become their decimal text. */
+/** Only strings, finite numbers and bigints are bank values; objects, arrays and the rest read as missing. */
+function scalar(value: unknown): string | number | bigint | null {
+  if (typeof value === 'string' || typeof value === 'bigint') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+
+  return null
+}
+
+/** A scalar bank field (never an object or list), or null when missing. */
+function field(data: unknown, key: string | number): string | number | bigint | null {
+  return scalar(node(data, key))
+}
+
+/** A scalar bank field at a nested position, or null when any step is missing. */
+function path(data: unknown, ...keys: string[]): string | number | bigint | null {
+  return scalar(walk(data, ...keys))
+}
+
+/** A bank field as a string, or null when missing or not a scalar; JSON numbers become their decimal text. */
 function text(data: unknown, key: string | number): string | null {
-  const value = field(data, key)
-  if (value === null) return null
-  return typeof value === 'string' ? value : String(value)
+  return asText(field(data, key))
 }
 
 /** The same conversion for an already extracted value. */
 function asText(value: unknown): string | null {
-  if (value === null || value === undefined) return null
-  return typeof value === 'string' ? value : String(value)
+  const v = scalar(value)
+  if (v === null) return null
+
+  return typeof v === 'string' ? v : String(v)
 }
 
 /** PHP 8 `$value > 0` for a bank value: numeric strings compare as numbers, others as strings. */
@@ -103,7 +121,7 @@ export class AkbankPosResponseDataMapper extends AbstractResponseDataMapper {
     const txnCode = text(raw, 'txnCode')
     const txnDateTime = text(raw, 'txnDateTime')
     const orderTrackId = path(raw, 'order', 'orderTrackId')
-    const transaction = path(raw, 'transaction')
+    const transaction = walk(raw, 'transaction')
 
     const mappedResponse: Raw = {
       recurring_id: orderTrackId,
@@ -189,6 +207,8 @@ export class AkbankPosResponseDataMapper extends AbstractResponseDataMapper {
     defaultResponse.currency = order.currency ?? null
     defaultResponse.installment_count = order.installment ?? null
 
+    // An approved answer may still lack order_id, auth_code or transaction_time here: the gateway confirms
+    // approved 3D Pay and 3D Host results with the bank before it returns them.
     if (status === TX_APPROVED) {
       const txnDateTime = text(raw, 'txnDateTime')
       defaultResponse.transaction_time =
@@ -283,7 +303,7 @@ export class AkbankPosResponseDataMapper extends AbstractResponseDataMapper {
     let orderId: unknown = null
     let isRecurringOrder = false
     if (status === TX_APPROVED) {
-      for (const rawTx of asRecordList(field(rawResponseData, 'txnDetailList'))) {
+      for (const rawTx of asRecordList(node(rawResponseData, 'txnDetailList'))) {
         if (field(rawTx, 'requestType') === 'R') {
           isRecurringOrder = true
           transactions.push(this.mapSingleRecurringOrderHistoryTransaction(rawTx))
@@ -343,8 +363,10 @@ export class AkbankPosResponseDataMapper extends AbstractResponseDataMapper {
 
   private formatAmountOrNull(value: unknown): number | null {
     const amount = asText(value)
+    // a non-numeric amount is unknown, not zero
+    if (amount === null || amount.trim() === '' || !Number.isFinite(Number(amount))) return null
 
-    return amount === null ? null : this.valueFormatter.formatAmount(amount, TX_TYPE.ORDER_HISTORY)
+    return this.valueFormatter.formatAmount(amount, TX_TYPE.ORDER_HISTORY)
   }
 
   private formatDateOrNull(value: unknown): Date | null {
