@@ -234,6 +234,40 @@ describe('PayForPosCrypt', () => {
       expect(crypt.check3DHash(account, { ...data, ResponseHash: hex })).toBe(false)
     })
 
+    // addition: the signed text has no separators, so dropping, emptying or wrapping a field merges it into its
+    // neighbour while the genuine hash still matches; only the shape checks reject these
+    describe('re-split callbacks that keep the genuine hash', () => {
+      const GENUINE = 'il/SWNG2llQkLgnCbUG6lPYtlgM='
+      const genuine = (): GatewayResponseData =>
+        callback('2022103114B3', 'S86797', '00', '1', 'PF638028538035077529', GENUINE)
+
+      it('the genuine callback is accepted', () => {
+        expect(crypt.check3DHash(account, genuine())).toBe(true)
+      })
+
+      it.each([
+        ['missing OrderId merged into AuthCode', { OrderId: undefined, AuthCode: '2022103114B3S86797' }],
+        ['empty OrderId merged into AuthCode', { OrderId: '', AuthCode: '2022103114B3S86797' }],
+        ['null OrderId merged into AuthCode', { OrderId: null, AuthCode: '2022103114B3S86797' }],
+        ['missing ProcReturnCode merged into AuthCode', { ProcReturnCode: undefined, AuthCode: 'S8679700' }],
+        ['empty ProcReturnCode merged into 3DStatus', { ProcReturnCode: '', AuthCode: 'S86797', '3DStatus': '001' }],
+        ['missing 3DStatus merged into ProcReturnCode', { '3DStatus': undefined, ProcReturnCode: '001' }],
+        ['empty 3DStatus merged into ResponseRnd', { '3DStatus': '', ResponseRnd: '1PF638028538035077529' }],
+        ['missing ResponseRnd merged into 3DStatus', { ResponseRnd: undefined, '3DStatus': '1PF638028538035077529' }],
+        ['empty ResponseRnd merged into 3DStatus', { ResponseRnd: '', '3DStatus': '1PF638028538035077529' }],
+        ['array AuthCode', { AuthCode: ['S86797'] }],
+        ['array OrderId', { OrderId: ['2022103114B3'] }],
+        ['number 3DStatus', { '3DStatus': 1 }],
+      ])('rejects %s', (_name, change) => {
+        const data = { ...genuine(), ...change } as unknown as GatewayResponseData
+        expect(crypt.check3DHash(account, data)).toBe(false)
+      })
+    })
+
+    it('hashFromParams is not implemented', () => {
+      expect(() => crypt.hashFromParams(account, {}, 'a:b')).toThrow(NotImplementedError)
+    })
+
     it('ignores an unsigned hash type and inherited values', () => {
       const data = base()
       expect(crypt.check3DHash(account, { ...data, HashType: 'sha1' })).toBe(true)

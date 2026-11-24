@@ -31,7 +31,7 @@ describe('PayForPosRequestValueFormatter', () => {
     expect(formatter.formatAmount(amount)).toBe(expected)
   })
 
-  // deviation: F28/F3 (the formatter takes the card, not a date)
+  // deviation: the formatter takes the card
   it.each(['', 'abc'])('formatCardExpDate with field "%s"', (fieldName) => {
     expect(formatter.formatCardExpDate(card, fieldName)).toBe('0424')
   })
@@ -45,7 +45,6 @@ describe('PayForPosRequestValueFormatter', () => {
   it.each([
     [1.005, '1.01'],
     [0.285, '0.29'],
-    [10.1, '10.1'],
     [10.1, '10.1'],
     [100, '100'],
     [100.01, '100.01'],
