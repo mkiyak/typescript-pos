@@ -110,4 +110,4 @@ export const AccountFactory = {
   ): BoaPosAccount {
     return new BoaPosAccount(bank, merchantId, username, customerId, secretKey, subMerchantId)
   },
-}
+} as const

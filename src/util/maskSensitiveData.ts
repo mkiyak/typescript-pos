@@ -45,6 +45,7 @@ const SENSITIVE_KEYS = new Set([
   'mac',
   'payerauthenticationcode',
   'hashpassword',
+  'hashdata',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -84,6 +85,7 @@ const SENSITIVE_TAGS = [
   'mac',
   'PayerAuthenticationCode',
   'HashPassword',
+  'HashData',
 ]
 const XML_PATTERN = new RegExp(`(<(${SENSITIVE_TAGS.join('|')})(?:\\s[^>]*)?>)[^<]*(</\\2\\s*>)`, 'gi')
 const QUERY_PATTERN = new RegExp(`(?<![A-Za-z0-9_])(${SENSITIVE_TAGS.join('|')})=[^&\\s"']*`, 'gi')

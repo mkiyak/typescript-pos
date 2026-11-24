@@ -325,4 +325,15 @@ describe('maskSensitiveData', () => {
     expect(json).not.toContain('c77dFss')
     expect(json).toContain('"MerchantId":"1"')
   })
+
+  // a logged HashData would allow an offline guess of the API password it is derived from
+  it('masks HashData in objects, XML and form text and keeps the order id', () => {
+    expect(maskSensitiveData({ HashData: 'iZ4ZJW8sGXEaN0GBvqHkvK3IK5E=', MerchantOrderId: 'A001' })).toStrictEqual({
+      HashData: '***',
+      MerchantOrderId: 'A001',
+    })
+    const xml = maskSensitiveData('<VPosMessage><HashData>iZ4ZJW8sGXEaN0GBvqHkvK3IK5E=</HashData></VPosMessage>')
+    expect(xml).toBe('<VPosMessage><HashData>***</HashData></VPosMessage>')
+    expect(maskSensitiveData('HashData=iZ4Z%3D&OrderId=1')).toBe('HashData=***&OrderId=1')
+  })
 })
