@@ -6,6 +6,7 @@ import { AkbankPosAccount } from '../../../src/model/account/AkbankPosAccount.js
 import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js'
 import { GarantiPosAccount } from '../../../src/model/account/GarantiPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
+import { PayForPosAccount } from '../../../src/model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../../../src/model/account/PosNetPosAccount.js'
 import { CARD_CLASS } from '../../../src/PosInterface.js'
 import { maskSensitiveData } from '../../../src/util/maskSensitiveData.js'
@@ -202,6 +203,69 @@ describe('AccountFactory PosNet', () => {
   })
 })
 
+describe('AccountFactory PayFor', () => {
+  it('testCreatePayForPosAccount', () => {
+    const a = AccountFactory.createPayForPosAccount(
+      'qnbfinansbank-payfor',
+      '085300000009704',
+      'QNB_API_KULLANICI_3DPAY',
+      'UcBN0',
+      '12345678',
+      PayForPosAccount.MBR_ID_ZIRAAT_KATILIM,
+    )
+    expect(a).toBeInstanceOf(PayForPosAccount)
+    expect(a.getBankName()).toBe('qnbfinansbank-payfor')
+    expect(a.getMerchantId()).toBe('085300000009704')
+    expect(a.getUsername()).toBe('QNB_API_KULLANICI_3DPAY')
+    expect(a.getPassword()).toBe('UcBN0')
+    expect(a.getSecretKey()).toBe('12345678')
+    expect(a.getMbrId()).toBe('12')
+  })
+
+  it('testCreatePayForPosAccountNonSecure', () => {
+    const a = AccountFactory.createPayForPosAccount(
+      'qnbfinansbank-payfor',
+      '085300000009704',
+      'QNB_API_KULLANICI',
+      'UcBN0',
+    )
+    expect(a.getMerchantId()).toBe('085300000009704')
+    expect(a.getUsername()).toBe('QNB_API_KULLANICI')
+    expect(a.getMbrId()).toBe(PayForPosAccount.MBR_ID_FINANSBANK)
+    expect(PayForPosAccount.MBR_ID_FINANSBANK).toBe('5')
+    // addition: F1 (no merchant pass means 3D is unavailable)
+    expect(() => a.getSecretKey()).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: F1
+  it.each([
+    ['merchantId', ['', 'u', 'p']],
+    ['merchantId', ['  ', 'u', 'p']],
+    ['userCode', ['m', '', 'p']],
+    ['userCode', ['m', '  ', 'p']],
+    ['userPassword', ['m', 'u', '']],
+    ['userPassword', ['m', 'u', '  ']],
+  ] as const)('rejects a blank %s', (_n, [m, u, p]) => {
+    expect(() => AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', m, u, p)).toThrow(
+      MissingAccountInfoError,
+    )
+  })
+
+  // addition: F1
+  it.each(['', ' '])('rejects a blank merchantPass %j', (pass) => {
+    expect(() => AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'm', 'u', 'p', pass)).toThrow(
+      MissingAccountInfoError,
+    )
+  })
+
+  // addition: F1
+  it.each(['', '5a', '12345'])('rejects an invalid mbrId %j', (mbrId) => {
+    expect(() => AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'm', 'u', 'p', null, mbrId)).toThrow(
+      MissingAccountInfoError,
+    )
+  })
+})
+
 describe('account credential leakage', () => {
   const accounts = [
     ['Asseco', () => AccountFactory.createAssecoPosAccount('akbank', 'mid', 'USER1', 'PW1', 'SK1')],
@@ -222,6 +286,11 @@ describe('account credential leakage', () => {
     ],
     ['Akbank', () => AccountFactory.createAkbankPosAccount('akbank-pos', 'mid', 'APIUSER', 'kdsnsksl', 'SUB1')],
     ['PosNet', () => AccountFactory.createPosNetPosAccount('yapikredi', 'mid', 'TERM1', '27426457', 'SK1')],
+    // addition: F1
+    [
+      'PayFor',
+      () => AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'mid', 'USER1', 'UcBN0', '12345678'),
+    ],
   ] as const
 
   it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
@@ -238,6 +307,8 @@ describe('account credential leakage', () => {
         'kdsnsksl',
         'APIUSER',
         '27426457',
+        'UcBN0',
+        '12345678',
       ])
         expect(out).not.toContain(secret)
     }

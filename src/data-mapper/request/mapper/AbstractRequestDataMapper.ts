@@ -72,7 +72,7 @@ export abstract class AbstractRequestDataMapper<A extends AbstractPosAccount = A
     _paymentModel: PaymentModel,
     _txType: TxType,
     _creditCard: CreditCard | null = null,
-  ): Record<string, unknown> {
+  ): Record<string, unknown> | Promise<Record<string, unknown>> {
     throw new NotImplementedError('Not supported')
   }
 

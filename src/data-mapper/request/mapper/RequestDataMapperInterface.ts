@@ -63,5 +63,5 @@ export interface RequestDataMapperInterface<A extends AbstractPosAccount = Abstr
     paymentModel: PaymentModel,
     txType: TxType,
     creditCard?: CreditCard | null,
-  ): Record<string, unknown>
+  ): Record<string, unknown> | Promise<Record<string, unknown>>
 }

@@ -237,4 +237,39 @@ describe('maskSensitiveData', () => {
   it('leaves MacParams values readable', () => {
     expect(maskSensitiveData({ MacParams: 'MerchantNo:TerminalNo' })).toEqual({ MacParams: 'MerchantNo:TerminalNo' })
   })
+
+  // addition: F23
+  it('masks PayFor password keys and card fields in objects', () => {
+    const out = maskSensitiveData({
+      UserPass: 'UcBN0',
+      MerchantPass: 'x',
+      Pan: '4155650100416111',
+      Expiry: '0128',
+      Cvv2: '123',
+    })
+    for (const value of Object.values(out)) expect(value).toBe('***')
+  })
+
+  // addition: F23
+  it('masks PayFor XML request fields', () => {
+    const out = maskSensitiveData(
+      '<PayforRequest><UserCode>u</UserCode><UserPass>UcBN0</UserPass><Pan>4155650100416111</Pan><Cvv2>123</Cvv2><Expiry>0128</Expiry></PayforRequest>',
+    )
+    expect(out).toContain('<UserPass>***</UserPass>')
+    expect(out).toContain('<Pan>***</Pan>')
+    expect(out).toContain('<Cvv2>***</Cvv2>')
+    expect(out).toContain('<Expiry>***</Expiry>')
+    expect(out).toContain('<UserCode>u</UserCode>')
+    expect(out).not.toContain('UcBN0')
+  })
+
+  // addition: F23
+  it('masks PayFor form fields and keeps the hash readable', () => {
+    const out = maskSensitiveData('MbrId=5&UserCode=u&Pan=4155650100416111&Expiry=0128&Cvv2=123&Hash=abc')
+    expect(out).toContain('Pan=***')
+    expect(out).toContain('Expiry=***')
+    expect(out).toContain('Cvv2=***')
+    expect(out).toContain('Hash=abc')
+    expect(out).not.toContain('4155650100416111')
+  })
 })

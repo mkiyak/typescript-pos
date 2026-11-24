@@ -276,7 +276,13 @@ export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
   ): Promise<Raw> {
     const requestTxType = TX_TYPE.INTERNAL_3D_FORM_BUILD
     const requestData = await this.dispatchRequestDataPrepared(
-      this.requestDataMapper.create3DFormInitializeRequestData(this.account, order, paymentModel, orderTxType, card),
+      await this.requestDataMapper.create3DFormInitializeRequestData(
+        this.account,
+        order,
+        paymentModel,
+        orderTxType,
+        card,
+      ),
       requestTxType,
       order,
       paymentModel,

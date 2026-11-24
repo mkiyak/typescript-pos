@@ -162,7 +162,7 @@ export class PosNetPos extends AbstractGateway<PosNetPosAccount> {
     required(order, 'success_url')
 
     const requestData = await this.dispatchRequestDataPrepared(
-      this.requestDataMapper.create3DFormInitializeRequestData(this.account, order, paymentModel, txType, card),
+      await this.requestDataMapper.create3DFormInitializeRequestData(this.account, order, paymentModel, txType, card),
       txType,
       order,
       paymentModel,
