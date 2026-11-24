@@ -16,6 +16,10 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
 - **Akbank (`AkbankPos`).** Every request is signed with the secret key and every callback is verified; 3D Pay and
   3D Host callbacks must be signed, and an approved result is confirmed with the bank (one signed order-history request)
   before it is returned. When the bank does not confirm it, `OrderMismatchError.paymentMayHaveCompleted` is `true`.
+- **PayFor (`PayForPos`).** The signed callback is verified with pinned fields and can never be switched off; the
+  echoed order id, amount, currency, transaction type, installment count and model are bound to your order
+  (`OrderMismatchError`), and every approved 3D result is confirmed with a status request before it is returned. A
+  Ziraat Katılım callback without a signature never approves a payment by itself.
 - **POSNET (`PosNetPos`).** The 3D result is decrypted by the bank and its MAC is verified before any money moves;
   the bank-resolved order id, amount, currency and installment count must equal your order's (`OrderMismatchError`,
   nothing charged). The check cannot be disabled.

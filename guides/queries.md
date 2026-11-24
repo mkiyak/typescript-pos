@@ -35,6 +35,7 @@ replaces the other.
 | `AkbankPosQuery` | yes | yes | no | no | no |
 | `PosNetPosQuery` | yes | no | no | no | no |
 | `PosNetV1PosQuery` | yes | no | no | no | no |
+| `PayForPosQuery` | yes | yes | no | no | no |
 
 A query the bank class does not offer rejects with `UnsupportedTransactionTypeError`; it never throws synchronously.
 Check first when the choice is dynamic:
@@ -59,6 +60,7 @@ the bank's field names back.
 | `GarantiPos` | `Mode`, `Version`, `Terminal` and `Terminal.HashData` (each only when missing) | `GVPSRequest` XML | `payment_api` |
 | `AkbankPos` | `terminal`, `version`, `requestDateTime`, `randomNumber` (each only when missing) | JSON, signed with the `auth-hash` header | `payment_api` + `/transaction/process` unless `apiUrl` is given |
 | `PosNetPos` | `mid`, `tid` (each only when missing) | XML in the `xmldata` form field | `payment_api` unless `apiUrl` is given |
+| `PayForPos` | `MerchantId`, `UserCode`, `UserPass`, `MbrId` (each only when missing) | `PayforRequest` XML | `payment_api` unless `apiUrl` is given |
 | `PosNetV1Pos` | `ApiType`, `ApiVersion`, `MerchantNo`, `TerminalNo` (each only when missing) and a `MAC` over the fields listed in `MACParams` (when you set no `MAC`) | JSON | none: `apiUrl` is required |
 
 For a sub-dealer account `MerchantId` is the sub-merchant id, otherwise `'1'`.
@@ -110,6 +112,19 @@ const byDate = await query.history({ start_date: new Date('2026-11-14T00:00:00+0
 
 A declined answer has `status: 'declined'`, an empty list and the bank's message in `error_message`. The raw decoded
 answer is always in `all`. See the [Akbank guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/akbank-pos-payment.md).
+
+## PayFor: `history`
+
+```ts
+const query = PosQueryFactory.createPosQuery(payForAccount, posProductionConfig)
+
+// The transactions of one day (a Date; Türkiye time)
+const day = await query.history({ transaction_date: new Date('2026-11-14T00:00:00+03:00') })
+// day.status is null when the bank's answer carries no overall result; day.transactions[] lists the day's records
+```
+
+A single order is listed by the gateway's `orderHistory({ id })`. The raw decoded answer is always in `all`. See the
+[PayFor guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/payfor-payment.md).
 
 ## Custom URLs are restricted
 
