@@ -122,7 +122,7 @@ type PayRow = {
   isSuccess: boolean
 }
 
-// The reference passes txType "status" in these rows; deviation: tx type must be a payment type for binding.
+// An earlier version of these rows passed txType "status"; deviation: tx type must be a payment type for binding.
 const make3DPayPaymentRows: Array<[string, PayRow]> = [
   [
     'auth_fail',
@@ -552,6 +552,9 @@ const boundOrder: PosOrder = {
   transaction_id: 'T1',
 }
 
+/** The same order without a stored `transaction_id` / `payment_token`: the callback ids are queried. */
+const { transaction_id: _boundTransactionId, ...unboundOrder } = boundOrder
+
 /** A forged callback: says approved and points at transaction T1. */
 const forgedCallback: GatewayResponseData = { Rc: '0000', TransactionId: 'T1' }
 
@@ -731,10 +734,12 @@ describe('PayFlexCPV4Pos (end to end)', () => {
       expect(res.status).toBe('approved')
     })
 
+    // changed by the order id binding: an order with its own transaction_id is queried by that id, so this case
+    // uses an order without stored ids
     it('queries by PaymentToken alone and skips the transaction id comparison', async () => {
       const sent: Sent[] = []
       const pos = realGateway(recordingFetch(sent, () => answer({ TransactionId: 'T9' })))
-      const res = await pos.payment(MODEL.THREE_D_HOST, boundOrder, TX_TYPE.PAY_AUTH, null, {
+      const res = await pos.payment(MODEL.THREE_D_HOST, unboundOrder, TX_TYPE.PAY_AUTH, null, {
         Rc: '0000',
         PaymentToken: 'P1',
       })
@@ -761,7 +766,8 @@ describe('PayFlexCPV4Pos (end to end)', () => {
 
     it('callback Rc 2053 and the query says not approved: declined without review flag', async () => {
       const pos = realGateway(recordingFetch([], () => JSON.stringify(authFailCallback)))
-      const res = await pos.payment(MODEL.THREE_D_PAY, boundOrder, TX_TYPE.PAY_AUTH, null, { ...authFailCallback })
+      // order without stored ids: the callback TransactionId differs from boundOrder's T1
+      const res = await pos.payment(MODEL.THREE_D_PAY, unboundOrder, TX_TYPE.PAY_AUTH, null, { ...authFailCallback })
       expect(res.status).toBe('declined')
       expect(res.error_code).toBe('2053')
       expect(res.requires_manual_review).toBeUndefined()
@@ -788,7 +794,8 @@ describe('PayFlexCPV4Pos (end to end)', () => {
       async (model, cb) => {
         const fetchSpy = vi.fn(unexpectedNetwork)
         const pos = realGateway(fetchSpy as unknown as typeof fetch)
-        const res = await pos.payment(model, boundOrder, TX_TYPE.PAY_AUTH, null, cb)
+        // order without stored ids: an order with a transaction_id is queried by it (see the binding tests below)
+        const res = await pos.payment(model, unboundOrder, TX_TYPE.PAY_AUTH, null, cb)
         expect(res.status).toBe('declined')
         expect(res.requires_manual_review).toBe(true)
         expect(res.payment_model).toBe(model)
@@ -799,7 +806,7 @@ describe('PayFlexCPV4Pos (end to end)', () => {
     it('callback with a failure code and no ids: declined without review flag, no HTTP', async () => {
       const fetchSpy = vi.fn(unexpectedNetwork)
       const pos = realGateway(fetchSpy as unknown as typeof fetch)
-      const res = await pos.payment(MODEL.THREE_D_HOST, boundOrder, TX_TYPE.PAY_AUTH, null, { Rc: '2053' })
+      const res = await pos.payment(MODEL.THREE_D_HOST, unboundOrder, TX_TYPE.PAY_AUTH, null, { Rc: '2053' })
       expect(res.status).toBe('declined')
       expect(res.requires_manual_review).toBeUndefined()
       expect(fetchSpy).not.toHaveBeenCalled()
@@ -851,12 +858,211 @@ describe('PayFlexCPV4Pos (end to end)', () => {
         }),
       )
       const [r1, r2] = await Promise.all([
-        pos.make3DHostPayment({ Rc: '0000', TransactionId: 'T1' }, { ...boundOrder, id: 'o1' }, TX_TYPE.PAY_AUTH),
-        pos.make3DHostPayment({ Rc: '0000', TransactionId: 'T2' }, { ...boundOrder, id: 'o2' }, TX_TYPE.PAY_AUTH),
+        pos.make3DHostPayment(
+          { Rc: '0000', TransactionId: 'T1' },
+          { ...boundOrder, id: 'o1', transaction_id: 'T1' },
+          TX_TYPE.PAY_AUTH,
+        ),
+        pos.make3DHostPayment(
+          { Rc: '0000', TransactionId: 'T2' },
+          { ...boundOrder, id: 'o2', transaction_id: 'T2' },
+          TX_TYPE.PAY_AUTH,
+        ),
       ])
       expect([r1.order_id, r1.transaction_id]).toStrictEqual(['o1', 'T1'])
       expect([r2.order_id, r2.transaction_id]).toStrictEqual(['o2', 'T2'])
     })
+  })
+
+  // addition: the order's own transaction id / payment token decide what is queried (replay protection)
+  describe('binding to the order transaction id and payment token', () => {
+    it('rejects a callback whose TransactionId contradicts the order before any HTTP', async () => {
+      const fetchSpy = vi.fn(unexpectedNetwork)
+      const pos = realGateway(fetchSpy as unknown as typeof fetch)
+      const err = await pos
+        .payment(MODEL.THREE_D_HOST, { ...boundOrder, transaction_id: 'T_new' }, TX_TYPE.PAY_AUTH, null, {
+          Rc: '0000',
+          TransactionId: 'T_old',
+        })
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      const mismatch = err as OrderMismatchError
+      expect(mismatch.field).toBe('transaction_id')
+      expect(mismatch.expected).toBe('T_new')
+      expect(mismatch.actual).toBe('T_old')
+      expect(mismatch.paymentMayHaveCompleted).toBe(false)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('rejects a callback whose PaymentToken contradicts the order before any HTTP', async () => {
+      const fetchSpy = vi.fn(unexpectedNetwork)
+      const pos = realGateway(fetchSpy as unknown as typeof fetch)
+      const err = await pos
+        .payment(MODEL.THREE_D_PAY, { ...unboundOrder, payment_token: 'P_new' }, TX_TYPE.PAY_AUTH, null, {
+          Rc: '0000',
+          PaymentToken: 'P_old',
+        })
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      const mismatch = err as OrderMismatchError
+      expect(mismatch.field).toBe('transaction_id')
+      expect(mismatch.expected).toBe('P_new')
+      expect(mismatch.actual).toBe('P_old')
+      expect(mismatch.paymentMayHaveCompleted).toBe(false)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['no ids', {}],
+      ['only a result code', { Rc: '0000' }],
+    ] as Array<[string, GatewayResponseData]>)(
+      'queries the order transaction_id when the callback carries %s and approves when bound',
+      async (_name, cb) => {
+        const sent: Sent[] = []
+        const pos = realGateway(recordingFetch(sent, () => answer()))
+        // make3DHostPayment directly: payment() rejects an empty callback before the gateway sees it
+        const res = await pos.make3DHostPayment(cb, boundOrder, TX_TYPE.PAY_AUTH)
+        expect(res.status).toBe('approved')
+        expect(res.transaction_id).toBe('T1')
+        expect(sent).toHaveLength(1)
+        expect(jsonBody(sent[0] as Sent)).toStrictEqual({
+          HostMerchantId: MERCHANT_ID,
+          MerchantId: '1',
+          Password: PASSWORD,
+          TransactionId: 'T1',
+        })
+      },
+    )
+
+    it('queries only the order ids, never extra callback ids', async () => {
+      const sent: Sent[] = []
+      const pos = realGateway(recordingFetch(sent, () => answer()))
+      const res = await pos.payment(MODEL.THREE_D_HOST, boundOrder, TX_TYPE.PAY_AUTH, null, {
+        Rc: '0000',
+        TransactionId: 'T1',
+        PaymentToken: 'P_from_browser',
+      })
+      expect(res.status).toBe('approved')
+      expect(jsonBody(sent[0] as Sent)).toStrictEqual({
+        HostMerchantId: MERCHANT_ID,
+        MerchantId: '1',
+        Password: PASSWORD,
+        TransactionId: 'T1',
+      })
+    })
+
+    it('rejects an approved answer whose TransactionId differs from the order transaction_id', async () => {
+      const pos = realGateway(recordingFetch([], () => answer({ TransactionId: 'T_old' })))
+      const err = await pos.make3DHostPayment({}, boundOrder, TX_TYPE.PAY_AUTH).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      const mismatch = err as OrderMismatchError
+      expect(mismatch.field).toBe('transaction_id')
+      expect(mismatch.expected).toBe('T1')
+      expect(mismatch.actual).toBe('T_old')
+      expect(mismatch.paymentMayHaveCompleted).toBe(true)
+    })
+
+    it('queries the order payment_token and binds the answer PaymentToken', async () => {
+      const sent: Sent[] = []
+      const order = { ...unboundOrder, payment_token: 'P1' }
+      const pos = realGateway(recordingFetch(sent, () => answer({ PaymentToken: 'P1' })))
+      const res = await pos.payment(MODEL.THREE_D_PAY, order, TX_TYPE.PAY_AUTH, null, { Rc: '0000' })
+      expect(res.status).toBe('approved')
+      expect(jsonBody(sent[0] as Sent)).toStrictEqual({
+        HostMerchantId: MERCHANT_ID,
+        MerchantId: '1',
+        Password: PASSWORD,
+        PaymentToken: 'P1',
+      })
+
+      const other = realGateway(recordingFetch([], () => answer({ PaymentToken: 'P_old' })))
+      const err = await other
+        .payment(MODEL.THREE_D_PAY, order, TX_TYPE.PAY_AUTH, null, { Rc: '0000' })
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      expect((err as OrderMismatchError).field).toBe('transaction_id')
+      expect((err as OrderMismatchError).paymentMayHaveCompleted).toBe(true)
+    })
+
+    it('keeps querying the callback ids for an order without stored ids', async () => {
+      const sent: Sent[] = []
+      const pos = realGateway(recordingFetch(sent, () => answer()))
+      const res = await pos.payment(MODEL.THREE_D_HOST, unboundOrder, TX_TYPE.PAY_AUTH, null, { ...forgedCallback })
+      expect(res.status).toBe('approved')
+      expect(jsonBody(sent[0] as Sent).TransactionId).toBe('T1')
+
+      const err = await realGateway(recordingFetch([], () => answer({ TransactionId: 'T2' })))
+        .payment(MODEL.THREE_D_HOST, unboundOrder, TX_TYPE.PAY_AUTH, null, { ...forgedCallback })
+        .catch((e: unknown) => e)
+      expect((err as OrderMismatchError).field).toBe('transaction_id')
+    })
+  })
+
+  // addition: a callback without ids is reported as declined with nothing taken from the browser data
+  describe('callback without ids for an order without stored ids', () => {
+    it.each([
+      ['a plain approved code', { Rc: '0000', AuthCode: '735879', OrderID: '2023030913ED', Amount: '1,01' }],
+      ['junk fields', { Rc: '0000', Amount: { x: '1' }, HostDate: 'junk' }],
+    ] as Array<[string, GatewayResponseData]>)('%s: declined, no approved-only fields, no HTTP', async (_name, cb) => {
+      const fetchSpy = vi.fn(unexpectedNetwork)
+      const pos = realGateway(fetchSpy as unknown as typeof fetch)
+      const res = await pos.payment(MODEL.THREE_D_HOST, unboundOrder, TX_TYPE.PAY_AUTH, null, cb)
+      expect(res.status).toBe('declined')
+      expect(res.proc_return_code).toBeNull()
+      expect(res.error_code).toBeNull()
+      expect(res.error_message).toBe(
+        'Callback carries no TransactionId or PaymentToken; the result cannot be confirmed with the bank.',
+      )
+      expect(res.auth_code).toBeNull()
+      expect(res.order_id).toBeNull()
+      expect(res.amount).toBeNull()
+      expect(res.transaction_time).toBeNull()
+      expect(res.requires_manual_review).toBe(true)
+      expect(res.all).toStrictEqual(cb)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  // addition: a cosmetic answer field never aborts or approves a payment by itself
+  describe('malformed answer fields', () => {
+    it('approves with transaction_time null when HostDate has an unknown format', async () => {
+      const pos = realGateway(recordingFetch([], () => answer({ HostDate: '2026/02/24 10:15' })))
+      const res = await pos.payment(MODEL.THREE_D_HOST, boundOrder, TX_TYPE.PAY_AUTH, null, { ...forgedCallback })
+      expect(res.status).toBe('approved')
+      expect(res.transaction_time).toBeNull()
+    })
+
+    it('rejects an object Amount with OrderMismatchError, never a TypeError', async () => {
+      const pos = realGateway(recordingFetch([], () => answer({ Amount: {} })))
+      const err = await pos
+        .payment(MODEL.THREE_D_HOST, boundOrder, TX_TYPE.PAY_AUTH, null, { ...forgedCallback })
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(OrderMismatchError)
+      expect((err as OrderMismatchError).field).toBe('amount')
+      expect((err as OrderMismatchError).paymentMayHaveCompleted).toBe(true)
+    })
+  })
+
+  // addition: "callback said approved" reads RC / Rc / ResultCode, first non-empty value
+  describe('callback result code spellings', () => {
+    it.each([
+      ['RC', { RC: '0000', TransactionId: 'T1' }],
+      ['ResultCode behind an empty Rc', { Rc: '', ResultCode: '0000', TransactionId: 'T1' }],
+    ] as Array<[string, GatewayResponseData]>)('%s 0000 + declined query: flagged for review', async (_name, cb) => {
+      const pos = realGateway(recordingFetch([], () => JSON.stringify({ ErrorCode: '5003', ResponseMessage: 'x' })))
+      const res = await pos.payment(MODEL.THREE_D_HOST, boundOrder, TX_TYPE.PAY_AUTH, null, cb)
+      expect(res.status).toBe('declined')
+      expect(res.requires_manual_review).toBe(true)
+    })
+  })
+
+  // addition: the amount is compared in the cents actually sent to the bank
+  it('accepts answer 100,01 for order amount 100.005 (sent as 100.01)', async () => {
+    const pos = realGateway(recordingFetch([], () => answer({ Amount: '100,01' })))
+    const res = await pos.payment(MODEL.THREE_D_HOST, { ...boundOrder, amount: 100.005 }, TX_TYPE.PAY_AUTH, null, {
+      ...forgedCallback,
+    })
+    expect(res.status).toBe('approved')
   })
 
   describe('registration (get3DFormData)', () => {

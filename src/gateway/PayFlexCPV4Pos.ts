@@ -19,6 +19,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
+import { numberFormat2 } from '../util/numberFormat2.js'
 import { AbstractGateway, type GatewayConfig, type GatewayDeps, type SupportedTransactions } from './AbstractGateway.js'
 
 type Raw = Record<string, unknown>
@@ -30,11 +31,11 @@ type CpRequestDataMapper = RequestDataMapperInterface<PayFlexPosAccount> & {
 
 const SUCCESS_CODE = '0000'
 
-/** Largest difference between the answer amount and the order amount still treated as equal. */
-const AMOUNT_TOLERANCE = 0.005
-
 /** Query answer `Amount`: digits with at most two decimals after a dot or a comma (`1.01`, `1,01`, `100`). */
-const ANSWER_AMOUNT = /^\d+([.,]\d{1,2})?$/
+const ANSWER_AMOUNT = /^(\d+)(?:[.,](\d{1,2}))?$/
+
+const NO_IDS_MESSAGE =
+  'Callback carries no TransactionId or PaymentToken; the result cannot be confirmed with the bank.'
 
 /** A plain decimal order amount (no hex, exponent or Infinity, which `Number()` would accept). */
 const DECIMAL = /^\s*[+-]?(\d+(\.\d*)?|\.\d+)\s*$/
@@ -64,18 +65,50 @@ function nonEmpty(data: Raw, key: string): string | null {
   return s === '' ? null : s
 }
 
-/** The query answer amount as a number; NaN for anything but the strict decimal shape. */
-function parseAnswerAmount(v: unknown): number {
-  if (typeof v !== 'string' && !(typeof v === 'number' && Number.isFinite(v))) return Number.NaN
-  const s = String(v)
-  return ANSWER_AMOUNT.test(s) ? Number(s.replace(',', '.')) : Number.NaN
+/** First non-empty string among several candidate keys, or null. */
+function firstNonEmptyString(data: Raw, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const v = value(data, key)
+    if (typeof v === 'string' && v !== '') return v
+  }
+
+  return null
 }
 
-/** A finite order amount from a number or a plain decimal string; NaN otherwise. */
-function parseOrderAmount(v: unknown): number {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : Number.NaN
+/** A non-empty string, or null. */
+function nonEmptyString(v: unknown): string | null {
+  return typeof v === 'string' && v !== '' ? v : null
+}
 
-  return typeof v === 'string' && DECIMAL.test(v) ? Number(v) : Number.NaN
+/** The query answer amount in whole cents; null for anything but the strict decimal shape. */
+function answerCents(v: unknown): bigint | null {
+  if (typeof v !== 'string' && !(typeof v === 'number' && Number.isFinite(v))) return null
+  const match = ANSWER_AMOUNT.exec(String(v))
+  if (match === null) return null
+
+  return BigInt(match[1] as string) * 100n + BigInt((match[2] ?? '').padEnd(2, '0'))
+}
+
+/**
+ * The order amount in the whole cents sent to the bank (two-decimal `number_format`, so 100.005 is 10001);
+ * null when the amount is not a finite number or a plain decimal string.
+ */
+function orderCents(v: unknown): bigint | null {
+  let amount: number
+  if (typeof v === 'number') {
+    amount = v
+  } else if (typeof v === 'string' && DECIMAL.test(v)) {
+    amount = Number(v)
+  } else {
+    return null
+  }
+
+  try {
+    return BigInt(numberFormat2(amount).replace('.', ''))
+  } catch (e) {
+    if (e instanceof PosError) return null
+    throw e
+  }
 }
 
 /**
@@ -86,16 +119,23 @@ function parseOrderAmount(v: unknown): number {
  *   reports no error (`ErrorCode` empty or `0000`, `StatusCode` absent or `0`); anything else is a `PosError`.
  * - The browser callback to the success/fail URL is informational only and carries no signature
  *   (VakifBank Common Payment guide v2.1 §5, §6.4). `make3DPayPayment` / `make3DHostPayment` therefore always ask
- *   the transaction query API (`GetVposTransaction`, guide §6.5) with the callback `TransactionId` /
- *   `PaymentToken`; only the query answer decides the status, in both directions. A callback with neither id is
- *   mapped as declined without an HTTP call.
+ *   the transaction query API (`GetVposTransaction`, guide §6.5); only the query answer decides the status, in
+ *   both directions.
+ * - When the order carries its own `transaction_id` and/or `payment_token` (the values used for the
+ *   registration), the query is built from those order values only. A callback `TransactionId` /
+ *   `PaymentToken` that contradicts them is an `OrderMismatchError('transaction_id')` with
+ *   `paymentMayHaveCompleted: false` and no HTTP call. This stops a replay of an earlier transaction of a reused
+ *   order id (the query API does not report later cancels or refunds). Without order ids the callback
+ *   `TransactionId` / `PaymentToken` are queried; a callback with neither id is returned as declined without an
+ *   HTTP call.
  * - An approved query answer must belong to the order: `OrderID` / `OrderId` equals the order id, `Amount`
- *   equals the order amount (within 0.005), `AmountCode` / `CurrencyCode` the order currency (an answer without a
- *   currency code is accepted only for TRY), and when present `HostMerchantId` the account merchant id,
- *   `TransactionType` the requested transaction type and `TransactionId` the callback transaction id. A mismatch
- *   is an `OrderMismatchError` with `paymentMayHaveCompleted: true`.
- * - A callback that says approved (`Rc` `0000`) while the query does not confirm it is returned as declined
- *   with `requires_manual_review: true`.
+ *   equals the order amount in the cents sent to the bank, `AmountCode` / `CurrencyCode` the order currency (an
+ *   answer without a currency code is accepted only for TRY), and when present `HostMerchantId` the account
+ *   merchant id, `TransactionType` the requested transaction type, `TransactionId` the order (or else callback)
+ *   transaction id and `PaymentToken` the order payment token. A mismatch is an `OrderMismatchError` with
+ *   `paymentMayHaveCompleted: true`.
+ * - A callback that says approved (`Rc` / `RC` / `ResultCode` `0000`) while the query does not confirm it is
+ *   returned as declined with `requires_manual_review: true`.
  * - `require_3d_hash` does not apply: there is no callback hash to verify; the query and the order binding
  *   above take its place.
  * - The registration sends `AllowNotEnrolledCard` `false`, so the bank charges only after full 3-D Secure
@@ -264,6 +304,9 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
   /**
    * Confirms the browser callback with the transaction query (VakifBank Common Payment guide v2.1 §6.4, §6.5) and
    * binds an approved answer to the order. The callback result code never decides the status.
+   *
+   * @throws OrderMismatchError (`paymentMayHaveCompleted: false`, no HTTP call) when the callback ids contradict
+   *   the order's `transaction_id` / `payment_token`
    */
   private async completeHostedPayment(
     callback: GatewayResponseData,
@@ -276,17 +319,39 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
     }
 
     const cb = callback as Raw
-    const callbackSaysApproved = (value(cb, 'Rc') ?? value(cb, 'ResultCode')) === SUCCESS_CODE
+    const callbackSaysApproved = firstNonEmptyString(cb, 'Rc', 'RC', 'ResultCode') === SUCCESS_CODE
     const map = (data: Raw): PosResponse =>
       paymentModel === MODEL.THREE_D_PAY
         ? this.responseDataMapper.map3DPayResponseData(data, txType, order)
         : this.responseDataMapper.map3DHostResponseData(data, txType, order)
 
-    if (nonEmpty(cb, 'TransactionId') === null && nonEmpty(cb, 'PaymentToken') === null) {
+    const orderTransactionId = nonEmptyString(order.transaction_id)
+    const orderPaymentToken = nonEmptyString(order.payment_token)
+    const callbackTransactionId = nonEmpty(cb, 'TransactionId')
+    const callbackPaymentToken = nonEmpty(cb, 'PaymentToken')
+
+    if (orderTransactionId !== null && callbackTransactionId !== null && callbackTransactionId !== orderTransactionId) {
+      this.rejectCallbackId(orderTransactionId, callbackTransactionId)
+    }
+    if (orderPaymentToken !== null && callbackPaymentToken !== null && callbackPaymentToken !== orderPaymentToken) {
+      this.rejectCallbackId(orderPaymentToken, callbackPaymentToken)
+    }
+
+    const queryByOrder = orderTransactionId !== null || orderPaymentToken !== null
+
+    if (!queryByOrder && callbackTransactionId === null && callbackPaymentToken === null) {
       this.logger.error('3D callback has no TransactionId or PaymentToken to confirm', {
         callback_says_approved: callbackSaysApproved,
       })
-      const response: PosResponse = { ...map(cb), status: 'declined' }
+      // mapped from an empty answer so nothing from the browser data looks approved
+      const response: PosResponse = {
+        ...map({}),
+        status: 'declined',
+        proc_return_code: null,
+        error_code: null,
+        error_message: NO_IDS_MESSAGE,
+        all: cb,
+      }
       if (callbackSaysApproved) response.requires_manual_review = true
 
       return response
@@ -295,7 +360,9 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
     const queryTxType = TX_TYPE.INTERNAL_3D_PAYMENT_STATUS
     const queryModel = MODEL.NON_SECURE
     const query = await this.dispatchRequestDataPrepared(
-      this.cpRequestDataMapper.create3DPaymentStatusRequestData(this.account, cb),
+      queryByOrder
+        ? this.requestDataMapper.createStatusRequestData(this.account, order)
+        : this.cpRequestDataMapper.create3DPaymentStatusRequestData(this.account, cb),
       queryTxType,
       order,
       queryModel,
@@ -304,7 +371,14 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
     const response = map(answer)
 
     if (response.status === 'approved') {
-      this.assertAnswerMatchesOrder(answer, cb, order, txType, response)
+      this.assertAnswerMatchesOrder(
+        answer,
+        orderTransactionId ?? callbackTransactionId,
+        orderPaymentToken,
+        order,
+        txType,
+        response,
+      )
       this.logger.debug('finished 3D payment', { mapped_response: response })
 
       return response
@@ -324,10 +398,17 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
     return response
   }
 
+  /** A callback id that contradicts the order's own id: rejected before any HTTP call. */
+  private rejectCallbackId(expected: string, actual: string): never {
+    this.logger.error('3D callback id does not match the order', { expected, actual })
+    throw new OrderMismatchError('transaction_id', expected, actual)
+  }
+
   /** Binds an approved query answer to the order (fail closed: a missing required value never matches). */
   private assertAnswerMatchesOrder(
     answer: Raw,
-    callback: Raw,
+    expectedTransactionId: string | null,
+    expectedPaymentToken: string | null,
     order: PosOrder,
     txType: TxType,
     response: PosResponse,
@@ -337,16 +418,16 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
       throw new OrderMismatchError(field, expected, actual, response)
     }
 
-    const orderId = asText(order.id)
+    const expectedOrderId = asText(order.id)
     const answerOrderId = value(answer, 'OrderID') ?? value(answer, 'OrderId')
-    if (orderId === '' || typeof answerOrderId !== 'string' || answerOrderId !== orderId) {
-      fail('order_id', orderId, asText(answerOrderId))
+    if (expectedOrderId === '' || typeof answerOrderId !== 'string' || answerOrderId !== expectedOrderId) {
+      fail('order_id', expectedOrderId, asText(answerOrderId))
     }
 
-    const answerAmount = parseAnswerAmount(value(answer, 'Amount'))
-    const orderAmount = parseOrderAmount(order.amount)
-    // NaN (missing or malformed on either side) never matches
-    if (!(Math.abs(answerAmount - orderAmount) < AMOUNT_TOLERANCE)) {
+    // compared in the whole cents actually sent; null (missing or malformed on either side) never matches
+    const answerAmount = answerCents(value(answer, 'Amount'))
+    const orderAmount = orderCents(order.amount)
+    if (answerAmount === null || orderAmount === null || answerAmount !== orderAmount) {
       fail('amount', asText(order.amount), asText(value(answer, 'Amount')))
     }
 
@@ -373,14 +454,22 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
       }
     }
 
-    const callbackTransactionId = nonEmpty(callback, 'TransactionId')
     const answerTransactionId = value(answer, 'TransactionId')
     if (
-      callbackTransactionId !== null &&
+      expectedTransactionId !== null &&
       answerTransactionId !== undefined &&
-      String(answerTransactionId) !== callbackTransactionId
+      String(answerTransactionId) !== expectedTransactionId
     ) {
-      fail('transaction_id', callbackTransactionId, asText(answerTransactionId))
+      fail('transaction_id', expectedTransactionId, asText(answerTransactionId))
+    }
+
+    const answerPaymentToken = value(answer, 'PaymentToken')
+    if (
+      expectedPaymentToken !== null &&
+      answerPaymentToken !== undefined &&
+      String(answerPaymentToken) !== expectedPaymentToken
+    ) {
+      fail('transaction_id', expectedPaymentToken, asText(answerPaymentToken))
     }
   }
 }

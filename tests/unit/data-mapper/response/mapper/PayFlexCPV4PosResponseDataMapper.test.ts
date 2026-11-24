@@ -225,7 +225,7 @@ describe('PayFlexCPV4PosResponseDataMapper', () => {
     expect(() => mapper.mapOrderHistoryResponse({})).toThrow(NotImplementedError)
   })
 
-  // deviation: R10 status supported (the reference threw NotImplementedError)
+  // deviation: R10 status supported (an earlier version threw NotImplementedError)
   it('mapStatusResponse maps the query answer', () => {
     valueMapper.mapTxType.mockReturnValue('pay')
     formatter.formatDateTime.mockReturnValue(txTime)
@@ -289,6 +289,34 @@ describe('PayFlexCPV4PosResponseDataMapper', () => {
       formatter.formatInstallment.mockReturnValue(0)
       mapper.map3DPayResponseData({ ...successRaw, Amount: '1.234,56' }, TX_TYPE.PAY_AUTH, {} as never)
       expect(formatter.formatAmount).toHaveBeenCalledExactlyOnceWith('1.234,56', TX_TYPE.PAY_AUTH)
+    })
+
+    // addition: a cosmetic field never throws; the gateway binding decides on the raw values
+    it.each([['map3DPayResponseData'], ['mapStatusResponse']] as Array<['map3DPayResponseData' | 'mapStatusResponse']>)(
+      '%s: unknown HostDate format gives transaction_time null and a warning',
+      (method) => {
+        const warn = vi.fn()
+        const logger = { ...noopLogger, warn }
+        const real = new PayFlexCPV4PosResponseDataMapper(
+          new BasicResponseValueFormatter(),
+          new PayFlexCPV4PosResponseValueMapper(),
+          logger,
+        )
+        const raw = { ...successRaw, HostDate: '2026/02/24 10:15' }
+        const result =
+          method === 'mapStatusResponse'
+            ? real.mapStatusResponse(raw)
+            : real.map3DPayResponseData(raw, TX_TYPE.PAY_AUTH, {} as never)
+        expect(result.status).toBe('approved')
+        expect(result.transaction_time).toBeNull()
+        expect(warn).toHaveBeenCalledOnce()
+      },
+    )
+
+    it.each([[{}], [['1']], [true]])('an Amount of %j maps to null, never a TypeError', (amount) => {
+      const raw = { ...successRaw, Amount: amount }
+      expect(integrationMapper().map3DPayResponseData(raw, TX_TYPE.PAY_AUTH, {} as never).amount).toBeNull()
+      expect(integrationMapper().mapStatusResponse(raw).first_amount).toBeNull()
     })
 
     // addition: JSON-shaped answers nest objects and lists

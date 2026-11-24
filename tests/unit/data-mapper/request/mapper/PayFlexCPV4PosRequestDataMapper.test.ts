@@ -99,7 +99,7 @@ describe('PayFlexCPV4PosRequestDataMapper', () => {
         ExpireYear: '2021',
         CardHoldersName: 'ahmet',
       })
-      // deviation: R2 the reference expected exactly one createHash call
+      // deviation: R2 an earlier formula required exactly one createHash call
       expect(crypt.createHash).not.toHaveBeenCalled()
     })
 

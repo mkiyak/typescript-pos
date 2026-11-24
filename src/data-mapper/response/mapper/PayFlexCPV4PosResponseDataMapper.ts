@@ -1,4 +1,4 @@
-import { NotImplementedError } from '../../../errors.js'
+import { NotImplementedError, PosError } from '../../../errors.js'
 import { MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, PosResponse } from '../../../types.js'
 import { AbstractResponseDataMapper } from './AbstractResponseDataMapper.js'
@@ -85,10 +85,10 @@ export class PayFlexCPV4PosResponseDataMapper extends AbstractResponseDataMapper
       response.ref_ret_num = field(raw, 'TransactionId')
       response.order_id = firstText(raw, 'OrderID', 'OrderId')
       response.currency = amountCode !== null ? this.valueMapper.mapCurrency(amountCode, txType) : null
-      response.amount = amount !== null ? this.valueFormatter.formatAmount(amount as string | number, txType) : null
+      response.amount = this.formatAmount(amount, txType)
       response.transaction_type = bankTxType !== null ? this.valueMapper.mapTxType(bankTxType) : null
       response.installment_count = this.valueFormatter.formatInstallment(text(raw, 'InstallmentCount'), txType)
-      response.transaction_time = hostDate !== null ? this.valueFormatter.formatDateTime(hostDate, txType) : null
+      response.transaction_time = this.formatHostDate(hostDate, txType)
     }
 
     return response
@@ -131,10 +131,9 @@ export class PayFlexCPV4PosResponseDataMapper extends AbstractResponseDataMapper
       response.auth_code = firstText(raw, 'AuthCode', 'AuthorizeId')
       response.transaction_id = field(raw, 'TransactionId')
       response.ref_ret_num = field(raw, 'Rrn')
-      response.transaction_time = hostDate !== null ? this.valueFormatter.formatDateTime(hostDate, txType) : null
+      response.transaction_time = this.formatHostDate(hostDate, txType)
       response.transaction_type = bankTxType !== null ? this.valueMapper.mapTxType(bankTxType) : null
-      response.first_amount =
-        amount !== null ? this.valueFormatter.formatAmount(amount as string | number, txType) : null
+      response.first_amount = this.formatAmount(amount, txType)
       response.currency = amountCode !== null ? this.valueMapper.mapCurrency(amountCode, txType) : null
       response.masked_number = field(raw, 'MaskedPan')
       response.installment_count = this.valueFormatter.formatInstallment(text(raw, 'InstallmentCount'), txType)
@@ -162,6 +161,29 @@ export class PayFlexCPV4PosResponseDataMapper extends AbstractResponseDataMapper
 
   protected getProcReturnCode(response: Raw): string | null {
     return firstText(response, 'Rc', 'ResultCode')
+  }
+
+  /**
+   * Only a string or number amount is formatted; anything else maps to null. The gateway binds the raw answer
+   * amount, so a malformed value fails the binding instead of throwing here.
+   */
+  private formatAmount(amount: unknown, txType: TxType): number | null {
+    return typeof amount === 'string' || typeof amount === 'number'
+      ? this.valueFormatter.formatAmount(amount, txType)
+      : null
+  }
+
+  /** `HostDate` is informational: an unknown format gives null and a warning instead of failing the mapping. */
+  private formatHostDate(hostDate: string | null, txType: TxType): Date | null {
+    if (hostDate === null) return null
+    try {
+      return this.valueFormatter.formatDateTime(hostDate, txType)
+    } catch (e) {
+      if (!(e instanceof PosError)) throw e
+      this.logger.warn('unrecognized HostDate format in the transaction query answer', { HostDate: hostDate })
+
+      return null
+    }
   }
 
   /** Status, procedure code and message shared by the callback and query mappings. */
