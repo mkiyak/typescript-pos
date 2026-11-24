@@ -1163,3 +1163,36 @@ describe('PosNetV1Pos (end to end) other transactions', () => {
     expect(logged).toContain('"Mac":"***"')
   })
 })
+
+// addition: a partial refund that cannot carry an amount never reaches the bank
+describe('PosNetV1Pos (end to end) partial refund', () => {
+  it('refuses a partial refund of a 3D order before any request', async () => {
+    const { posted, fetchImpl } = fakeBank(null)
+    const gateway = realGateway(fetchImpl)
+
+    await expectRejection(
+      gateway.refund({ id: 'ORD1', amount: 25, currency: 'TRY', order_amount: 100 }),
+      UnsupportedTransactionTypeError,
+    )
+    await expectRejection(
+      gateway.refund({ ref_ret_num: '159044932490000231', amount: 25, order_amount: 100 }),
+      UnsupportedTransactionTypeError,
+    )
+    expect(posted).toHaveLength(0)
+  })
+
+  it('sends the amount of a partial refund of a regular order', async () => {
+    const { posted, fetchImpl } = fakeBank(() => ({ ServiceResponseData: { ResponseCode: '00' } }))
+
+    await realGateway(fetchImpl).refund({
+      id: 'ORD1',
+      amount: 25,
+      currency: 'TRY',
+      order_amount: 100,
+      payment_model: MODEL.NON_SECURE,
+    })
+
+    expect(posted).toHaveLength(1)
+    expect(posted[0]?.body.Amount).toBe(2500)
+  })
+})

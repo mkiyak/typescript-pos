@@ -3,7 +3,7 @@ import { PosNetV1PosCrypt } from '../../../../../src/crypt/PosNetV1PosCrypt.js'
 import { PosNetV1PosRequestDataMapper } from '../../../../../src/data-mapper/request/mapper/PosNetV1PosRequestDataMapper.js'
 import { PosNetV1PosRequestValueFormatter } from '../../../../../src/data-mapper/request/value-formatter/PosNetV1PosRequestValueFormatter.js'
 import { PosNetV1PosRequestValueMapper } from '../../../../../src/data-mapper/request/value-mapper/PosNetV1PosRequestValueMapper.js'
-import { NotImplementedError, PosError } from '../../../../../src/errors.js'
+import { NotImplementedError, PosError, UnsupportedTransactionTypeError } from '../../../../../src/errors.js'
 import { AccountFactory } from '../../../../../src/factory/AccountFactory.js'
 import { CreditCardFactory } from '../../../../../src/factory/CreditCardFactory.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE, type TxType } from '../../../../../src/PosInterface.js'
@@ -719,8 +719,34 @@ describe('PosNetV1PosRequestDataMapper with the real crypt', () => {
   })
 
   it('refund without a payment model is a 3D lookup and carries no amount', () => {
-    const data = mapper.createRefundRequestData(account, { id: '1', amount: 5 }, TX_TYPE.REFUND_PARTIAL)
+    const data = mapper.createRefundRequestData(account, { id: '1', amount: 5 }, TX_TYPE.REFUND)
     expect(data.OrderId).toBe('TDS_00000000000000000001')
     expect('Amount' in data).toBe(false)
+  })
+
+  // deviation: a partial refund that cannot carry its amount (3D order) is refused instead of sent without it,
+  // because the bank would refuse it or return the whole payment.
+  it('refuses a partial refund of a 3D order, by order id or by reference', () => {
+    const orders: PosOrder[] = [
+      { id: '1', amount: 5 },
+      { id: '1', amount: 5, payment_model: MODEL.THREE_D_SECURE },
+      { ref_ret_num: '159044932490000231', amount: 5 },
+    ]
+    for (const order of orders) {
+      expect(() => mapper.createRefundRequestData(account, order, TX_TYPE.REFUND_PARTIAL)).toThrow(
+        UnsupportedTransactionTypeError,
+      )
+    }
+  })
+
+  // addition: the partial refund of a regular order does carry amount and currency
+  it('partial refund of a regular order carries the amount', () => {
+    const data = mapper.createRefundRequestData(
+      account,
+      { id: '1', amount: 5, currency: CURRENCY.TRY, payment_model: MODEL.NON_SECURE },
+      TX_TYPE.REFUND_PARTIAL,
+    )
+    expect(data.Amount).toBe(500)
+    expect(data.CurrencyCode).toBe('TL')
   })
 })

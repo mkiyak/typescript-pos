@@ -15,8 +15,8 @@ differential-tested against PHP built-ins (1000 random inputs each, 0 mismatches
 | Non-secure | `MODEL.NON_SECURE` | One server-to-server request, no 3D step. |
 
 Sale (`TX_TYPE.PAY_AUTH`) and pre-authorization (`TX_TYPE.PAY_PRE_AUTH`) work with both models;
-`TX_TYPE.PAY_POST_AUTH` captures a pre-authorization. `pos.status()`, `pos.cancel()` and `pos.refund()` (full or
-partial) are available. There is no order history request, and 3D Pay and 3D Host do not exist for this gateway.
+`TX_TYPE.PAY_POST_AUTH` captures a pre-authorization. `pos.status()`, `pos.cancel()` and `pos.refund()` (full, or
+partial for orders paid without 3D) are available. There is no order history request, and 3D Pay and 3D Host do not exist for this gateway.
 
 ## Configuration and account
 
@@ -86,8 +86,13 @@ ignored. Public HTTPS URLs without `localhost` are usually required.
 ```ts
 await pos.status({ id: orderId })
 await pos.cancel({ id: orderId, payment_model: 'regular' })
-await pos.refund({ id: orderId, amount: 25, currency: 'TRY', order_amount: 100 }) // partial: amount < order_amount
+await pos.refund({ id: orderId, amount: 100, currency: 'TRY' }) // full refund of a 3D order
+// partial refund (amount < order_amount): regular orders only
+await pos.refund({ id: regularOrderId, amount: 25, currency: 'TRY', order_amount: 100, payment_model: 'regular' })
 ```
+
+The bank's lookup of a 3D order has no amount field, so a partial refund of a 3D order is rejected with
+`UnsupportedTransactionTypeError` before any request is sent: refund the full amount instead.
 
 ## Queries
 

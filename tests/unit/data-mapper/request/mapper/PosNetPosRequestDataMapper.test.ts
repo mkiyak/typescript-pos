@@ -326,6 +326,19 @@ describe('PosNetPosRequestDataMapper', () => {
     })
   })
 
+  // addition: every refund variant, partial included, carries the amount; a missing amount is refused
+  it('partial refund carries the amount and cannot be built without one', () => {
+    const data = mapper.createRefundRequestData(
+      account,
+      { id: '2020110828BC', amount: 25, currency: CURRENCY.TRY, payment_model: MODEL.THREE_D_SECURE },
+      TX_TYPE.REFUND_PARTIAL,
+    )
+    expect((data.return as Record<string, unknown>).amount).toBe(2500)
+    expect(() => mapper.createRefundRequestData(account, { id: '2020110828BC' }, TX_TYPE.REFUND_PARTIAL)).toThrow(
+      PosError,
+    )
+  })
+
   it('has no order history', () => {
     // deviation: P28 NotImplementedError
     expect(() => mapper.createOrderHistoryRequestData(account, {})).toThrow(NotImplementedError)

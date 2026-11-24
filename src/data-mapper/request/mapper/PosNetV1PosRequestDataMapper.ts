@@ -1,5 +1,5 @@
 import type { PosNetV1PosCrypt } from '../../../crypt/PosNetV1PosCrypt.js'
-import { NotImplementedError, PosError } from '../../../errors.js'
+import { NotImplementedError, PosError, UnsupportedTransactionTypeError } from '../../../errors.js'
 import type { PosNetPosAccount } from '../../../model/account/PosNetPosAccount.js'
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
@@ -185,9 +185,17 @@ export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosN
   createRefundRequestData(account: PosNetPosAccount, order: PosOrder, refundTxType: TxType): Record<string, unknown> {
     // The amount is only sent for orders paid without 3D, but it must be valid either way.
     const amount = this.kurus(order)
+    const carriesAmount = this.paymentModel(order) === MODEL.NON_SECURE
+    if (!carriesAmount && refundTxType === TX_TYPE.REFUND_PARTIAL) {
+      // The bank's reference lookup of a 3D order has no amount field, so the request would refund the whole
+      // payment or be refused: fail before anything is sent.
+      throw new UnsupportedTransactionTypeError(
+        "Partial refunds are only supported for non-3D (regular) orders; refund the full amount or pass payment_model 'regular' for a regular order.",
+      )
+    }
     const requestData = this.referenceRequest(account, order, refundTxType)
 
-    if (this.paymentModel(order) === MODEL.NON_SECURE) {
+    if (carriesAmount) {
       requestData.Amount = amount
       requestData.CurrencyCode = this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY)
     }
