@@ -271,4 +271,103 @@ describe('GarantiPosCrypt', () => {
       expect(text).not.toContain(crypt.hashString('x'))
     })
   })
+
+  // ---- additions: forged callbacks (fixed field list, own top-level strings only) ----
+
+  describe('addition: forged callback structure', () => {
+    const HASH_PARAMS = 'clientid:oid:authcode:procreturncode:response:mdstatus:cavv:eci:md:rnd:'
+
+    /** A signed 3D Pay callback (approved by the bank, 3D failed: mdstatus 0). */
+    const payCallback = (): GatewayResponseData => ({
+      clientid: '30691298',
+      oid: 'order222',
+      authcode: '304919',
+      procreturncode: '00',
+      response: 'Approved',
+      mdstatus: '0',
+      cavv: 'xgRlQDz4AAAAAAAAAAAAAAAAAAA=',
+      eci: '02',
+      md: 'MDVALUE123',
+      rnd: 'kW094tPzNEhqORzzCsLB',
+      hash: 'CD9397BB77CA4D9C672FF18082BB0B41A8999F39E5336D008D27218ED9F981448D66AA91A5FC79E703669256BEF9F0F8BB536FFBF8D6649C1F78BD18513D38D1',
+      hashparams: HASH_PARAMS,
+    })
+
+    it('the legitimate vectors still verify', () => {
+      expect(crypt.check3DHash(account, callbackData())).toBe(true)
+      expect(crypt.check3DHash(account, payCallback())).toBe(true)
+      expect(
+        crypt.check3DHash(account, {
+          ...payCallback(),
+          mdstatus: '1',
+          hash: 'FC9EBD151A59FF5B092106B92A4CEF4C3057BA351A9ED2D06B3BF11CEE90D663640594CAED312544B8C1BE20814ACA7FAD8203B951DB1E5944F8380E29852979',
+        }),
+      ).toBe(true)
+      expect(
+        crypt.check3DHash(account, {
+          ...payCallback(),
+          mdstatus: '1',
+          authcode: '',
+          procreturncode: '92',
+          response: 'Declined',
+          hash: '0EE1ADB31B9B03AE933917495356E35A4310609FE0F64727534A14FDCD98BE6596358F994B6AAE6DA81D359EE6CF494943C3A1DF85648CE549212FDB31AB67E8',
+        }),
+      ).toBe(true)
+    })
+
+    it('a regrouping hashparams list is rejected although the generic list hash matches', () => {
+      // the signed characters "...Approved0<cavv>02MDVALUE123<rnd>" regrouped so that mdstatus reads "1"
+      const signed = payCallback()
+      const forged: GatewayResponseData = {
+        ...signed,
+        f1: `0${signed.cavv}02MDVALUE`,
+        mdstatus: '1',
+        f2: `23${signed.rnd}`,
+        hashparams: 'clientid:oid:authcode:procreturncode:response:f1:mdstatus:f2:',
+      }
+      expect(crypt.hashFromParams(account, forged, forged.hashparams as string, ':')).toBe(signed.hash)
+      expect(crypt.check3DHash(account, forged)).toBe(false)
+    })
+
+    it.each([
+      ['reordered', 'oid:clientid:authcode:procreturncode:response:mdstatus:cavv:eci:md:rnd:'],
+      ['duplicated', 'clientid:oid:authcode:procreturncode:response:mdstatus:mdstatus:cavv:eci:md:rnd:'],
+      ['extra name', 'clientid:oid:authcode:procreturncode:response:mdstatus:cavv:eci:md:rnd:xid:'],
+      ['without trailing separator', 'clientid:oid:authcode:procreturncode:response:mdstatus:cavv:eci:md:rnd'],
+      ['upper-cased', HASH_PARAMS.toUpperCase()],
+    ])('a %s hashparams list is rejected even with a hash valid for it', (_name, hashparams) => {
+      const data: GatewayResponseData = { ...callbackData(), hashparams }
+      data.hash = crypt.hashFromParams(account, data, hashparams, ':')
+      expect(crypt.check3DHash(account, data)).toBe(false)
+    })
+
+    it('a nested duplicate of a signed field is never read', () => {
+      // the signed oid sits in a nested object, the top-level oid belongs to another order
+      const forged = {
+        x: { oid: '2023100354BB' },
+        ...callbackData(),
+        oid: 'BIG-ORDER',
+      } as unknown as GatewayResponseData
+      expect(crypt.hashFromParams(account, forged, HASH_PARAMS, ':')).toBe(callbackData().hash)
+      expect(crypt.check3DHash(account, forged)).toBe(false)
+    })
+
+    it('a signed field that is not a string is rejected', () => {
+      const data = callbackData()
+      for (const value of [[data.md], { md: data.md }, 1]) {
+        expect(crypt.check3DHash(account, { ...data, md: value } as unknown as GatewayResponseData)).toBe(false)
+      }
+    })
+
+    it('an inherited hash or hashparams is not used', () => {
+      const { hash, hashparams, ...rest } = callbackData()
+      const data = Object.assign(Object.create({ hash, hashparams }), rest) as GatewayResponseData
+      expect(crypt.check3DHash(account, data)).toBe(false)
+    })
+
+    it('an account without a store key cannot verify a callback', () => {
+      const noKey = AccountFactory.createGarantiPosAccount('garanti', '7000679', 'PROVAUT', '123qweASD/', '30691298')
+      expect(() => crypt.check3DHash(noKey, callbackData())).toThrow(MissingAccountInfoError)
+    })
+  })
 })

@@ -19,16 +19,7 @@ export type {
   QueryStatus,
 } from './QueryResponseDataMapperInterface.js'
 
-/** Characters stripped by PHP trim(). */
-const PHP_TRIM_CHARS = new Set([' ', '\t', '\n', '\r', '\0', '\x0B'])
-
-function phpTrim(value: string): string {
-  let start = 0
-  let end = value.length
-  while (start < end && PHP_TRIM_CHARS.has(value.charAt(start))) start++
-  while (end > start && PHP_TRIM_CHARS.has(value.charAt(end - 1))) end--
-  return value.slice(start, end)
-}
+import { phpTrim } from '../../../util/phpTrim.js'
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object') return false

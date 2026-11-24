@@ -1,3 +1,4 @@
+import { TX_DECLINED } from '../data-mapper/response/mapper/ResponseDataMapperInterface.js'
 import {
   HashMismatchError,
   OrderMismatchError,
@@ -18,6 +19,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
+import { phpTrim } from '../util/phpTrim.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
 
 /** Security level the bank echoes for each payment model it accepts callbacks for. */
@@ -55,6 +57,11 @@ const CALLBACK_TEXT_FIELDS = [
   'mderrormessage',
 ] as const
 
+/** Strict formats of the signed fields that decide the outcome; anything else is treated as tampering. */
+const PROC_RETURN_CODE = /^\d{2}$/
+const MD_STATUS = /^\d$/
+const RESPONSES: readonly string[] = ['', 'Approved', 'Declined', 'Error']
+
 /** An own callback value; `null` counts as absent like a missing key. */
 function own(callback: GatewayResponseData, key: string): unknown {
   const value = Object.hasOwn(callback, key) ? callback[key] : undefined
@@ -87,7 +94,12 @@ function asText(value: unknown): string {
  *   currency, transaction type, terminal and merchant are bound as above. Declined callbacks echo an amount of 0,
  *   so they are not bound on amount.
  *
- * Every callback field read for these decisions must be a plain string, otherwise `PosError`.
+ * A callback is a flat record of strings: a nested object or array anywhere at its top level is a `PosError`
+ * before any other check, and every field read for these decisions must be a plain string. After the hash verifies,
+ * `procreturncode` (two digits), `response` (`Approved`, `Declined` or `Error`) and `mdstatus` (one digit) must be
+ * well formed (each may also be empty), otherwise `HashMismatchError`; `clientid`, when present, must be the account
+ * terminal id. 3D success is decided on the trimmed mdStatus, the same value the response mapper reads, and a
+ * callback taken down the not-3D-successful path must map as declined.
  */
 export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
   static readonly NAME = 'GarantiPay'
@@ -120,8 +132,20 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
   ): Promise<PosResponse> {
     const paymentModel = MODEL.THREE_D_SECURE
 
+    this.assertFlatCallback(gatewayResponseData)
+
     if (!this.is3dAuthSuccess(gatewayResponseData) || isErrorResponse(gatewayResponseData)) {
-      return this.responseDataMapper.map3DPaymentData(gatewayResponseData, null, txType, order)
+      const declined = this.responseDataMapper.map3DPaymentData(gatewayResponseData, null, txType, order)
+      if (declined.status !== TX_DECLINED) {
+        // Never report a payment that skipped the hash check, the order binding and the provision request.
+        this.logger.error('3D callback without 3D success was not mapped as declined', {
+          order_id: asText(declined.order_id),
+          status: asText(declined.status),
+        })
+        throw new PosError('3D callback without 3D success was not mapped as declined')
+      }
+
+      return declined
     }
 
     if (!this.crypt.check3DHash(this.account, gatewayResponseData)) {
@@ -129,6 +153,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     }
 
     this.assertTextFields(gatewayResponseData)
+    this.assertSignedOutcomeFormat(gatewayResponseData)
     this.assert3DSecureCallbackMatchesOrder(gatewayResponseData, order, txType)
 
     const requestData = await this.dispatchRequestDataPrepared(
@@ -156,6 +181,8 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     order: PosOrder,
     txType: TxType,
   ): Promise<PosResponse> {
+    this.assertFlatCallback(gatewayResponseData)
+
     const hash = own(gatewayResponseData, 'hash')
     const signed = hash !== undefined && hash !== ''
 
@@ -168,6 +195,9 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     }
 
     this.assertTextFields(gatewayResponseData)
+    if (signed) {
+      this.assertSignedOutcomeFormat(gatewayResponseData)
+    }
 
     const response = this.responseDataMapper.map3DPayResponseData(gatewayResponseData, txType, order)
 
@@ -218,6 +248,56 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     ) as Promise<ThreeDFormData>
   }
 
+  /** mdStatus as the response mapper reads it: trimmed like PHP, empty meaning absent. */
+  protected override is3dAuthSuccess(responseData: Record<string, unknown>): boolean {
+    const raw = this.responseDataMapper.extractMdStatus(responseData)
+    const mdStatus = typeof raw === 'string' ? phpTrim(raw) || null : null
+
+    if (this.responseDataMapper.is3dAuthSuccess(mdStatus)) {
+      this.logger.info('3d auth success', { md_status: mdStatus })
+
+      return true
+    }
+
+    this.logger.error('3d auth fail', { md_status: mdStatus })
+
+    return false
+  }
+
+  /**
+   * A bank callback is a flat form of strings. A nested value could shadow a field for one reader (for example a
+   * depth-first search) while another reads the top-level value. The signature itself is left to the hash check,
+   * which rejects anything but a string.
+   */
+  private assertFlatCallback(callback: GatewayResponseData): void {
+    for (const [key, value] of Object.entries(callback)) {
+      if (key !== 'hash' && ((typeof value === 'object' && value !== null) || typeof value === 'function')) {
+        this.logger.error('3D callback field is not a string', { field: key, type: typeof value })
+        throw new PosError(`3D callback field "${key}" must be a string`)
+      }
+    }
+  }
+
+  /** Signed outcome fields must be well formed; a valid hash over malformed values means regrouped characters. */
+  private assertSignedOutcomeFormat(callback: GatewayResponseData): void {
+    const procReturnCode = asText(own(callback, 'procreturncode'))
+    const response = asText(own(callback, 'response'))
+    const mdStatus = asText(own(callback, 'mdstatus'))
+    if (
+      (procReturnCode !== '' && !PROC_RETURN_CODE.test(procReturnCode)) ||
+      !RESPONSES.includes(response) ||
+      (mdStatus !== '' && !MD_STATUS.test(mdStatus))
+    ) {
+      this.logger.error('3D callback outcome fields are malformed', {
+        order_id: asText(own(callback, 'oid')),
+        proc_return_code: procReturnCode,
+        response,
+        md_status: mdStatus,
+      })
+      throw new HashMismatchError('3D callback outcome fields are malformed')
+    }
+  }
+
   private assertTextFields(callback: GatewayResponseData): void {
     for (const key of CALLBACK_TEXT_FIELDS) {
       const value = own(callback, key)
@@ -240,6 +320,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
       this.fail('order_id', orderId, asText(oid), orderId)
     }
 
+    this.assertClientId(callback, orderId)
     this.assertPaymentEchoMatches(callback, order, txType, orderId)
     this.assertSecurityLevel(callback, SECURITY_LEVEL_3D, orderId)
   }
@@ -258,6 +339,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     if (orderId === '' || mappedOrderId !== orderId) {
       this.fail('order_id', orderId, mappedOrderId, orderId, response)
     }
+    this.assertClientId(callback, orderId, response)
 
     if (reportsCompletedPayment(response)) {
       this.assertPaymentEchoMatches(callback, order, txType, orderId, response)
@@ -298,6 +380,14 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
     const merchantId = own(callback, 'terminalmerchantid')
     if (merchantId !== undefined && merchantId !== this.account.getMerchantId()) {
       this.fail('merchant_id', this.account.getMerchantId(), asText(merchantId), orderId, response)
+    }
+  }
+
+  /** The signed `clientid` is the terminal the callback was produced for. */
+  private assertClientId(callback: GatewayResponseData, orderId: string, response?: PosResponse): void {
+    const clientId = own(callback, 'clientid')
+    if (clientId !== undefined && clientId !== this.account.getTerminalId()) {
+      this.fail('terminal_id', this.account.getTerminalId(), asText(clientId), orderId, response)
     }
   }
 
@@ -344,7 +434,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
 /** The mapper treats a `response` of `Error` as a failed 3D authentication whatever the mdStatus says. */
 function isErrorResponse(callback: GatewayResponseData): boolean {
   const response = own(callback, 'response')
-  return typeof response === 'string' && response.trim() === 'Error'
+  return typeof response === 'string' && phpTrim(response) === 'Error'
 }
 
 function reportsCompletedPayment(response: PosResponse): boolean {

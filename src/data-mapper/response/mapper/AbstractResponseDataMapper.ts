@@ -1,22 +1,12 @@
 import { createSafeLogger, noopLogger, type PosLogger } from '../../../logger.js'
 import type { PaymentModel, TxType } from '../../../PosInterface.js'
 import type { PosOrder, PosResponse } from '../../../types.js'
+import { phpTrim } from '../../../util/phpTrim.js'
 import type { ResponseValueFormatterInterface } from '../value-formatter/ResponseValueFormatterInterface.js'
 import type { ResponseValueMapperInterface } from '../value-mapper/ResponseValueMapperInterface.js'
 import { type ResponseDataMapperInterface, TX_APPROVED, TX_DECLINED } from './ResponseDataMapperInterface.js'
 
 type Raw = Record<string, unknown>
-
-/** Characters stripped by PHP trim(). */
-const PHP_TRIM_CHARS = new Set([' ', '\t', '\n', '\r', '\0', '\x0B'])
-
-function phpTrim(value: string): string {
-  let start = 0
-  let end = value.length
-  while (start < end && PHP_TRIM_CHARS.has(value.charAt(start))) start++
-  while (end > start && PHP_TRIM_CHARS.has(value.charAt(end - 1))) end--
-  return value.slice(start, end)
-}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object') return false

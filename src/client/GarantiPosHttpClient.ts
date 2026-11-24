@@ -27,6 +27,7 @@ export class GarantiPosHttpClient extends AbstractHttpClient {
     return true
   }
 
+  /** Public here (protected in the base class) so callers can see where a transaction is posted. */
   override getApiUrl(txType: ClientTxType, paymentModel: PaymentModel): string {
     return super.getApiUrl(txType, paymentModel)
   }
