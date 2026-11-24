@@ -87,6 +87,8 @@ export { AssecoPosQuery } from './pos-query/AssecoPosQuery.js'
 export { GarantiPosQuery } from './pos-query/GarantiPosQuery.js'
 export { PayFlexCPV4PosQuery } from './pos-query/PayFlexCPV4PosQuery.js'
 export { PayFlexV4PosQuery } from './pos-query/PayFlexV4PosQuery.js'
+export { PosNetPosQuery } from './pos-query/PosNetPosQuery.js'
+export { PosNetV1PosQuery } from './pos-query/PosNetV1PosQuery.js'
 export { type PosQueryInterface, QUERY_TYPE, type QueryType } from './pos-query/PosQueryInterface.js'
 export type { EncodedData } from './serializer/EncodedData.js'
 export type {

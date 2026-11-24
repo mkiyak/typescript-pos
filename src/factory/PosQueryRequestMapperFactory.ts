@@ -4,6 +4,8 @@ import { AssecoPosQueryRequestDataMapper } from '../data-mapper/pos-query/reques
 import { GarantiPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/GarantiPosQueryRequestDataMapper.js'
 import { PayFlexCPV4PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayFlexCPV4PosQueryRequestDataMapper.js'
 import { PayFlexV4PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayFlexV4PosQueryRequestDataMapper.js'
+import { PosNetPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PosNetPosQueryRequestDataMapper.js'
+import { PosNetV1PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PosNetV1PosQueryRequestDataMapper.js'
 import type { QueryRequestDataMapperInterface } from '../data-mapper/pos-query/request/QueryRequestDataMapperInterface.js'
 import type { RequestValueFormatterInterface } from '../data-mapper/request/value-formatter/RequestValueFormatterInterface.js'
 import type { RequestValueMapperInterface } from '../data-mapper/request/value-mapper/RequestValueMapperInterface.js'
@@ -17,6 +19,8 @@ const REQUEST_MAPPERS = [
   GarantiPosQueryRequestDataMapper,
   PayFlexCPV4PosQueryRequestDataMapper,
   PayFlexV4PosQueryRequestDataMapper,
+  PosNetPosQueryRequestDataMapper,
+  PosNetV1PosQueryRequestDataMapper,
 ]
 
 /** Picks the query request mapper of a gateway class. Internal: not part of the public API. */

@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
@@ -15,6 +15,8 @@ import { AssecoPosQuery } from '../../../src/pos-query/AssecoPosQuery.js'
 import { GarantiPosQuery } from '../../../src/pos-query/GarantiPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../../../src/pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../../../src/pos-query/PayFlexV4PosQuery.js'
+import { PosNetPosQuery } from '../../../src/pos-query/PosNetPosQuery.js'
+import { PosNetV1PosQuery } from '../../../src/pos-query/PosNetV1PosQuery.js'
 
 const assecoConfig: PosConfig = {
   banks: {
@@ -323,5 +325,125 @@ describe('PosQueryFactory with AkbankPos', () => {
     const all = lines.join('\n')
     expect(all).not.toContain(SECRET)
     expect(all).not.toContain(hmac(calls[0]?.body ?? ''))
+  })
+})
+
+describe('PosQueryFactory with PosNetPos and PosNetV1Pos', () => {
+  const yAccount = () => AccountFactory.createPosNetPosAccount('yapikredi', '6706598320', '67005551', '27426', 'k1')
+  const aAccount = () =>
+    AccountFactory.createPosNetPosAccount('albaraka', '6700950031', '67540050', '1010028724242434', 'k2')
+  const ALBARAKA_SALE = 'https://epostest.albarakaturk.com.tr/ALBMerchantService/MerchantJSONAPI.svc/Sale'
+
+  it('creates the query classes from the shipped test config', () => {
+    expect(PosQueryFactory.createPosQuery(yAccount(), posTestConfig)).toBeInstanceOf(PosNetPosQuery)
+    expect(PosQueryFactory.createPosQuery(aAccount(), posTestConfig)).toBeInstanceOf(PosNetV1PosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('PosNetPos')).toBe(PosNetPosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('PosNetV1Pos')).toBe(PosNetV1PosQuery)
+  })
+
+  it.each(['yapikredi', 'albaraka'])('rejects an AssecoPosAccount for the %s bank', (bank) => {
+    expect(() => PosQueryFactory.createPosQuery(assecoAccount(bank), posTestConfig)).toThrow(PosError)
+  })
+
+  // addition: end to end through the real mappers, clients and crypt with a fake fetch
+  function e2e(account: ReturnType<typeof yAccount>, answer: string, logger?: PosLogger) {
+    const calls: Array<{ url: string; body: string }> = []
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const body = init?.body
+      calls.push({
+        url: String(url),
+        body: typeof body === 'string' ? body : Buffer.from(body as Uint8Array).toString('latin1'),
+      })
+      return new Response(answer, { status: 200 })
+    }) as unknown as typeof fetch
+    const q = PosQueryFactory.createPosQuery(account, posTestConfig, { fetch: fetchFn, logger })
+    return { q, calls, fetchFn }
+  }
+
+  const pointUsage = {
+    pointUsage: {
+      amount: '250',
+      lpAmount: '40',
+      ccno: '4048090000000001',
+      currencyCode: 'TL',
+      expDate: '2411',
+      orderID: 'PKPPislemleriNT000000001',
+    },
+  }
+  const xmlAnswer = '<?xml version="1.0" encoding="ISO-8859-9"?><posnetResponse><approved>1</approved></posnetResponse>'
+
+  it('PosNetPos posts the xmldata form with mid and tid after the caller fields', async () => {
+    const { q, calls } = e2e(yAccount(), xmlAnswer)
+    const result = await q.customQuery(pointUsage)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe('https://setmpos.ykb.com/PosnetWebService/XML')
+    const body = calls[0]?.body ?? ''
+    expect(body.startsWith('xmldata=')).toBe(true)
+    expect(body).toContain('<posnetRequest>')
+    expect(body).toMatch(/<\/pointUsage><mid>6706598320<\/mid><tid>67005551<\/tid>/)
+    expect(result).toEqual({ approved: '1' })
+  })
+
+  it('PosNetPos rejects a value with an ampersand before sending anything', async () => {
+    const { q, fetchFn } = e2e(yAccount(), xmlAnswer)
+    await expect(q.customQuery({ note: 'a&b' })).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('PosNetV1Pos posts signed JSON to the given URL', async () => {
+    const { q, calls } = e2e(aAccount(), '{"approved":"1"}')
+    const result = await q.customQuery(
+      {
+        MACParams: 'MerchantNo:TerminalNo:CardNo',
+        CardInformationData: { CardNo: '4048090000000001' },
+      },
+      ALBARAKA_SALE,
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(ALBARAKA_SALE)
+    const sent = JSON.parse(calls[0]?.body ?? '{}') as Record<string, string>
+    expect(sent.ApiType).toBe('JSON')
+    expect(sent.MerchantNo).toBe('6700950031')
+    expect(sent.TerminalNo).toBe('67540050')
+    const signed = '67009500316754005040480900000000'.concat('01')
+    expect(sent.MAC).toBe(createHash('sha256').update(`${signed}k2`, 'utf8').digest('base64'))
+    expect(result).toEqual({ approved: '1' })
+  })
+
+  it('PosNetV1Pos without an apiUrl rejects with a PosError and sends nothing', async () => {
+    const { q, fetchFn } = e2e(aAccount(), '{}')
+    const err = await q.customQuery({ MACParams: 'MerchantNo' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosError)
+    expect((err as Error).message).toContain('apiUrl')
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['yapikredi', 'https://evil.example/x'],
+    ['albaraka', 'https://evil.example/x'],
+  ])('%s: a URL on a foreign origin rejects before anything is sent', async (bank, url) => {
+    const { q, fetchFn } = e2e(bank === 'yapikredi' ? yAccount() : aAccount(), '{}')
+    await expect(q.customQuery({ MACParams: 'MerchantNo' }, url)).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('never logs the key, the card number or the expiry', async () => {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    const logger = { debug: record, info: record, warning: record, error: record } as unknown as PosLogger
+    const y = e2e(yAccount(), xmlAnswer, logger)
+    await y.q.customQuery(pointUsage)
+    const a = e2e(aAccount(), '{"approved":"1"}', logger)
+    await a.q.customQuery(
+      { MACParams: 'MerchantNo:CardNo', CardInformationData: { CardNo: '4048090000000001', ExpireDate: '2411' } },
+      ALBARAKA_SALE,
+    )
+    expect(lines.length).toBeGreaterThan(0)
+    const text = JSON.stringify(lines)
+    for (const secret of ['k1', '"k2"', '4048090000000001', '2411']) {
+      expect(text).not.toContain(secret)
+    }
   })
 })

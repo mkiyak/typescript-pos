@@ -80,6 +80,8 @@ describe('public index', () => {
         'GarantiPosQuery',
         'PayFlexV4PosQuery',
         'PayFlexCPV4PosQuery',
+        'PosNetPosQuery',
+        'PosNetV1PosQuery',
       ]),
     )
   })
@@ -146,6 +148,10 @@ describe('public index', () => {
     expect(mod.PosQueryFactory.createPosQuery(garanti, mod.posTestConfig)).toBeInstanceOf(mod.GarantiPosQuery)
     const akbank = mod.AccountFactory.createAkbankPosAccount('akbank-pos', 'm', 't', 'k')
     expect(mod.PosQueryFactory.createPosQuery(akbank, mod.posTestConfig)).toBeInstanceOf(mod.AkbankPosQuery)
+    const yapikredi = mod.AccountFactory.createPosNetPosAccount('yapikredi', 'm', 't', 'p', 'k')
+    expect(mod.PosQueryFactory.createPosQuery(yapikredi, mod.posTestConfig)).toBeInstanceOf(mod.PosNetPosQuery)
+    const albaraka = mod.AccountFactory.createPosNetPosAccount('albaraka', 'm', 't', 'p', 'k')
+    expect(mod.PosQueryFactory.createPosQuery(albaraka, mod.posTestConfig)).toBeInstanceOf(mod.PosNetV1PosQuery)
   })
 
   it('exports the query types', () => {
