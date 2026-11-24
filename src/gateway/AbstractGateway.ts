@@ -56,6 +56,10 @@ export type GatewayConfig = {
    *
    * PosNetPos: no effect. The browser callback carries only the bank's encrypted packets, which nothing on the
    * merchant side can verify; the data the bank resolves from them is always MAC-verified before a provision.
+   *
+   * PosNetV1Pos: reject a declined 3D callback that carries no `Mac` (`HashMismatchError`). Default false: without
+   * it an unsigned callback is accepted only as a decline (nothing is provisioned). A successful callback must
+   * always carry a valid `Mac`, and a `Mac` on a declined callback must always verify.
    */
   require_3d_hash?: boolean
 }

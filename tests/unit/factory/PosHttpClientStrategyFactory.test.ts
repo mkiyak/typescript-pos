@@ -8,6 +8,7 @@ import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3D
 import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../../../src/client/PayFlexV4PosSearchApiHttpClient.js'
 import { PosNetPosHttpClient } from '../../../src/client/PosNetPosHttpClient.js'
+import { PosNetV1PosHttpClient } from '../../../src/client/PosNetV1PosHttpClient.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { AkbankPosCrypt } from '../../../src/crypt/AkbankPosCrypt.js'
 import { AssecoPosCrypt } from '../../../src/crypt/AssecoPosCrypt.js'
@@ -156,6 +157,28 @@ describe('PosHttpClientStrategyFactory', () => {
     expect(() => classesOf('PosNetPos', { ...posNetConfig, gateway_endpoints: {} as never })).toThrow(
       /Endpoint \[payment_api\] is required for/,
     )
+  })
+
+  it('wires PosNetV1Pos with its JSON payment client', () => {
+    const paymentApi = 'https://epostest.albarakaturk.com.tr/ALBMerchantService/MerchantJSONAPI.svc'
+    const cfg: GatewayConfig = {
+      name: 'Albaraka',
+      class: 'PosNetV1Pos',
+      gateway_endpoints: {
+        payment_api: paymentApi,
+        gateway_3d: 'https://epostest.albarakaturk.com.tr/ALBSecurePaymentUI/SecureProcess/SecureVerification.aspx',
+      },
+    }
+    const clients = PosHttpClientStrategyFactory.createForGateway(
+      'PosNetV1Pos',
+      cfg,
+      transport,
+      noopLogger,
+    ).getAllClients()
+    expect(clients).toHaveLength(1)
+    expect(clients[0]).toBeInstanceOf(PosNetV1PosHttpClient)
+    expect((clients[0] as PosNetV1PosHttpClient).getApiUrl('pay', '3d')).toBe(`${paymentApi}/Sale`)
+    expect(PosNetV1PosHttpClient.supports('PosNetV1Pos', 'payment_api')).toBe(true)
   })
 
   it('rejects an unknown gateway class', () => {

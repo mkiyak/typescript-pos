@@ -8,8 +8,10 @@ import { PayFlexV4Pos3DFormHttpClient } from '../client/PayFlexV4Pos3DFormHttpCl
 import { PayFlexV4PosHttpClient } from '../client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../client/PayFlexV4PosSearchApiHttpClient.js'
 import { PosNetPosHttpClient } from '../client/PosNetPosHttpClient.js'
+import { PosNetV1PosHttpClient } from '../client/PosNetV1PosHttpClient.js'
 import { AkbankPosCrypt } from '../crypt/AkbankPosCrypt.js'
 import type { CryptInterface } from '../crypt/CryptInterface.js'
+import { PosNetV1PosRequestValueMapper } from '../data-mapper/request/value-mapper/PosNetV1PosRequestValueMapper.js'
 import { GatewayClassNotConfiguredError, PosError } from '../errors.js'
 import type { GatewayConfig } from '../gateway/AbstractGateway.js'
 import type { PosLogger } from '../logger.js'
@@ -81,6 +83,16 @@ export const PosHttpClientStrategyFactory = {
       case 'PosNetPos':
         return new HttpClientStrategy([
           new PosNetPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+        ])
+      case 'PosNetV1Pos':
+        // The URL of each transaction is named after it; the value mapper is a stateless table.
+        return new HttpClientStrategy([
+          new PosNetV1PosHttpClient(
+            requiredEndpoint(config, 'payment_api'),
+            transport,
+            logger,
+            new PosNetV1PosRequestValueMapper(),
+          ),
         ])
       case 'AkbankPos': {
         const account = signing?.account
