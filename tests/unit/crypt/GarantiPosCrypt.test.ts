@@ -268,7 +268,24 @@ describe('GarantiPosCrypt', () => {
       expect(context).not.toHaveProperty('generated_hash')
       const text = JSON.stringify(logger.error.mock.calls)
       expect(text).not.toContain('12345678')
-      expect(text).not.toContain(crypt.hashString('x'))
+      // the hash the crypt actually computed for the tampered data
+      const signed = [
+        'clientid',
+        'oid',
+        'authcode',
+        'procreturncode',
+        'response',
+        'mdstatus',
+        'cavv',
+        'eci',
+        'md',
+        'rnd',
+      ]
+        .map((name) => data[name] ?? '')
+        .join('')
+      const generated = crypt.hashString(`${signed}12345678`)
+      expect(generated).not.toBe(data.hash)
+      expect(text).not.toContain(generated)
     })
   })
 
@@ -363,6 +380,42 @@ describe('GarantiPosCrypt', () => {
       const { hash, hashparams, ...rest } = callbackData()
       const data = Object.assign(Object.create({ hash, hashparams }), rest) as GatewayResponseData
       expect(crypt.check3DHash(account, data)).toBe(false)
+    })
+
+    // addition: an empty store key is as missing as a null one
+    it('an account with an empty or blank store key cannot verify a callback or sign the 3D form', () => {
+      for (const key of ['', '  ']) {
+        const empty = AccountFactory.createGarantiPosAccount(
+          'garanti',
+          '7000679',
+          'PROVAUT',
+          '123qweASD/',
+          '30691298',
+          key,
+        )
+        expect(() => crypt.check3DHash(empty, callbackData())).toThrow(MissingAccountInfoError)
+        expect(() => crypt.create3DHash(empty, { terminalid: '30691298', txntype: 'sales' })).toThrow(
+          MissingAccountInfoError,
+        )
+      }
+    })
+
+    // addition: an empty refund password is as missing as a null one
+    it('an empty or blank refund password cannot sign void or refund', () => {
+      for (const refundPassword of ['', ' ']) {
+        const empty = AccountFactory.createGarantiPosAccount(
+          'garanti',
+          '7000679',
+          'PROVAUT',
+          '123qweASD/',
+          '30691298',
+          '12345678',
+          'PROVRFN',
+          refundPassword,
+        )
+        expect(() => crypt.createHash(empty, request('void', '1', 100))).toThrow(MissingAccountInfoError)
+        expect(() => crypt.createHash(empty, request('refund', '1', 100))).toThrow(MissingAccountInfoError)
+      }
     })
 
     it('an account without a store key cannot verify a callback', () => {

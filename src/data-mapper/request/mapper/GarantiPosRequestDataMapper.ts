@@ -265,7 +265,7 @@ export class GarantiPosRequestDataMapper extends AbstractRequestDataMapper<Garan
     let username = account.getUsername()
     if (isRefund) {
       const refundUsername = account.getRefundUsername()
-      if (refundUsername === null) {
+      if (refundUsername === null || refundUsername.trim() === '') {
         throw new MissingAccountInfoError('Refund username is required for cancel and refund requests.')
       }
       username = refundUsername

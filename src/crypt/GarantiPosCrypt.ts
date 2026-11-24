@@ -33,6 +33,7 @@ export class GarantiPosCrypt extends AbstractCrypt<GarantiPosAccount> {
   /** The 3D form fields are signed together with the store key and the security data. */
   create3DHash(account: GarantiPosAccount, formInputs: Record<string, string>): string {
     const terminalId = this.requireTerminalId(formInputs.terminalid)
+    const storeKey = this.requireStoreKey(account)
 
     const parts = [
       terminalId,
@@ -43,7 +44,7 @@ export class GarantiPosCrypt extends AbstractCrypt<GarantiPosAccount> {
       formInputs.errorurl,
       formInputs.txntype,
       formInputs.txninstallmentcount,
-      account.getSecretKey(),
+      storeKey,
       this.securityData(account, terminalId, formInputs.txntype),
     ]
 
@@ -59,8 +60,8 @@ export class GarantiPosCrypt extends AbstractCrypt<GarantiPosAccount> {
   check3DHash(account: GarantiPosAccount, data: GatewayResponseData): boolean {
     const hash = ownValue(data, 'hash')
     const hashParams = ownValue(data, 'hashparams')
-    const storeKey = account.getSecretKey()
-    if (typeof hash === 'string' && hash !== '' && hashParams === HASH_PARAMS && storeKey !== null && storeKey !== '') {
+    const storeKey = this.requireStoreKey(account)
+    if (typeof hash === 'string' && hash !== '' && hashParams === HASH_PARAMS) {
       const signedString = this.signedString(data)
       if (signedString !== null && timingSafeEqualStr(hash.toUpperCase(), this.hashString(signedString + storeKey))) {
         this.logger.debug('hash check is successful')
@@ -112,12 +113,21 @@ export class GarantiPosCrypt extends AbstractCrypt<GarantiPosAccount> {
     let password: string | null = account.getPassword()
     if (txType === 'void' || txType === 'refund') {
       password = account.getRefundPassword()
-      if (password === null) {
+      if (password === null || password.trim() === '') {
         throw new MissingAccountInfoError('Refund password is required for cancel and refund requests.')
       }
     }
 
     return sha('sha1', password + terminalId.padStart(9, '0'))
+  }
+
+  /** The store key; an empty or blank one is as missing as none. */
+  private requireStoreKey(account: GarantiPosAccount): string {
+    const storeKey = account.getSecretKey()
+    if (storeKey.trim() === '') {
+      throw new MissingAccountInfoError('GarantiPosAccount.secretKey is not set.')
+    }
+    return storeKey
   }
 
   private requireTerminalId(value: unknown): string {

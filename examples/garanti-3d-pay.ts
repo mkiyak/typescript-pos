@@ -19,9 +19,9 @@ const account = AccountFactory.createGarantiPosAccount(
   process.env.POS_PROVISION_USER ?? '',
   process.env.POS_PROVISION_PASSWORD ?? '',
   process.env.POS_TERMINAL_ID ?? '',
-  process.env.POS_STORE_KEY ?? '', // 3D secret key
-  process.env.POS_REFUND_USER ?? '', // only needed for cancel and refund
-  process.env.POS_REFUND_PASSWORD ?? '',
+  process.env.POS_STORE_KEY || null, // 3D secret key
+  process.env.POS_REFUND_USER || null, // only needed for cancel and refund
+  process.env.POS_REFUND_PASSWORD || null,
 )
 
 // Stateless: build once and share between requests. posTestConfig sends Mode TEST; use posProductionConfig live.

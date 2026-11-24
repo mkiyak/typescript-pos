@@ -231,6 +231,24 @@ describe('GarantiPosRequestDataMapper', () => {
       expect(crypt.createHash).not.toHaveBeenCalled()
     })
 
+    // addition: an empty refund username is as missing as a null one
+    it('rejects an account with an empty or blank refund username before hashing', () => {
+      for (const refundUsername of ['', '  ']) {
+        const empty = AccountFactory.createGarantiPosAccount(
+          'garanti',
+          '7000679',
+          'PROVAUT',
+          'pw',
+          '30691298',
+          'key',
+          refundUsername,
+          'refundpw',
+        )
+        expect(() => mapper.createCancelRequestData(empty, order)).toThrow(MissingAccountInfoError)
+      }
+      expect(crypt.createHash).not.toHaveBeenCalled()
+    })
+
     // addition: the refund user is required for a cancel
     it('rejects an account without refund username', () => {
       const noRefund = AccountFactory.createGarantiPosAccount('garanti', '7000679', 'PROVAUT', 'pw', '30691298', 'key')
