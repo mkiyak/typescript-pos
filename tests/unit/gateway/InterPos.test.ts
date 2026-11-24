@@ -1002,6 +1002,16 @@ const mismatch = async (promise: Promise<unknown>): Promise<OrderMismatchError> 
   return err as OrderMismatchError
 }
 
+/** Signed decline fields in shapes the approval formats would refuse; a decline is mapped as it came. */
+const FREE_FORM_DECLINES: Array<[string, Data]> = [
+  ['a Response with punctuation', { Response: 'Red - Limit yetersiz' }],
+  ['a Turkish Response', { Response: 'İşlem reddedildi' }],
+  ['a letter-and-digit return code', { ProcReturnCode: 'M041' }],
+  ['a one-digit return code', { ProcReturnCode: '5' }],
+  ['a Version', { Version: '1.0' }],
+  ['an mdStatus of two digits', { mdStatus: '11', '3DStatus': '11' }],
+]
+
 const MALFORMED = new HashMismatchError('3D callback fields are malformed')
 const NO_HASH = new HashMismatchError('3D callback has no HASH')
 const HASH_MISMATCH = new HashMismatchError('3D callback hash mismatch')
@@ -1079,7 +1089,8 @@ describe('InterPos (end to end) 3D Secure', () => {
     expect(sent).toHaveLength(0)
   })
 
-  // addition: F16 an approved 3D Pay callback posted to a 3D Secure order is a model swap (the bank charged)
+  // addition: F16 an approved 3D Pay callback posted to a 3D Secure order is a model swap; the result (and
+  // paymentMayHaveCompleted) is attached only when one status request shows the payment of the order
   it('FV3 posted to make3DPayment is OrderMismatchError payment_model with the result attached', async () => {
     const { sent, promise } = run(fv3(), payOrder)
     const err = await mismatch(promise)
@@ -1088,6 +1099,87 @@ describe('InterPos (end to end) 3D Secure', () => {
     expect(err.actual).toBe('3d_pay')
     expect(err.paymentMayHaveCompleted).toBe(true)
     expect(err.response?.status).toBe('approved')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.fields.TxnType).toBe('StatusHistory')
+    expect(sent[0]?.fields.orgOrderId).toBe('20221225B83B')
+  })
+
+  // addition: review fix, the model swap needs bank evidence before it reports that money may have moved
+  it.each([
+    ['FV3 for its order, a record that does not confirm', fv3(), payOrder, ['81', '']],
+    ['FP1 re-read for order 12, a declined record', fp1ReRead(), { id: '12', amount: 1.01 }, ['81', '']],
+  ] as Array<[string, Data, PosOrder, [string, string]]>)(
+    '%s: payment_model without the result attached',
+    async (_name, callback, order, [code, authCode]) => {
+      const { sent, promise } = run(callback, order, {
+        status: (id) => bankBody(statusRecord(id, { ProcReturnCode: code, AuthCode: authCode })),
+      })
+      const err = await mismatch(promise)
+      expect(err.field).toBe('payment_model')
+      expect(err.paymentMayHaveCompleted).toBe(false)
+      expect(err.response).toBeUndefined()
+      expect(sent).toHaveLength(1)
+    },
+  )
+
+  // addition: review fix, the order binding runs before the model check: an approval of another order is an order
+  // mismatch without the result attached and without any request
+  it.each([
+    ['FV3 for an unrelated order', fv3(), { id: 'X9', amount: 50, currency: CURRENCY.USD }, 'order_id'],
+    ['FV3 for an order of another amount', fv3(), { id: '20221225B83B', amount: 50 }, 'amount'],
+    [
+      'FP1 re-read for order 12 of another currency',
+      fp1ReRead(),
+      { id: '12', amount: 1.01, currency: CURRENCY.USD },
+      'currency',
+    ],
+    ['FP4 for an unrelated order', fp4(), { id: 'X9', amount: 1.01 }, 'order_id'],
+  ] as Array<[string, Data, PosOrder, string]>)(
+    '%s is an order mismatch, nothing sent',
+    async (_n, callback, order, field) => {
+      const { sent, promise } = run(callback, order)
+      const err = await mismatch(promise)
+      expect(err.field).toBe(field)
+      expect(err.paymentMayHaveCompleted).toBe(false)
+      expect(err.response).toBeUndefined()
+      expect(sent).toHaveLength(0)
+    },
+  )
+
+  // addition: review fix, a signed approval with a failed 3D status posted to a 3D Secure order (the bank charged)
+  it('FP4 posted to make3DPayment: a confirming record gives declined with manual review', async () => {
+    const { sent, promise } = run({ ...fp4(), AuthCode: 'FORGED', TransId: 'FORGED' }, payOrder)
+    const res = (await promise) as Data
+    expect(res.status).toBe('declined')
+    expect(res.requires_manual_review).toBe(true)
+    expect(res.payment_model).toBe('3d')
+    expect(res.proc_return_code).toBeNull()
+    expect(res.auth_code).toBe('A12345')
+    expect(res.transaction_id).toBe('T1')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.fields.TxnType).toBe('StatusHistory')
+  })
+
+  it('FP4 posted to make3DPayment: a record that does not confirm gives a plain decline', async () => {
+    const { sent, promise } = run({ ...fp4(), AuthCode: 'FORGED', TransId: 'FORGED' }, payOrder, {
+      status: (id) => bankBody(statusRecord(id, { ProcReturnCode: '81', AuthCode: '' })),
+    })
+    const res = (await promise) as Data
+    expect(res.status).toBe('declined')
+    expect(res.requires_manual_review).toBeUndefined()
+    expect(res.proc_return_code).toBeNull()
+    expect(res.auth_code).toBeNull()
+    expect(res.transaction_id).toBeNull()
+    expect(sent).toHaveLength(1)
+  })
+
+  it.each([
+    ['Version x', { Version: 'x' }],
+    ['Currency 94', { Currency: '94' }],
+    ['Response with a digit', { Response: 'Approved5' }],
+  ])('FP4 with %s posted to make3DPayment is malformed, nothing sent', async (_name, change) => {
+    const { sent, promise } = run(fv3({ mdStatus: '0', '3DStatus': '0', ...change }), payOrder)
+    await expect(promise).rejects.toThrow(MALFORMED)
     expect(sent).toHaveLength(0)
   })
 
@@ -1104,7 +1196,6 @@ describe('InterPos (end to end) 3D Secure', () => {
     ['PurchAmount 1.01', { PurchAmount: '1.01' }],
     ['PurchAmount 1,019', { PurchAmount: '1,019' }],
     ['Response with a digit', { Response: 'A1' }],
-    ['mdStatus 11', { mdStatus: '11', '3DStatus': '11' }],
     ['OrderId with a space', { OrderId: '3355 4969' }],
   ])('rejects a signed success callback with %s (malformed, nothing sent)', async (_name, change) => {
     const { sent, promise } = run(fv4(change))
@@ -1247,13 +1338,24 @@ describe('InterPos (end to end) 3D Secure', () => {
     expect(strict.sent).toHaveLength(0)
   })
 
-  // addition: Task 1 carry re-splits that the crypt accepts (a null field signs as empty) are malformed here
+  // addition: Task 1 carry re-splits that the crypt accepts (a null field signs as empty): a re-split decline stays
+  // a decline (nothing sent, no review flag), a re-split success is malformed
   it.each([
     ['decline: amount merged with a null currency', { ...secureAuthFail(), PurchAmount: '1,01949', Currency: null }],
     [
       'decline: order id shifted into the return code',
       { ...secureAuthFail(), OrderId: '20221225E1DF8', ProcReturnCode: '1' },
     ],
+  ] as Array<[string, Data]>)('%s (declined, nothing sent, no review flag)', async (_name, callback) => {
+    expect(sign(callback)).toBe(callback.HASH)
+    const { sent, promise } = run(callback)
+    const res = (await promise) as Data
+    expect(res.status).toBe('declined')
+    expect(res.requires_manual_review).toBeUndefined()
+    expect(sent).toHaveLength(0)
+  })
+
+  it.each([
     ['success: amount merged with a null currency', { ...fv4(), PurchAmount: '1949', Currency: null }],
     ['success: MD merged into a null order id', { ...fv4(), MD: 'MDVALUE12333554969', OrderId: null }],
   ] as Array<[string, Data]>)('%s (malformed, nothing sent)', async (_name, callback) => {
@@ -1262,6 +1364,18 @@ describe('InterPos (end to end) 3D Secure', () => {
     await expect(promise).rejects.toThrow(MALFORMED)
     expect(sent).toHaveLength(0)
   })
+
+  // addition: review ruling, signed declines are mapped as they came: the bank's decline texts and codes are free form
+  it.each(FREE_FORM_DECLINES)(
+    'a signed decline with %s is declined (nothing sent, no review flag)',
+    async (_n, change) => {
+      const { sent, promise } = run(fv4({ ProcReturnCode: '05', mdStatus: '0', '3DStatus': '0', ...change }))
+      const res = (await promise) as Data
+      expect(res.status).toBe('declined')
+      expect(res.requires_manual_review).toBeUndefined()
+      expect(sent).toHaveLength(0)
+    },
+  )
 
   // addition: F11 disable_3d_hash_check changes nothing
   it('disable_3d_hash_check does not disable the check', async () => {
@@ -1313,6 +1427,14 @@ describe('InterPos (end to end) 3D Pay and 3D Host', () => {
         expect(res.payment_model).toBe(model)
         expect(res.auth_code).toBe('A12345')
         expect(res.transaction_id).toBe('T1')
+      })
+
+      it('confirms an approval whose record reports the transaction result Success', async () => {
+        const { sent, promise } = run(model, approved(), order, {
+          status: (id) => bankBody(statusRecord(id, { TxnResult: 'Success' })),
+        })
+        expect(((await promise) as Data).status).toBe('approved')
+        expect(sent).toHaveLength(1)
       })
 
       it('confirms a half 3D approval', async () => {
@@ -1387,6 +1509,10 @@ describe('InterPos (end to end) 3D Pay and 3D Host', () => {
         ['order_status', { AuthCode: '' }],
         ['order_status', { AuthCode: 'A B' }],
         ['order_status', { ProcReturnCode: '81' }],
+        // addition: review ruling, a transaction result other than Success is no approval
+        ['order_status', { TxnResult: 'Failed' }],
+        ['order_status', { TxnResult: '' }],
+        ['order_status', { TxnResult: 'success' }],
       ])('a confirmation failure on %s %j is OrderMismatchError with manual review', async (field, change) => {
         const { sent, promise } = run(model, approved(), order, {
           status: (id) => bankBody(statusRecord(id, change)),
@@ -1427,20 +1553,28 @@ describe('InterPos (end to end) 3D Pay and 3D Host', () => {
         ['mdStatus 0 (FP4 shape)', { mdStatus: '0', '3DStatus': '0' }],
         ['the unsigned 3DStatus 1 with the signed mdStatus 0', { mdStatus: '0', '3DStatus': '1' }],
       ])('%s: a confirming record gives declined with manual review', async (_name, change) => {
-        const { sent, promise } = run(model, approved(change), order)
+        const { sent, promise } = run(model, { ...approved(change), AuthCode: 'FORGED', TransId: 'FORGED' }, order)
         const res = (await promise) as Data
         expect(res.status).toBe('declined')
         expect(res.requires_manual_review).toBe(true)
+        // addition: review fix, no approval code and the references of the bank record, never the callback's
+        expect(res.proc_return_code).toBeNull()
+        expect(res.auth_code).toBe('A12345')
+        expect(res.transaction_id).toBe('T1')
         expect(sent).toHaveLength(1)
       })
 
       it('approved without 3D success and a record that does not confirm is a plain decline', async () => {
-        const { sent, promise } = run(model, approved({ mdStatus: '0', '3DStatus': '0' }), order, {
+        const callback = { ...approved({ mdStatus: '0', '3DStatus': '0' }), AuthCode: 'FORGED', TransId: 'FORGED' }
+        const { sent, promise } = run(model, callback, order, {
           status: (id) => bankBody(statusRecord(id, { ProcReturnCode: '81', AuthCode: '' })),
         })
         const res = (await promise) as Data
         expect(res.status).toBe('declined')
         expect(res.requires_manual_review).toBeUndefined()
+        expect(res.proc_return_code).toBeNull()
+        expect(res.auth_code).toBeNull()
+        expect(res.transaction_id).toBeNull()
         expect(sent).toHaveLength(1)
       })
 
@@ -1461,6 +1595,7 @@ describe('InterPos (end to end) 3D Pay and 3D Host', () => {
         ['PurchAmount 1.01', { PurchAmount: '1.01' }],
         ['Response with a digit', { Response: 'Approved5' }],
         ['mdStatus missing', { mdStatus: undefined }],
+        ['mdStatus of two digits', { mdStatus: '11', '3DStatus': '11' }],
       ])('rejects an approved callback with %s (malformed, nothing sent)', async (_name, change) => {
         const { sent, promise } = run(model, approved(change), order)
         await expect(promise).rejects.toThrow(MALFORMED)
@@ -1550,21 +1685,49 @@ describe('InterPos (end to end) 3D Pay and 3D Host', () => {
     expect(sent).toHaveLength(0)
   })
 
-  // addition: Task 1 carry re-splits that the crypt accepts (a null field signs as empty) are malformed here
+  // addition: Task 1 carry re-splits that the crypt accepts (a null field signs as empty): a re-split that no longer
+  // reads as an approval is a decline (nothing sent, no review flag), a re-split approval is malformed
   it.each([
-    ['approval: amount merged with a null currency', { ...fv3(), PurchAmount: '1,01949', Currency: null }],
     ['approval: order id shifted into the return code', { ...fv3(), OrderId: '20221225B83B0', ProcReturnCode: '0' }],
     ['decline: amount merged with a null currency', { ...payAuthFail(), PurchAmount: '1,01949', Currency: null }],
     [
       'decline: order id shifted into the return code',
       { ...payAuthFail(), OrderId: '20221225B83B8', ProcReturnCode: '1' },
     ],
-  ] as Array<[string, Data]>)('%s (malformed, nothing sent)', async (_name, callback) => {
+  ] as Array<[string, Data]>)('%s (declined, nothing sent, no review flag)', async (_name, callback) => {
+    expect(sign(callback)).toBe(callback.HASH)
+    const { sent, promise } = run(MODEL.THREE_D_PAY, callback, payOrder)
+    const res = (await promise) as Data
+    expect(res.status).toBe('declined')
+    expect(res.requires_manual_review).toBeUndefined()
+    expect(sent).toHaveLength(0)
+  })
+
+  it('approval: amount merged with a null currency (malformed, nothing sent)', async () => {
+    const callback: Data = { ...fv3(), PurchAmount: '1,01949', Currency: null }
     expect(sign(callback)).toBe(callback.HASH)
     const { sent, promise } = run(MODEL.THREE_D_PAY, callback, payOrder)
     await expect(promise).rejects.toThrow(MALFORMED)
     expect(sent).toHaveLength(0)
   })
+
+  // addition: review ruling, signed declines are mapped as they came: the bank's decline texts and codes are free form
+  it.each(FREE_FORM_DECLINES)(
+    'a signed decline with %s is declined (nothing sent, no review flag)',
+    async (_n, change) => {
+      for (const model of [MODEL.THREE_D_PAY, MODEL.THREE_D_HOST] as const) {
+        const { sent, promise } = run(
+          model,
+          fv3({ ProcReturnCode: '05', Response: '', mdStatus: '0', '3DStatus': '0', ...change }),
+          payOrder,
+        )
+        const res = (await promise) as Data
+        expect(res.status).toBe('declined')
+        expect(res.requires_manual_review).toBeUndefined()
+        expect(sent).toHaveLength(0)
+      }
+    },
+  )
 
   // addition: F7 hostile callback shapes through the hosted flow
   it('a numeric signed value fails the hash, a nested one is refused before the crypt', async () => {

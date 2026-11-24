@@ -283,7 +283,8 @@ describe('InterPosCrypt', () => {
     })
 
     // addition: F9 a null (or absent) signed field reads as empty, so its characters can merge into a neighbour while
-    // the genuine hash still verifies; the gateway's field formats reject each of these (see InterPos.test.ts)
+    // the genuine hash still verifies; through the gateway a re-split decline stays a decline and a re-split approval
+    // is rejected as malformed (see InterPos.test.ts)
     it.each([
       ['decline: amount merged with a null currency', { ...decline3d(), PurchAmount: '1,01949', Currency: null }],
       [
@@ -292,9 +293,12 @@ describe('InterPosCrypt', () => {
       ],
       ['approval: amount merged with a null currency', { ...pay(), PurchAmount: '1,01949', Currency: null }],
       ['approval: order id shifted into the return code', { ...pay(), OrderId: '20221225B83B0', ProcReturnCode: '0' }],
-    ] as Array<[string, Cb]>)('accepted by the crypt; the gateway rejects: %s', (_n, resplit) => {
-      expect(check(resplit)).toBe(true)
-    })
+    ] as Array<[string, Cb]>)(
+      'accepted by the crypt; the gateway at most declines it (nothing sent, no review flag): %s',
+      (_n, resplit) => {
+        expect(check(resplit)).toBe(true)
+      },
+    )
 
     // addition: F7 for each of these lists the genuine hash verifies under a check that trusts the announced list
     it.each([

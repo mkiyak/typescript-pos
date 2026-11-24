@@ -53,6 +53,9 @@ const MAX_MD_LENGTH = 1024
 /** The authorization code of an approved transaction in the bank's status record. */
 const AUTH_CODE = /^[\x21-\x7E]{1,32}$/
 
+/** The transaction result of an approved transaction in the bank's status record. */
+const TXN_RESULT_SUCCESS = 'Success'
+
 /** The bank prints "never voided" as the year-one placeholder. */
 const NO_VOID_DATE = '1.1.0001 00:00:00'
 
@@ -156,8 +159,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * - Signed values have no separators, so after the hash verifies their formats are pinned: `Version` and `Exponent`
  *   are empty, `Currency` three digits, `PurchAmount` a bank amount (`1,01`, `1.056,20`), the return URLs start with
  *   `http`, the return code is empty or two digits, `Response` letters and spaces only, `mdStatus` one digit and the
- *   order id letters, digits, `_` or `-`. On a callback that reports success every field is required; on a decline
- *   the fields that are present must have these formats. A violation is `HashMismatchError('3D callback fields are
+ *   order id letters, digits, `_` or `-`. These formats are checked on every callback that reports 3D success or
+ *   an approval (return code `00`); a signed decline grants nothing and is mapped as it came, since the bank's decline
+ *   texts and codes are free form. A violation is `HashMismatchError('3D callback fields are
  *   malformed')`. One shift remains possible: a genuine callback of order `1200` without a return code reads as an
  *   approval of order `12`. Only the bank can tell, which is why every approval is confirmed (see below).
  * - 3D success is the response mapper's reading of the unsigned `3DStatus` (1 to 4) together with the signed
@@ -168,22 +172,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  *   order's, and the unsigned shop code, when present, the account's. For 3D Secure this runs before the provision
  *   request (nothing attached); for 3D Pay / 3D Host it runs on the mapped result, which is attached because the bank
  *   may already have charged the card.
- * - 3D Secure: a callback with return code `00` is a 3D Pay result posted to a 3D Secure order: the bank already
- *   charged the card, so it is `OrderMismatchError` on `payment_model` with the 3D Pay result attached, and nothing is
- *   provisioned. Any other non-empty return code is malformed. The unsigned ECI, CAVV and payer transaction id must
+ * - 3D Secure: a 3D-successful callback with return code `00` is a 3D Pay result posted to a 3D Secure order: after
+ *   the order binding it is `OrderMismatchError` on `payment_model`, and nothing is provisioned. The 3D Pay result
+ *   (and with it `paymentMayHaveCompleted`) is attached only when one status request shows the bank holds that
+ *   payment of the order. Any other non-empty return code on a 3D success is malformed. The unsigned ECI, CAVV and payer transaction id must
  *   be short base64 or digit strings and the signed `MD` a non-empty string of at most 1024 characters, otherwise
  *   `PosError` before any request; only the bank can reject altered values. The provision answer must be approved
  *   with return code `00`, for this order id and, when it carries an amount, for the order's amount; otherwise
  *   `OrderMismatchError` with the result attached.
  * - 3D Pay / 3D Host: every approved result is confirmed with one status request before it is returned. The bank's
- *   record must be approved with return code `00`, for this order id, with an authorization code, for the order's
+ *   record must be approved with return code `00` (and a transaction result, when present, of `Success`), for this
+ *   order id, with an authorization code, for the order's
  *   amount, and neither voided nor refunded; otherwise `OrderMismatchError` with the result attached and flagged for
  *   manual review. The authorization code and transaction id of the returned result are taken from that record.
  *   Errors of the status request (such as `PosHttpError`) propagate unchanged; the payment may have completed, so
  *   check it later with `status`. Declined results are never confirmed.
- * - A 3D Pay / 3D Host payment the bank approved although the 3D authentication did not succeed is `declined`: with
- *   `requires_manual_review: true` when one status request shows the bank holds that payment of the order, otherwise
- *   plainly declined (a callback alone does not raise alerts).
+ * - A payment the bank approved (return code `00`) although the 3D authentication did not succeed, on any of the
+ *   three models, is `declined` after the field formats and the order binding: with `requires_manual_review: true`
+ *   when one status request shows the bank holds that payment of the order, otherwise plainly declined (a callback
+ *   alone does not raise alerts). Its return code is null, and its authorization code and transaction id come from
+ *   the bank's record (null without it).
  */
 export class InterPos extends AbstractGateway<InterPosAccount> {
   static readonly NAME = 'InterPos'
@@ -208,8 +216,8 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
    * @throws HashMismatchError when a present hash does not verify, a required hash is missing, or the signed fields
    *   are malformed
    * @throws OrderMismatchError when the callback does not belong to the order or account (nothing is sent), when it
-   *   is an approved 3D Pay result (`payment_model`, result attached), or when the approved provision answer does not
-   *   belong to the order (result attached)
+   *   is an approved 3D Pay result (`payment_model`, result attached only when the bank's record shows the payment),
+   *   or when the approved provision answer does not belong to the order (result attached)
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -225,9 +233,7 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
     const authenticated = this.isAuthenticated(callback)
 
     if (!authenticated) {
-      if (signed) {
-        this.assertSignedFields(callback, false)
-      } else {
+      if (!signed) {
         this.refuseIfHashRequired(callback)
       }
       const declined = this.responseDataMapper.map3DPaymentData(callback, null, txType, order)
@@ -240,32 +246,38 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
         throw new PosError('3D callback without 3D success was not mapped as declined')
       }
 
-      return signed ? declined : this.unsignedResult(declined, order, txType, paymentModel)
+      if (!signed) {
+        return this.unsignedResult(declined, order, txType, paymentModel)
+      }
+      if (ownText(callback, 'ProcReturnCode') === SUCCESS_CODE) {
+        // The bank charged the card (a 3D Pay form posted as 3D Secure) although the 3D authentication failed.
+        this.assertSignedFields(callback)
+        const orderId = this.orderIdOf(order)
+        this.assertCallbackMatchesOrder(callback, order, orderId)
+
+        return this.declineUnauthenticatedApproval(declined, order, orderId)
+      }
+
+      return declined
     }
 
     if (!signed) {
       this.rejectUnsigned(callback)
     }
-    this.assertSignedFields(callback, true)
+    this.assertSignedFields(callback)
 
     const returnCode = ownText(callback, 'ProcReturnCode') ?? ''
-    if (returnCode === SUCCESS_CODE) {
-      // A 3D Pay result (the bank charged the card already) posted to a 3D Secure order: the posted payment model is
-      // unsigned, so this is how a swapped form comes back. Nothing is provisioned.
-      this.fail(
-        'payment_model',
-        paymentModel,
-        MODEL.THREE_D_PAY,
-        asText(order.id),
-        this.responseDataMapper.map3DPayResponseData(callback, txType, order),
-      )
-    }
-    if (returnCode !== '') {
+    if (returnCode !== '' && returnCode !== SUCCESS_CODE) {
       this.malformed(callback, ['ProcReturnCode'])
     }
 
     const orderId = this.orderIdOf(order)
     this.assertCallbackMatchesOrder(callback, order, orderId)
+
+    if (returnCode === SUCCESS_CODE) {
+      await this.rejectSwappedPaymentModel(callback, order, orderId, txType)
+    }
+
     this.assertAuthenticationValues(callback)
 
     const requestData = await this.dispatchRequestDataPrepared(
@@ -358,9 +370,9 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
     this.assertFlatCallback(callback)
     const signed = this.verifyPresentHash(callback)
     const approvedByCallback = ownText(callback, 'ProcReturnCode') === SUCCESS_CODE
-    if (signed) {
-      this.assertSignedFields(callback, approvedByCallback)
-    } else {
+    if (signed && approvedByCallback) {
+      this.assertSignedFields(callback)
+    } else if (!signed) {
       this.refuseIfHashRequired(callback)
     }
 
@@ -404,17 +416,44 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
   }
 
   /**
+   * A 3D-successful callback with return code `00` is a 3D Pay result (the bank charged the card already) posted to
+   * a 3D Secure order: the posted payment model is unsigned, so this is how a swapped form comes back. Nothing is
+   * provisioned. The callback is already bound to this order; whether money moved is only known from the bank's
+   * record, so the result (and with it `paymentMayHaveCompleted`) is attached only when one status request shows the
+   * payment of this order.
+   */
+  private async rejectSwappedPaymentModel(
+    callback: Record<string, unknown>,
+    order: PosOrder,
+    orderId: string,
+    txType: TxType,
+  ): Promise<never> {
+    const { failure } = await this.bankRecordConfirms(order, orderId)
+    const evidence =
+      failure === null ? this.responseDataMapper.map3DPayResponseData(callback, txType, order) : undefined
+
+    this.fail('payment_model', MODEL.THREE_D_SECURE, MODEL.THREE_D_PAY, orderId, evidence)
+  }
+
+  /**
    * The bank approved a payment whose 3D authentication failed: it is not accepted. Whether money moved is only
    * known from the bank's record, so the manual review flag needs that record (a re-read callback must not raise
-   * alerts by itself).
+   * alerts by itself). The result reports no approval code, and its authorization code and transaction id come from
+   * that record (null when it does not confirm the payment), never from the callback.
    */
   private async declineUnauthenticatedApproval(
     response: PosResponse,
     order: PosOrder,
     orderId: string,
   ): Promise<PosResponse> {
-    const declined: PosResponse = { ...response, status: TX_DECLINED }
-    const { failure } = await this.bankRecordConfirms(order, orderId)
+    const declined: PosResponse = {
+      ...response,
+      status: TX_DECLINED,
+      proc_return_code: null,
+      auth_code: null,
+      transaction_id: null,
+    }
+    const { record, failure } = await this.bankRecordConfirms(order, orderId)
     if (failure !== null) {
       this.logger.warn('payment approved without 3D success, the bank record does not confirm it', {
         order_id: this.echo(orderId),
@@ -428,7 +467,7 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
       order_id: this.echo(orderId),
     })
 
-    return { ...declined, requires_manual_review: true }
+    return { ...declined, ...this.recordReferences(record), requires_manual_review: true }
   }
 
   /**
@@ -443,10 +482,15 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
     }
 
     this.logger.info('payment confirmed by the bank status record', { order_id: this.echo(orderId) })
-    const fields = record.all as Record<string, unknown>
+
+    return { ...response, ...this.recordReferences(record) }
+  }
+
+  /** The authorization code and transaction id of a confirming bank record. */
+  private recordReferences(record: PosResponse): { auth_code: string | null; transaction_id: string | null } {
+    const fields = isRecord(record.all) ? record.all : {}
 
     return {
-      ...response,
       auth_code: ownText(fields, 'AuthCode') ?? null,
       transaction_id: ownText(fields, 'TransId') || null,
     }
@@ -467,6 +511,11 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
 
     if (record.status !== TX_APPROVED || !isRecord(raw) || ownText(fields, 'ProcReturnCode') !== SUCCESS_CODE) {
       return { record, failure: ['order_status', TX_APPROVED, asText(record.status)] }
+    }
+
+    // A transaction result other than the success word, also an empty one, is no approval.
+    if (Object.hasOwn(fields, 'TxnResult') && fields.TxnResult !== TXN_RESULT_SUCCESS) {
+      return { record, failure: ['order_status', TX_APPROVED, asText(fields.TxnResult) || 'no transaction result'] }
     }
 
     const recordOrderId = ownText(fields, 'OrderId') ?? ''
@@ -591,10 +640,11 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
   }
 
   /**
-   * Runs after the hash verified. On a callback that reports success (`required`) every signed field must be present
-   * in its format; on a decline the fields that are present must be.
+   * Runs after the hash verified, on a callback that reports success or an approval: every signed field that keeps a
+   * boundary must be present in its format (`Version`, `Exponent`, the return code and `Response` may be empty).
+   * Declines are not checked: a decline grants nothing, and the bank's decline texts and codes are free form.
    */
-  private assertSignedFields(callback: Record<string, unknown>, required: boolean): void {
+  private assertSignedFields(callback: Record<string, unknown>): void {
     const malformed: string[] = []
     const check = (key: string, format: RegExp | null, mandatory: boolean): void => {
       const value = own(callback, key)
@@ -608,14 +658,14 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
     // Version and Exponent are always empty: a value there could take characters of the amount or the currency.
     check('Version', null, false)
     check('Exponent', null, false)
-    check('PurchAmount', BANK_AMOUNT, required)
-    check('Currency', CURRENCY_CODE, required)
-    check('OkUrl', RETURN_URL, required)
-    check('FailUrl', RETURN_URL, required)
-    check('OrderId', ORDER_ID, required)
+    check('PurchAmount', BANK_AMOUNT, true)
+    check('Currency', CURRENCY_CODE, true)
+    check('OkUrl', RETURN_URL, true)
+    check('FailUrl', RETURN_URL, true)
+    check('OrderId', ORDER_ID, true)
     check('ProcReturnCode', RETURN_CODE, false)
     check('Response', RESPONSE_TEXT, false)
-    check('mdStatus', MD_STATUS, required)
+    check('mdStatus', MD_STATUS, true)
 
     if (malformed.length > 0) {
       this.malformed(callback, malformed)
