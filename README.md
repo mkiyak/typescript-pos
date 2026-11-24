@@ -18,6 +18,8 @@ ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
 | `PayFlexCPV4Pos` | VakıfBank (Common Payment hosted page, port 8443) | Unit-tested. |
 | `GarantiPos` | Garanti BBVA | Unit-tested; hashes and amount format differential-tested against PHP. |
 | `AkbankPos` | Akbank (virtual POS API) | Unit-tested; request signature, 3D hashes and amount format differential-tested against PHP (0 mismatches in 1000 random sets each). |
+| `PosNetPos` | Yapı Kredi (POSNET XML) | Unit-tested; MACs, amount and order-id formats differential-tested against PHP (0 mismatches in 1000 random sets each). |
+| `PosNetV1Pos` | Albaraka Türk (POSNET JSON) | Unit-tested; MACs differential-tested against PHP (0 mismatches in 1000 random sets each). |
 
 ## Install
 
@@ -73,6 +75,8 @@ Complete, compile-checked versions with error handling live in [`examples/`](htt
 - [VakıfBank Common Payment (3D Host / 3D Pay)](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-cp-payment.md)
 - [Garanti BBVA 3D payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/garanti-3d-payment.md)
 - [Akbank virtual POS payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/akbank-pos-payment.md)
+- [Yapı Kredi POSNET 3D payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/posnet-3d-payment.md)
+- [Albaraka Türk POSNET 3D payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/posnet-v1-3d-payment.md)
 - [Queries (custom bank requests)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
 - [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
@@ -151,15 +155,14 @@ const query = PosQueryFactory.createPosQuery(account, posProductionConfig)
 const answer = await query.customQuery({ TransactionId: transactionId }) // decoded, not normalized
 ```
 
-Custom URLs must be `https:` on a configured bank origin (or one you list in `allowedApiOrigins`). `GarantiPos` also supports `history` and `getBinList`, `AkbankPos` supports `history`. For Asseco, PayFlex V4 and
-VakıfBank Common Payment only `customQuery` is offered; the other queries reject
+Custom URLs must be `https:` on a configured bank origin (or one you list in `allowedApiOrigins`). `GarantiPos` also supports `history` and `getBinList`, `AkbankPos` supports `history`. For Asseco, PayFlex V4, VakıfBank Common Payment and the POSNET gateways only `customQuery` is offered; the other queries reject
 with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md).
 
 ## Design
 
 1. Stateless, async API: each network method returns its own response; no `isSuccess()` / `getResponse()` state.
 2. Order and normalized response keys are snake_case and the same for every gateway.
-3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `GarantiPos` always verifies a signed callback and accepts an unsigned one only as a decline (`require_3d_hash: true` rejects it too); `AkbankPos` always requires a valid hash for 3D Pay, 3D Host and successful 3D Secure callbacks, and confirms approved 3D Pay/Host results with the bank; `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`.
+3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `GarantiPos` always verifies a signed callback and accepts an unsigned one only as a decline (`require_3d_hash: true` rejects it too); `AkbankPos` always requires a valid hash for 3D Pay, 3D Host and successful 3D Secure callbacks, and confirms approved 3D Pay/Host results with the bank; `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`; `PosNetPos` always verifies the bank's MAC on the decrypted 3D result; `PosNetV1Pos` always requires a valid MAC on successful callbacks (an unsigned declined one is rejected only with `require_3d_hash: true`).
 4. Sensitive data (PAN, CVV, expiry, passwords, store keys) is masked before it reaches the logger.
 5. Constant-time hash comparison; the Asseco hash uses the exact natural, case-insensitive key ordering the bank expects.
 6. Extra Asseco, Garanti and Akbank safeguards: the returned order id, amount and payment model (Garanti: also terminal and currency) are compared with the order

@@ -16,6 +16,12 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
 - **Akbank (`AkbankPos`).** Every request is signed with the secret key and every callback is verified; 3D Pay and
   3D Host callbacks must be signed, and an approved result is confirmed with the bank (one signed order-history request)
   before it is returned. When the bank does not confirm it, `OrderMismatchError.paymentMayHaveCompleted` is `true`.
+- **POSNET (`PosNetPos`).** The 3D result is decrypted by the bank and its MAC is verified before any money moves;
+  the bank-resolved order id, amount, currency and installment count must equal your order's (`OrderMismatchError`,
+  nothing charged). The check cannot be disabled.
+- **POSNET (`PosNetV1Pos`).** The callback signature cannot be disabled; the signed fields are pinned to the
+  bank's formats, the echoed order id, amount, currency, merchant and transaction type are compared with your order
+  (`OrderMismatchError`), and the provision always charges your order's own amount.
 - **Order binding.** Signed Garanti callbacks must carry your terminal id and order id, and the echoed amount, currency and payment model are compared too. Asseco 3D callbacks must carry your order id, amount and the storetype of the payment model they
   are completed with; PayFlex callbacks must carry your amount, currency and merchant id (`OrderMismatchError`
   otherwise). Prefer fixed-length order ids (zero-padded or UUID-based): they leave no ambiguity about where the

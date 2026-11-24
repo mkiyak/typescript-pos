@@ -33,6 +33,8 @@ replaces the other.
 | `PayFlexCPV4PosQuery` | yes | no | no | no | no |
 | `GarantiPosQuery` | yes | yes | no | no | yes |
 | `AkbankPosQuery` | yes | yes | no | no | no |
+| `PosNetPosQuery` | yes | no | no | no | no |
+| `PosNetV1PosQuery` | yes | no | no | no | no |
 
 A query the bank class does not offer rejects with `UnsupportedTransactionTypeError`; it never throws synchronously.
 Check first when the choice is dynamic:
@@ -56,6 +58,8 @@ the bank's field names back.
 | `PayFlexCPV4Pos` | `HostMerchantId`, `MerchantId`, `Password` | JSON | `payment_api` + `/GetVposTransaction` |
 | `GarantiPos` | `Mode`, `Version`, `Terminal` and `Terminal.HashData` (each only when missing) | `GVPSRequest` XML | `payment_api` |
 | `AkbankPos` | `terminal`, `version`, `requestDateTime`, `randomNumber` (each only when missing) | JSON, signed with the `auth-hash` header | `payment_api` + `/transaction/process` unless `apiUrl` is given |
+| `PosNetPos` | `mid`, `tid` (each only when missing) | XML in the `xmldata` form field | `payment_api` unless `apiUrl` is given |
+| `PosNetV1Pos` | `ApiType`, `ApiVersion`, `MerchantNo`, `TerminalNo` (each only when missing) and a `MAC` over the fields listed in `MACParams` (when you set no `MAC`) | JSON | none: `apiUrl` is required |
 
 For a sub-dealer account `MerchantId` is the sub-merchant id, otherwise `'1'`.
 
