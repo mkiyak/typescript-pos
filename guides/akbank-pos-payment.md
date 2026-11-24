@@ -86,11 +86,15 @@ concatenation of its values, so ids with a single shape keep it unambiguous wher
     callback. A 3D Secure callback without 3D success is mapped as declined without these checks.
   - In every model, load the order from the customer's session, never from a field of the callback.
 - **3D Pay and 3D Host approvals are confirmed with the bank.** The callback carries no amount, so before `approved` is
-  returned the library sends one signed order-history request and requires an approved, completed transaction of the
-  requested type for your order amount and currency. If the bank does not confirm it, the call throws
-  `OrderMismatchError` with `paymentMayHaveCompleted: true` and `error.response` set: check the bank panel, then
-  void or refund the payment. A network error (`PosHttpError`, timeout) during the confirmation propagates as is and
-  means the payment may have completed: keep the order pending and re-check it later with `pos.orderHistory(order)`.
+  returned the library sends one signed order-history request and requires an approved transaction of the requested
+  type for your order. The confirmation checks the transaction type, the order status (it must be completed), the
+  amount, the currency and the installment count (for a single payment, none, `0` and `1` are equal). If the bank
+  does not confirm it, the call throws `OrderMismatchError` (`field` is one of the checked values, for example
+  `order_status` or `installment`) with `paymentMayHaveCompleted: true` and `error.response` set: check the bank
+  panel, then void or refund the payment. On success `auth_code`, `ref_ret_num`, `batch_num`, `installment_count` and
+  the transaction time are taken from the bank's own record of the payment. A network error (`PosHttpError`,
+  timeout) during the confirmation propagates as is and means the payment may have completed: keep the order pending
+  and re-check it later with `pos.orderHistory(order)`.
 - **Approved but 3D failed.** When the bank authorized money although the 3D result is not successful, the response is
   `declined` with `requires_manual_review: true`. Do not ship the goods; reconcile in the bank panel.
 - **Complete each order once.** Mark it paid in an idempotent update: a replayed callback maps to the same result
