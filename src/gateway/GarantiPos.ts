@@ -104,7 +104,8 @@ function asText(value: unknown): string {
  * `procreturncode` (two digits), `response` (`Approved`, `Declined` or `Error`) and `mdstatus` (one digit) must be
  * well formed (each may also be empty) and `authcode` empty or six letters or digits (always six when
  * `procreturncode` is `00`), otherwise `HashMismatchError`; a signed callback must carry `clientid` equal to the
- * account terminal id (an unsigned one only when present). 3D success is decided on the trimmed mdStatus, the same value the response mapper reads, and a
+ * account terminal id (an unsigned one only when present). A signed 3D Secure callback must carry an empty
+ * `authcode`, `procreturncode` and `response` (nothing is provisioned yet), otherwise `HashMismatchError`. 3D success is decided on the trimmed mdStatus, the same value the response mapper reads, and a
  * callback taken down the not-3D-successful path must map as declined.
  */
 export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
@@ -160,6 +161,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
 
     this.assertTextFields(gatewayResponseData)
     this.assertSignedOutcomeFormat(gatewayResponseData)
+    this.assertNoOutcomeBeforeProvision(gatewayResponseData)
     this.assert3DSecureCallbackMatchesOrder(gatewayResponseData, order, txType)
 
     const requestData = await this.dispatchRequestDataPrepared(
@@ -312,6 +314,23 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
         auth_code_length: authCode.length,
       })
       throw new HashMismatchError('3D callback outcome fields are malformed')
+    }
+  }
+
+  /**
+   * A 3D Secure callback reports only the authentication; the bank has not provisioned anything yet, so its
+   * authorization code, return code and response are empty. Requiring that pins where the signed order id ends:
+   * otherwise its last characters could be moved into those fields with the hash still valid.
+   */
+  private assertNoOutcomeBeforeProvision(callback: GatewayResponseData): void {
+    for (const key of ['authcode', 'procreturncode', 'response'] as const) {
+      if (phpTrim(asText(own(callback, key))) !== '') {
+        this.logger.error('3D Secure callback carries a provision outcome', {
+          order_id: asText(own(callback, 'oid')),
+          field: key,
+        })
+        throw new HashMismatchError('3D Secure callback carries a provision outcome')
+      }
     }
   }
 

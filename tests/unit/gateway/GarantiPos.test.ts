@@ -915,6 +915,49 @@ describe('GarantiPos (mocked collaborators)', () => {
     )
     expect(crypt.check3DHash).not.toHaveBeenCalled()
   })
+  // addition: review ruling, a signed 3D Secure callback carries no provision outcome
+  it.each([
+    ['authcode', '304919'],
+    ['authcode', 'B'],
+    ['procreturncode', '00'],
+    ['procreturncode', '12'],
+    ['response', 'Approved'],
+    ['response', 'Declined'],
+  ])('3D Secure rejects a signed callback with %s %j before provisioning', async (field, value) => {
+    responseMapper.is3dAuthSuccess.mockReturnValue(true)
+    crypt.check3DHash.mockReturnValue(true)
+    const err = await pos
+      .payment(MODEL.THREE_D_SECURE, boundOrder('ORDER-1'), TX_TYPE.PAY_AUTH, null, {
+        mdstatus: '1',
+        ...boundEcho('ORDER-1'),
+        [field]: value,
+      })
+      .catch((e: unknown) => e)
+    // authcode 'B' and procreturncode '00' without an authcode already fail the signed format rule
+    expect(err).toBeInstanceOf(HashMismatchError)
+    expect(requestMapper.create3DPaymentRequestData).not.toHaveBeenCalled()
+    expect(httpClient.request).not.toHaveBeenCalled()
+  })
+
+  // addition: review ruling, empty or blank outcome fields are what the bank sends before provisioning
+  it('3D Secure accepts empty and blank outcome fields', async () => {
+    responseMapper.is3dAuthSuccess.mockReturnValue(true)
+    crypt.check3DHash.mockReturnValue(true)
+    requestMapper.create3DPaymentRequestData.mockReturnValue({ r: 1 })
+    clientStrategy.getClient.mockReturnValue(httpClient as unknown as AbstractHttpClient)
+    httpClient.request.mockResolvedValue({})
+    responseMapper.map3DPaymentData.mockReturnValue({ status: 'approved' })
+    await expect(
+      pos.payment(MODEL.THREE_D_SECURE, boundOrder('ORDER-1'), TX_TYPE.PAY_AUTH, null, {
+        mdstatus: '1',
+        ...boundEcho('ORDER-1'),
+        authcode: ' ',
+        procreturncode: '',
+        response: '',
+      }),
+    ).resolves.toStrictEqual({ status: 'approved' })
+    expect(httpClient.request).toHaveBeenCalledTimes(1)
+  })
 })
 
 // ---------- end to end: real mappers, crypt and HTTP client over a fake fetch ----------
@@ -1660,6 +1703,55 @@ describe('GarantiPos (end to end) forged callbacks', () => {
         .catch((e: unknown) => e)
       expect(err).toBeInstanceOf(errorClass)
       expect(sent).toHaveLength(0)
+    },
+  )
+  // addition: review ruling, the tail of the signed oid cannot move into the empty 3D Secure authcode
+  it('3D Secure: oid "202310" + authcode "0354BB" (hash still valid) raises HashMismatchError, nothing sent', async () => {
+    const cb = { ...secureCallback, oid: '202310', orderid: '202310', authcode: '0354BB' }
+    expect(new GarantiPosCrypt().check3DHash(createAccount(), cb)).toBe(true)
+    const { sent, fetchImpl } = recordingFetch()
+    const err = await realGateway(fetchImpl)
+      .payment(MODEL.THREE_D_SECURE, { ...secureOrder, id: '202310', amount: 9999 }, TX_TYPE.PAY_AUTH, null, cb)
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(HashMismatchError)
+    expect((err as Error).message).toBe('3D Secure callback carries a provision outcome')
+    expect(sent).toHaveLength(0)
+  })
+
+  /** A signed 3D Secure callback for order ORDER12 (hash computed with PHP built-ins and the store key). */
+  const order12Callback: Record<string, string> = {
+    ...secureCallback,
+    oid: 'ORDER12',
+    orderid: 'ORDER12',
+    transid: 'ORDER12',
+    hash: 'A72F77E7E4EE97C544889DEA6CEFD975D27ED247E520F83E7193DC856033B805BC86BE6D57B52F1429CF7BF035C4CFAF7E437AA958A88265D56483DF4A79733C',
+  }
+
+  // addition: review ruling, two trailing digits of the signed oid cannot move into procreturncode
+  it('3D Secure: oid "ORDER" + procreturncode "12" (hash still valid) raises HashMismatchError, nothing sent', async () => {
+    const cb = { ...order12Callback, oid: 'ORDER', orderid: 'ORDER', transid: 'ORDER', procreturncode: '12' }
+    expect(new GarantiPosCrypt().check3DHash(createAccount(), cb)).toBe(true)
+    const { sent, fetchImpl } = recordingFetch()
+    const err = await realGateway(fetchImpl)
+      .payment(MODEL.THREE_D_SECURE, { ...secureOrder, id: 'ORDER' }, TX_TYPE.PAY_AUTH, null, cb)
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(HashMismatchError)
+    expect(sent).toHaveLength(0)
+  })
+
+  // addition: review ruling, the legitimate 3D Secure vectors still provision
+  it.each([
+    ['fixture 2023100354BB', secureCallback, secureOrder],
+    ['ORDER12', order12Callback, { ...secureOrder, id: 'ORDER12' }],
+  ] as Array<[string, Record<string, string>, PosOrder]>)(
+    '3D Secure: the signed %s callback is provisioned',
+    async (_name, cb, order) => {
+      expect(new GarantiPosCrypt().check3DHash(createAccount(), cb)).toBe(true)
+      const { sent, fetchImpl } = recordingFetch(() => new Response(provisionApproved))
+      const res = await realGateway(fetchImpl).payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, null, cb)
+      expect(res.status).toBe('approved')
+      expect(sent).toHaveLength(1)
+      expect(sent[0]?.body).toContain(`<OrderID>${order.id}</OrderID>`)
     },
   )
 })
