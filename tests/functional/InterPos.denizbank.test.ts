@@ -5,6 +5,27 @@ import { CreditCardFactory } from '../../src/factory/CreditCardFactory.js'
 import { PosFactory } from '../../src/factory/PosFactory.js'
 import { CARD_TYPE, CURRENCY, MODEL, TX_TYPE } from '../../src/PosInterface.js'
 import type { PosOrder, PosResponse, ThreeDFormData } from '../../src/types.js'
+import { maskSensitiveData } from '../../src/util/maskSensitiveData.js'
+
+/** Status record fields printed for live verification of the bank-side confirmation (none of them secret). */
+const RECORD_FIELDS = [
+  'OrderId',
+  'ProcReturnCode',
+  'TxnResult',
+  'TxnStat',
+  'TxnStatus',
+  'ChargeTypeCd',
+  'PurchAmount',
+  'Currency',
+  'InstallmentCount',
+  'AuthCode',
+  'HostRefNum',
+  'TRXDATE',
+  'VoidDate',
+  'RefundedAmount',
+  'ErrorCode',
+  'ErrorMessage',
+] as const
 
 // Runs against the Denizbank InterPos test environment. Skipped unless FUNCTIONAL_TESTS=1 and
 // INTERPOS_SHOP_CODE is set; never run in CI. All credentials come from the environment:
@@ -73,7 +94,10 @@ describe.skipIf(!RUN)('InterPos against the Denizbank test environment', () => {
     // the non-secret values are printed so they can be compared with the expected shape.
     const status = await pos.status({ id: order.id })
     console.info('[functional] status', summary(status), 'record keys', Object.keys(status.all ?? {}))
-    console.info('[functional] status record', JSON.stringify(status.all))
+    // values only for non-secret fields that matter for the bank-side confirmation; everything else is listed by key
+    const record = (status.all ?? {}) as Record<string, unknown>
+    const shown = Object.fromEntries(RECORD_FIELDS.filter((k) => Object.hasOwn(record, k)).map((k) => [k, record[k]]))
+    console.info('[functional] status record', JSON.stringify(maskSensitiveData(shown)))
     expect(status.order_id, JSON.stringify(summary(status))).toBe(order.id)
 
     const cancel = await pos.cancel({ id: order.id })
