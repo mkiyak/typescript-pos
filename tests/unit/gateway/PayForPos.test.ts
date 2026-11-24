@@ -642,7 +642,14 @@ describe('PayForPos (mocked collaborators)', () => {
           order,
           decodedResponse: paymentResponse,
         },
-        statusExchange(order, confirmingStatus(order, txType, { auth_code: 'S37397' })),
+        statusExchange(
+          order,
+          confirmingStatus(order, txType, {
+            auth_code: 'S37397',
+            ref_ret_num: '230422098249',
+            masked_number: '415565******6111',
+          }),
+        ),
       ])
     }
 
@@ -654,8 +661,14 @@ describe('PayForPos (mocked collaborators)', () => {
     expect(responseMapper.is3dAuthSuccess).toHaveBeenCalledWith('3d-status')
     expect(responseMapper.map3DPaymentData).toHaveBeenCalledTimes(1)
     if (is3DSuccess) {
-      // deviation: F14 the authorization code of the returned result comes from the confirming bank record
-      expect(result).toStrictEqual({ ...expected, auth_code: 'S37397' })
+      // deviation: F14 the authorization code and the bank references of the returned result come from the
+      // confirming bank record
+      expect(result).toStrictEqual({
+        ...expected,
+        auth_code: 'S37397',
+        ref_ret_num: '230422098249',
+        masked_number: '415565******6111',
+      })
       expect(crypt.check3DHash).toHaveBeenCalledTimes(1)
       expect(crypt.check3DHash).toHaveBeenCalledWith(account, callback)
       expect(requestMapper.create3DPaymentRequestData).toHaveBeenCalledWith(account, order, txType, callback)
@@ -757,7 +770,8 @@ describe('PayForPos (mocked collaborators)', () => {
 
         const result = await pos.payment(paymentModel, order, TX_TYPE.PAY_AUTH, null, cb(callback))
 
-        expect(result).toStrictEqual(mapped)
+        // the bank references come from the confirming record, which has none here
+        expect(result).toStrictEqual({ ...mapped, ref_ret_num: null, masked_number: null })
         expect(crypt.check3DHash).toHaveBeenCalledTimes(1)
         expect(crypt.check3DHash).toHaveBeenCalledWith(account, callback)
         expect(responseMapper[mapperMethod]).toHaveBeenCalledTimes(1)
@@ -890,6 +904,7 @@ const statusRecord = (orderId: string, overrides: Data = {}): Data => ({
   TxnType: 'Auth',
   InstallmentCount: '0',
   AuthCode: 'S37397',
+  HostRefNum: '230422098249',
   ...overrides,
 })
 
@@ -1205,6 +1220,94 @@ describe('PayForPos (end to end) confirmation of an approved provision', () => {
     expect(sent).toHaveLength(2)
   })
 
+  // addition: a record that is cancelled or refunded in any readable or unreadable way does not confirm a payment
+  const statusXml = (id: string, from: string, to: string): Response => {
+    const body = xml(statusRecord(id))
+    expect(body).toContain(from)
+    return new Response(body.replace(from, to), { status: 200 })
+  }
+
+  it.each([
+    ['a duplicated IsVoided', { IsVoided: ['false', 'true'] }],
+    ['IsVoided True', { IsVoided: 'True' }],
+    ['an empty IsVoided', { IsVoided: '' }],
+    ['a duplicated IsRefunded', { IsRefunded: ['false', 'false'] }],
+    ['a nested IsRefunded', { IsRefunded: { Value: 'false' } }],
+    ['IsRefunded 1', { IsRefunded: '1' }],
+    ['a VoidDate with IsVoided false', { VoidDate: '20240119', VoidTime: '213405' }],
+    ['an unreadable VoidDate', { VoidDate: 'x' }],
+    ['a VoidTime', { VoidTime: '213405' }],
+    ['a refunded amount', { RefundedAmount: '0.50' }],
+  ])('a status record with %s is closed (OrderMismatchError order_status)', async (_name, change) => {
+    const { sent, fetchImpl } = bankFetch({ status: (id) => statusRecord(id, change) })
+    const err = await mismatch(
+      realGateway(fetchImpl).payment(MODEL.THREE_D_SECURE, secureOrder, TX_TYPE.PAY_AUTH, null, cb(secureSuccess())),
+    )
+    expect(err.field).toBe('order_status')
+    expect(err.paymentMayHaveCompleted).toBe(true)
+    expect(sent).toHaveLength(2)
+  })
+
+  it.each([
+    ['IsVoided with an attribute', '<IsVoided>false</IsVoided>', '<IsVoided state="1">false</IsVoided>'],
+    ['IsRefunded with an attribute', '<IsRefunded>false</IsRefunded>', '<IsRefunded x="y">false</IsRefunded>'],
+  ])('a status record with %s is closed (OrderMismatchError order_status)', async (_name, from, to) => {
+    const { fetchImpl } = bankFetch({ status: (id) => statusXml(id, from, to) })
+    const err = await mismatch(
+      realGateway(fetchImpl).payment(MODEL.THREE_D_SECURE, secureOrder, TX_TYPE.PAY_AUTH, null, cb(secureSuccess())),
+    )
+    expect(err.field).toBe('order_status')
+  })
+
+  it('a status record without the void and refund fields confirms the payment', async () => {
+    const record = statusRecord('20221031CFD0')
+    for (const key of ['IsVoided', 'IsRefunded', 'VoidDate', 'VoidTime', 'RefundedAmount']) delete record[key]
+    const { fetchImpl } = bankFetch({ status: () => record })
+    const res = (await realGateway(fetchImpl).payment(
+      MODEL.THREE_D_SECURE,
+      secureOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      cb(secureSuccess()),
+    )) as Data
+    expect(res.status).toBe('approved')
+  })
+
+  // addition: the bank references of the result come from the confirming record, never from the callback
+  it('takes the host reference and the masked card number from the confirming record', async () => {
+    const { fetchImpl } = bankFetch({
+      status: (id) => statusRecord(id, { HostRefNum: '999999999999', CardMask: '415565******0000' }),
+    })
+    const res = (await realGateway(fetchImpl).payment(
+      MODEL.THREE_D_SECURE,
+      secureOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      cb({ ...secureSuccess() }),
+    )) as Data
+    expect(res.ref_ret_num).toBe('999999999999')
+    expect(res.masked_number).toBe('415565******0000')
+  })
+
+  it('a confirming record without host reference or masked card number leaves them null', async () => {
+    const { fetchImpl } = bankFetch({
+      status: (id) => statusRecord(id, { HostRefNum: '', CardMask: '', InstallmentCount: '3' }),
+    })
+    const callback = { ...hostSuccess() }
+    expect(callback.HostRefNum).toBeTruthy()
+    expect(callback.CardMask).toBeTruthy()
+    const res = (await realGateway(fetchImpl).payment(
+      MODEL.THREE_D_HOST,
+      hostOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      cb(callback),
+    )) as Data
+    expect(res.status).toBe('approved')
+    expect(res.ref_ret_num).toBeNull()
+    expect(res.masked_number).toBeNull()
+  })
+
   it('a failing status request propagates PosHttpError', async () => {
     const { sent, fetchImpl } = bankFetch({ status: () => new Response('error', { status: 500 }) })
     await expect(
@@ -1459,9 +1562,30 @@ describe('PayForPos (end to end) Ziraat Katılım', () => {
     expect(sent).toHaveLength(0)
   })
 
-  it('an unsigned 3D model success is provisioned and confirmed', async () => {
-    const callback: Data = { ...secureSuccess(), MbrId: '12' }
+  // addition: an unsigned 3D Secure callback would make the merchant send a provision for a request guid nobody
+  // signed, so it is refused before any request, whatever it reports
+  it.each([
+    ['a successful', () => ({ ...secureSuccess(), MbrId: '12' })],
+    ['a declined', () => ({ ...secureAuthFail(), MbrId: '12' })],
+  ])('%s unsigned 3D Secure callback is refused before any request', async (_name, make) => {
+    const callback: Data = make()
     delete callback.ResponseHash
+    const { sent, fetchImpl } = bankFetch()
+    await expect(
+      realGateway(fetchImpl, { account: Z }).payment(
+        MODEL.THREE_D_SECURE,
+        { ...secureOrder, id: callback.OrderId as string },
+        TX_TYPE.PAY_AUTH,
+        null,
+        cb(callback),
+      ),
+    ).rejects.toThrow(new HashMismatchError('3D callback has no ResponseHash'))
+    expect(sent).toHaveLength(0)
+  })
+
+  // addition: a signed Ziraat 3D Secure callback is provisioned and confirmed
+  it('a signed 3D Secure success is provisioned and confirmed', async () => {
+    const callback = resign({ ...secureSuccess(), MbrId: '12' }, Z)
     const { sent, fetchImpl } = bankFetch()
     const res = (await realGateway(fetchImpl, { account: Z }).payment(
       MODEL.THREE_D_SECURE,
@@ -1472,6 +1596,106 @@ describe('PayForPos (end to end) Ziraat Katılım', () => {
     )) as Data
     expect(res.status).toBe('approved')
     expect(sent.map((s) => s.fields.SecureType)).toStrictEqual(['3DModelPayment', 'Inquiry'])
+  })
+
+  // addition: an unsigned 3D Host success is approved only by the bank status record too
+  it('an unsigned successful 3D Host callback is approved only by the bank status record', async () => {
+    const callback: Data = { ...hostSuccess(), MbrId: '12' }
+    delete callback.ResponseHash
+    const { sent, fetchImpl } = bankFetch({
+      status: (id) => statusRecord(id, { InstallmentCount: '3', AuthCode: callback.AuthCode }),
+    })
+    const res = (await realGateway(fetchImpl, { account: Z }).payment(
+      MODEL.THREE_D_HOST,
+      hostOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      cb(callback),
+    )) as Data
+    expect(res.status).toBe('approved')
+    expect(sent.map((s) => s.fields.SecureType)).toStrictEqual(['Inquiry'])
+  })
+
+  // addition: an unsigned callback is not evidence that money moved; only the bank's record of the order is
+  describe('manual review needs bank evidence for unsigned callbacks', () => {
+    const notFound = () => statusRecord('', { ProcReturnCode: 'V013', ErrMsg: 'Kayıt bulunamadı' })
+    const unsigned = (change: Data = {}): Data => {
+      const callback: Data = { ...zSuccess(), ...change }
+      delete callback.ResponseHash
+      return callback
+    }
+
+    it('an unsigned approved callback with 3DStatus 2 is plain declined when the bank holds no payment', async () => {
+      const { sent, promise } = run(unsigned({ '3DStatus': '2' }), { status: () => notFound() })
+      const res = (await promise) as Data
+      expect(res.status).toBe('declined')
+      expect(res.requires_manual_review).toBeUndefined()
+      expect(sent.map((s) => s.fields.SecureType)).toStrictEqual(['Inquiry'])
+    })
+
+    it('an unsigned approved callback with 3DStatus 2 is flagged when the bank holds an approved payment', async () => {
+      const { sent, promise } = run(unsigned({ '3DStatus': '2' }))
+      const res = (await promise) as Data
+      expect(res.status).toBe('declined')
+      expect(res.requires_manual_review).toBe(true)
+      expect(sent).toHaveLength(1)
+    })
+
+    it('a signed approved callback with 3DStatus 2 is flagged without a request', async () => {
+      const { sent, promise } = run(resign({ ...zSuccess(), '3DStatus': '2' }, Z))
+      const res = (await promise) as Data
+      expect(res.status).toBe('declined')
+      expect(res.requires_manual_review).toBe(true)
+      expect(sent).toHaveLength(0)
+    })
+
+    it('an unsigned approved callback the bank does not know is OrderMismatchError without the response', async () => {
+      const { sent, promise } = run(unsigned(), { status: () => notFound() })
+      const err = await mismatch(promise)
+      expect(err.field).toBe('order_status')
+      expect(err.paymentMayHaveCompleted).toBe(false)
+      expect(err.response).toBeUndefined()
+      expect(sent).toHaveLength(1)
+    })
+
+    it('an unsigned approved callback whose record belongs to another order is OrderMismatchError without the response', async () => {
+      const { promise } = run(unsigned(), { status: () => confirmed({ OrderId: '2022103114B4' })('') })
+      const err = await mismatch(promise)
+      expect(err.field).toBe('order_id')
+      expect(err.paymentMayHaveCompleted).toBe(false)
+      expect(err.response).toBeUndefined()
+    })
+
+    it('a signed approved callback the bank does not know keeps the response attached', async () => {
+      const { promise } = run(zSuccess(), { status: () => notFound() })
+      const err = await mismatch(promise)
+      expect(err.field).toBe('order_status')
+      expect(err.paymentMayHaveCompleted).toBe(true)
+      expect(err.response?.requires_manual_review).toBe(true)
+    })
+
+    it.each([
+      ['amount', { PurchAmount: '2.00' }],
+      ['order_id', { OrderId: '2022103114B4' }],
+    ])(
+      'an unsigned approved callback with another %s is OrderMismatchError without the response when the bank holds no payment',
+      async (field, change) => {
+        const { sent, promise } = run(unsigned(change), { status: () => notFound() })
+        const err = await mismatch(promise)
+        expect(err.field).toBe(field)
+        expect(err.paymentMayHaveCompleted).toBe(false)
+        expect(err.response).toBeUndefined()
+        expect(sent.map((s) => s.fields.OrgOrderId)).toStrictEqual([payOrder.id])
+      },
+    )
+
+    it('an unsigned approved callback with another amount keeps the response when the bank holds a payment', async () => {
+      const { promise } = run(unsigned({ PurchAmount: '2.00' }))
+      const err = await mismatch(promise)
+      expect(err.field).toBe('amount')
+      expect(err.paymentMayHaveCompleted).toBe(true)
+      expect(err.response?.requires_manual_review).toBe(true)
+    })
   })
 })
 

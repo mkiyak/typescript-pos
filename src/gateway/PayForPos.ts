@@ -44,6 +44,12 @@ const REQUEST_GUID = /^\d{1,32}$/
 /** Order states of a payment that no longer stands. */
 const CLOSED_ORDER_STATUSES: readonly unknown[] = [PAYMENT_STATUS.CANCELED, PAYMENT_STATUS.FULLY_REFUNDED]
 
+/** Status record fields that report a cancellation or a refund; on an open payment they are empty or zero. */
+const VOID_OR_REFUND_FIELDS = ['VoidDate', 'VoidTime', 'RefundedAmount'] as const
+
+/** Status record flags of a cancellation or a full refund; on an open payment they read `false`. */
+const VOID_OR_REFUND_FLAGS = ['IsVoided', 'IsRefunded'] as const
+
 /** Callback key names and values are attacker controlled; only this much of one is echoed in errors and logs. */
 const MAX_ECHOED_LENGTH = 64
 
@@ -86,6 +92,37 @@ function installmentCount(value: unknown): number {
   return Number.isInteger(count) && count > 1 ? count : 0
 }
 
+/** A value of the bank's record that reports nothing: missing, empty or zero. */
+function isEmptyOrZero(value: unknown): boolean {
+  return (
+    value === undefined || value === null || value === 0 || (typeof value === 'string' && /^0+(?:\.0+)?$/.test(value))
+  )
+}
+
+/**
+ * Whether the bank's status record shows a cancellation or a refund, also in a shape the response mapper cannot read
+ * (a repeated or nested element, an element with attributes, an unexpected flag value): anything but a plain "nothing
+ * happened" counts as closed.
+ */
+function recordIsClosed(record: PosResponse): boolean {
+  if (record.cancel_time !== null && record.cancel_time !== undefined) return true
+  if (record.refund_amount !== null && record.refund_amount !== undefined) return true
+
+  const raw: unknown = record.all
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return false
+  const fields = raw as Record<string, unknown>
+  for (const key of VOID_OR_REFUND_FLAGS) {
+    if (!Object.hasOwn(fields, key)) continue
+    const flag = fields[key]
+    if (typeof flag !== 'string' || flag.toLowerCase() !== 'false') return true
+  }
+  for (const key of VOID_OR_REFUND_FIELDS) {
+    if (Object.hasOwn(fields, key) && !isEmptyOrZero(fields[key])) return true
+  }
+
+  return false
+}
+
 type HostedModel = typeof MODEL.THREE_D_PAY | typeof MODEL.THREE_D_HOST
 
 /**
@@ -101,10 +138,12 @@ type HostedModel = typeof MODEL.THREE_D_PAY | typeof MODEL.THREE_D_HOST
  *   before any other check.
  * - The hash check cannot be switched off (`disable_3d_hash_check` is ignored). A callback that carries a
  *   `ResponseHash` is always verified, whatever it reports, otherwise `HashMismatchError`. A callback without one is
- *   rejected when `require_3d_hash` is set. Otherwise an unsigned declined callback is mapped as declined, an
- *   unsigned successful callback is rejected for QNB Finansbank (which signs every callback), and for other
- *   institutions (Ziraat Katilim) it is accepted as unsigned data that can never approve a payment by itself: the
- *   bank's own status record decides (see below).
+ *   rejected (`HashMismatchError`, nothing sent) when `require_3d_hash` is set, when it reports success for QNB
+ *   Finansbank (which signs every callback), and for 3D Secure at other institutions (Ziraat Katilim), whose
+ *   provision request would otherwise carry a request guid nobody signed. Otherwise an unsigned declined callback is
+ *   mapped as declined, and an unsigned 3D Pay / 3D Host callback of another institution is unsigned data that can
+ *   never approve a payment or raise a manual review by itself: only the bank's own status record of the order can
+ *   (see below).
  * - The signed values have no separators, so after the hash verifies the fields that keep the boundaries fixed must be
  *   well formed, otherwise `HashMismatchError('3D callback fields are malformed')`: `ResponseRnd` is `PF` and digits;
  *   a successful 3D Secure authentication (`3DStatus` 1) carries no authorization code and a return code of one
@@ -121,13 +160,20 @@ type HostedModel = typeof MODEL.THREE_D_PAY | typeof MODEL.THREE_D_HOST
  * - 3D Secure: the provision request takes the order id from the order and only the bank's request guid (digits)
  *   from the callback.
  * - A 3D Pay / 3D Host payment the bank approved although the 3D authentication did not succeed is returned as
- *   `declined` with `requires_manual_review: true`, without further requests.
+ *   `declined` with `requires_manual_review: true`: for a signed callback without further requests, for an unsigned
+ *   one only when one status request shows an approved payment of the order (otherwise plain `declined`). Likewise an
+ *   unsigned callback that does not match the order carries the mapped result (and `paymentMayHaveCompleted`) only
+ *   when the bank holds an approved payment of the order.
  * - Every approved result is confirmed with one status request before it is returned: the bank must report the order
  *   as approved, for this order id, transaction type, amount, currency and installment count (a single payment is 0
- *   or 1 alike), and not cancelled or refunded. The authorization code and transaction time of the returned result
- *   are taken from that record. Otherwise `OrderMismatchError` with the result attached (`paymentMayHaveCompleted`).
- *   Errors of the status request (such as `PosHttpError`) propagate unchanged; the payment may have completed, so
- *   check it later with `status`. Declined results are never confirmed.
+ *   or 1 alike), and not cancelled or refunded. A cancellation or refund date, time, amount or flag in any shape the
+ *   mapper cannot read as "none" (a repeated or nested element, attributes, a flag other than `false`) counts as
+ *   cancelled. The authorization code, transaction time, host reference and masked card number of the returned
+ *   result are taken from that record (the last two are null when it has none, never the callback's values).
+ *   Otherwise `OrderMismatchError` with the result attached (`paymentMayHaveCompleted`); for an unsigned callback
+ *   whose record shows no approved payment of the order, without it. Errors of the status request (such as
+ *   `PosHttpError`) propagate unchanged; the payment may have completed, so check it later with `status`. Declined
+ *   results are never confirmed.
  *
  * `formFormat: 'html'` posts the 3D form, card data included, from the merchant server to the bank and returns the
  * bank's HTML page as it came. That page is untrusted bank markup: embed it deliberately (for example on a page of
@@ -218,7 +264,8 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
       return response
     }
 
-    return this.confirmPayment(response, order, txType)
+    // Only a signed callback reaches the provision.
+    return this.confirmPayment(response, order, txType, true)
   }
 
   /**
@@ -226,7 +273,8 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
    * @throws HashMismatchError when a present hash does not verify, a required hash is missing, or the signed fields
    *   are malformed
    * @throws OrderMismatchError when the callback does not belong to the order or account, or when the bank's status
-   *   record does not confirm an approved payment (the mapped response is attached)
+   *   record does not confirm an approved payment (the mapped response is attached, for an unsigned callback only
+   *   when the bank holds an approved payment of the order)
    */
   async make3DPayPayment(
     gatewayResponseData: GatewayResponseData,
@@ -322,7 +370,7 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
     this.assertFlatCallback(callback)
 
     const approvedByCallback = ownText(callback, 'ProcReturnCode') === SUCCESS_CODE
-    this.checkCallbackHash(callback, approvedByCallback, paymentModel)
+    const signed = this.checkCallbackHash(callback, approvedByCallback, paymentModel)
 
     const response =
       paymentModel === MODEL.THREE_D_HOST
@@ -337,14 +385,26 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
       throw new PosError('3D callback without approval was mapped as approved')
     }
 
-    this.assertCallbackMatchesOrder(callback, order, txType, paymentModel, response)
+    if (signed) {
+      this.assertCallbackMatchesOrder(callback, order, txType, paymentModel, response)
+    } else {
+      await this.assertUnsignedCallbackMatchesOrder(callback, order, txType, paymentModel, response)
+    }
 
     if (response.status !== TX_APPROVED) {
       return response
     }
 
     if (ownText(callback, '3DStatus') !== THREE_D_SUCCESS) {
-      // The bank approved a payment whose 3D authentication failed: money may have moved, but it is not accepted.
+      // The bank approved a payment whose 3D authentication failed: it is not accepted. A signed callback shows that
+      // money may have moved; an unsigned one shows nothing, so only the bank's own record of the order can.
+      if (!signed && !(await this.bankHoldsPayment(order))) {
+        this.logger.error('unsigned callback approved without 3D success, the bank holds no payment', {
+          order_id: this.echo(order.id),
+        })
+
+        return { ...response, status: TX_DECLINED }
+      }
       this.logger.error('payment approved without 3D success, manual review required', {
         order_id: this.echo(order.id),
         md_status: this.echo(ownText(callback, '3DStatus')),
@@ -353,25 +413,65 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
       return { ...response, status: TX_DECLINED, requires_manual_review: true }
     }
 
-    return this.confirmPayment(response, order, txType)
+    return this.confirmPayment(response, order, txType, signed)
+  }
+
+  /**
+   * The order binding of an unsigned callback. An unsigned callback is not evidence that the card was charged, so a
+   * mismatch carries the mapped result (and with it `paymentMayHaveCompleted` / `requires_manual_review`) only when
+   * the bank itself holds an approved payment for the order.
+   */
+  private async assertUnsignedCallbackMatchesOrder(
+    callback: GatewayResponseData,
+    order: PosOrder,
+    txType: TxType,
+    paymentModel: HostedModel,
+    response: PosResponse,
+  ): Promise<void> {
+    try {
+      this.assertCallbackMatchesOrder(callback, order, txType, paymentModel)
+    } catch (e) {
+      if (!(e instanceof OrderMismatchError)) throw e
+      const withResponse = new OrderMismatchError(e.field, e.expected, e.actual, response)
+      if (!withResponse.paymentMayHaveCompleted || (await this.bankHoldsPayment(order))) {
+        throw withResponse
+      }
+      throw e
+    }
+  }
+
+  /** Whether the bank's status record of the order shows an approved payment of this order id. */
+  private async bankHoldsPayment(order: PosOrder): Promise<boolean> {
+    const orderId = asText(order.id)
+    const record = await this.status({ id: orderId })
+
+    return orderId !== '' && record.status === TX_APPROVED && asText(record.order_id) === orderId
   }
 
   /**
    * The amount, currency, transaction type and installment count of a callback are unsigned, and an unsigned
    * callback proves nothing, so the bank's own status record decides: it must report an approved payment of this
-   * order, type, amount, currency and installment plan that was not cancelled or refunded.
+   * order, type, amount, currency and installment plan that was not cancelled or refunded. When the callback was
+   * unsigned and the bank holds no approved payment of the order, nothing shows that money moved: the mismatch is
+   * raised without the result attached.
    */
-  private async confirmPayment(response: PosResponse, order: PosOrder, txType: TxType): Promise<PosResponse> {
+  private async confirmPayment(
+    response: PosResponse,
+    order: PosOrder,
+    txType: TxType,
+    signed: boolean,
+  ): Promise<PosResponse> {
     const orderId = asText(order.id)
     const record = await this.status({ id: orderId })
+    const evidence = signed ? response : undefined
 
     if (record.status !== TX_APPROVED) {
-      this.fail('order_status', TX_APPROVED, asText(record.status), orderId, response)
+      this.fail('order_status', TX_APPROVED, asText(record.status), orderId, evidence)
     }
 
     const recordOrderId = asText(record.order_id)
     if (orderId === '' || recordOrderId !== orderId) {
-      this.fail('order_id', orderId, recordOrderId, orderId, response)
+      this.fail('order_id', orderId, recordOrderId, orderId, evidence)
     }
 
     const recordTxType = asText(record.transaction_type)
@@ -397,14 +497,19 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
       this.fail('installment', String(orderedInstallments), String(recordInstallments), orderId, response)
     }
 
-    if (CLOSED_ORDER_STATUSES.includes(record.order_status)) {
-      this.fail('order_status', 'open', asText(record.order_status), orderId, response)
+    if (CLOSED_ORDER_STATUSES.includes(record.order_status) || recordIsClosed(record)) {
+      this.fail('order_status', 'open', asText(record.order_status) || 'closed', orderId, response)
     }
 
     this.logger.info('payment confirmed by the bank status record', { order_id: this.echo(orderId) })
 
     // The callback's authorization code is signed only as part of an unseparated text; the bank record is plain.
-    const confirmed: PosResponse = { ...response }
+    // The host reference and the card mask are not signed at all, so they come from the record or not at all.
+    const confirmed: PosResponse = {
+      ...response,
+      ref_ret_num: record.ref_ret_num ?? null,
+      masked_number: record.masked_number ?? null,
+    }
     if (record.auth_code !== null && record.auth_code !== undefined) {
       confirmed.auth_code = record.auth_code
     }
@@ -417,9 +522,9 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
 
   /**
    * Verifies a present `ResponseHash` (and, on a success path, the field formats that keep the signed values in
-   * place), and decides what a callback without one may do.
+   * place), and decides what a callback without one may do. Returns whether the callback was signed.
    */
-  private checkCallbackHash(callback: GatewayResponseData, successful: boolean, paymentModel: PaymentModel): void {
+  private checkCallbackHash(callback: GatewayResponseData, successful: boolean, paymentModel: PaymentModel): boolean {
     const hash = own(callback, 'ResponseHash')
     if (hash !== undefined && hash !== '') {
       if (!this.crypt.check3DHash(this.account, callback)) {
@@ -429,15 +534,23 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
         this.assertSignedFields(callback, paymentModel)
       }
 
-      return
+      return true
     }
 
-    // QNB Finansbank signs every callback; other institutions' successful callbacks are confirmed with the bank.
+    // QNB Finansbank signs every callback, so an unsigned successful one is forged. Other institutions' unsigned
+    // 3D Pay / 3D Host callbacks are left to the bank's status record; an unsigned 3D Secure callback is never
+    // accepted, because its provision request would carry a request guid that nobody signed.
     const signsEveryCallback = this.account.getMbrId() === PayForPosAccount.MBR_ID_FINANSBANK
-    if (this.config.require_3d_hash === true || (successful && signsEveryCallback)) {
+    const refused =
+      this.config.require_3d_hash === true ||
+      (successful && signsEveryCallback) ||
+      (paymentModel === MODEL.THREE_D_SECURE && !signsEveryCallback)
+    if (refused) {
       this.logger.error('3D callback has no ResponseHash', { order_id: this.echo(ownText(callback, 'OrderId')) })
       throw new HashMismatchError('3D callback has no ResponseHash')
     }
+
+    return false
   }
 
   /**

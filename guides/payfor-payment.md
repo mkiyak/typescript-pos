@@ -82,8 +82,9 @@ itself.
   Katılım callback without a signature is never enough on its own: for 3D Pay and 3D Host the result is returned only
   after the status confirmation below finds the bank's matching approved record, and for 3D Secure an unsigned
   callback is refused with `HashMismatchError` and no provision request is sent. An unsigned callback never sets
-  `requires_manual_review` by itself. `require_3d_hash: true` in the bank's config also rejects unsigned decline
-  callbacks.
+  `requires_manual_review` or `paymentMayHaveCompleted` by itself: they are set only when a status request shows that
+  the bank holds an approved payment of the order. `require_3d_hash: true` in the bank's config also rejects unsigned
+  decline callbacks.
 - **The callback is bound to the order.** The order id, amount, currency, transaction type, installment count and
   model echoed in the callback must match the order, and the merchant and institution codes your account; a mismatch
   throws `OrderMismatchError` (`field` names the value). Load the order from the customer's session, never from a
@@ -91,8 +92,10 @@ itself.
 - **Approved results are confirmed with the bank.** The bank does not sign the amount or the currency, so every
   approved 3D result is confirmed with one status request before it is returned: the bank must report this order as
   approved with the same transaction type, amount, currency and installment count (for a single payment, none, `0`
-  and `1` are equal), not cancelled or refunded. Expect one extra request per approved payment. The authorization
-  code and transaction time of the result are taken from that record. When the bank does not confirm it, the call
+  and `1` are equal), not cancelled or refunded (a cancellation or refund field the library cannot read as "none"
+  counts as cancelled). Expect one extra request per approved payment. The authorization code, transaction time,
+  host reference (`ref_ret_num`) and masked card number of the result are taken from that record; the last two are
+  `null` when the record has none. When the bank does not confirm it, the call
   throws `OrderMismatchError` with `paymentMayHaveCompleted: true` and `error.response` set: alert someone, then
   cancel or refund the payment. A network error (`PosHttpError`, timeout) during the confirmation propagates as is
   and means the payment may have completed: keep the order pending and re-check it later with `pos.status(order)`.
