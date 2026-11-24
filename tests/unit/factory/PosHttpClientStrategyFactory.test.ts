@@ -14,6 +14,7 @@ import { PayForPos3DFormHttpClient } from '../../../src/client/PayForPos3DFormHt
 import { PayForPosHttpClient } from '../../../src/client/PayForPosHttpClient.js'
 import { PosNetPosHttpClient } from '../../../src/client/PosNetPosHttpClient.js'
 import { PosNetV1PosHttpClient } from '../../../src/client/PosNetV1PosHttpClient.js'
+import { VakifKatilimPosHttpClient } from '../../../src/client/VakifKatilimPosHttpClient.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { AkbankPosCrypt } from '../../../src/crypt/AkbankPosCrypt.js'
 import { AssecoPosCrypt } from '../../../src/crypt/AssecoPosCrypt.js'
@@ -276,6 +277,50 @@ describe('PosHttpClientStrategyFactory', () => {
       expect(strategy.getClient('cancel', 'regular')).toBeInstanceOf(KuveytPosSoapApiHttpClient)
       expect(strategy.getClient('pay', '3d')).toBeInstanceOf(KuveytPosHttpClient)
       expect(strategy.getClient('3d_form_build', '3d')).toBeInstanceOf(KuveytPosHttpClient)
+    })
+  })
+
+  // addition: V6, VakifKatilimPos has one XML client for payments, queries and the 3D form
+  describe('VakifKatilimPos', () => {
+    const vakifConfig: GatewayConfig = {
+      name: 'Vakıf Katılım',
+      class: 'VakifKatilimPos',
+      gateway_endpoints: {
+        payment_api: 'https://boa.vakifkatilim.com.tr/VirtualPOS.Gateway/Home',
+        gateway_3d_host: 'https://boa.vakifkatilim.com.tr/VirtualPOS.Gateway/CommonPaymentPage/CommonPaymentPage',
+      },
+    }
+
+    it('holds one client', () => {
+      expect(classesOf('VakifKatilimPos', vakifConfig)).toEqual([VakifKatilimPosHttpClient])
+    })
+
+    it('requires the payment_api endpoint', () => {
+      const config = {
+        ...vakifConfig,
+        gateway_endpoints: { gateway_3d_host: vakifConfig.gateway_endpoints.gateway_3d_host } as never,
+      }
+      expect(() => classesOf('VakifKatilimPos', config)).toThrow(PosError)
+      expect(() => classesOf('VakifKatilimPos', config)).toThrow(/Endpoint \[payment_api\] is required for/)
+    })
+
+    it('routes every transaction to that client', () => {
+      const strategy = PosHttpClientStrategyFactory.createForGateway(
+        'VakifKatilimPos',
+        vakifConfig,
+        transport,
+        noopLogger,
+      )
+      for (const [txType, model] of [
+        ['pay', '3d'],
+        ['pay', 'regular'],
+        ['status', 'regular'],
+        ['cancel', 'regular'],
+        ['3d_form_build', '3d'],
+        ['history', 'regular'],
+      ] as const) {
+        expect(strategy.getClient(txType, model)).toBeInstanceOf(VakifKatilimPosHttpClient)
+      }
     })
   })
 

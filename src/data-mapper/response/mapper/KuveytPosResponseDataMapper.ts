@@ -2,61 +2,10 @@ import { NotImplementedError } from '../../../errors.js'
 import { MODEL, PAYMENT_STATUS, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, PosResponse } from '../../../types.js'
 import { AbstractResponseDataMapper } from './AbstractResponseDataMapper.js'
+import { child, exactString, firstRecord, isRecord, NO_DATE, type Raw, scalar, text } from './boaResponseFields.js'
 import { TX_APPROVED, TX_DECLINED } from './ResponseDataMapperInterface.js'
 
-type Raw = Record<string, unknown>
-
-/** The bank prints "no date" as the year-one placeholder. */
-const NO_DATE = /^0001-?01-?01/
 const POSITIVE_INTEGER = /^\d+$/
-
-function isRecord(value: unknown): value is Raw {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-/** Own record child of a record; anything else (missing, list, text, inherited) reads as absent. */
-function child(data: unknown, key: string): Raw | null {
-  if (!isRecord(data) || !Object.hasOwn(data, key)) return null
-  const value = data[key]
-
-  return isRecord(value) ? value : null
-}
-
-/** The first record of a single record or a list of records. */
-function firstRecord(value: unknown): Raw | null {
-  if (Array.isArray(value)) return isRecord(value[0]) ? value[0] : null
-
-  return isRecord(value) ? value : null
-}
-
-/** A scalar bank field as text; objects, lists, booleans and missing keys read as null. */
-function text(data: unknown, key: string): string | null {
-  if (!isRecord(data) || !Object.hasOwn(data, key)) return null
-  const value = data[key]
-  if (typeof value === 'string') return value
-  if ((typeof value === 'number' && Number.isFinite(value)) || typeof value === 'bigint') return String(value)
-
-  return null
-}
-
-/** A scalar bank field with its type kept (text or number); everything else reads as null. */
-function scalar(data: unknown, key: string): string | number | null {
-  if (!isRecord(data) || !Object.hasOwn(data, key)) return null
-  const value = data[key]
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'bigint') return String(value)
-
-  return null
-}
-
-/** Own string field exactly as the bank sent it (no trimming): approval decisions are taken on this value only. */
-function exactString(data: unknown, key: string): string | null {
-  if (!isRecord(data) || !Object.hasOwn(data, key)) return null
-  const value = data[key]
-
-  return typeof value === 'string' && value !== '' ? value : null
-}
 
 /**
  * Response mapper of the Kuveyt Turk gateway. Every decision (approved or not) is taken on the exact `ResponseCode`
