@@ -110,4 +110,4 @@ export type {
 export { maskSensitiveData } from './util/maskSensitiveData.js'
 
 /** Library version. Hand-maintained; must equal package.json `version` (enforced by tests/unit/smoke.test.ts). */
-export const VERSION = '0.7.0'
+export const VERSION = '0.8.0'
