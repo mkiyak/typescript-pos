@@ -11,6 +11,7 @@ import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
+import { PayForPos } from '../../../src/gateway/PayForPos.js'
 import { PosNetPos } from '../../../src/gateway/PosNetPos.js'
 import { PosNetV1Pos } from '../../../src/gateway/PosNetV1Pos.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../src/PosInterface.js'
@@ -141,6 +142,58 @@ describe('PosFactory.createPosGateway', () => {
     expect(urls).toEqual([
       'https://epostest.albarakaturk.com.tr/ALBMerchantService/MerchantJSONAPI.svc/TransactionInquiry',
     ])
+  })
+
+  it.each([['qnbfinansbank-payfor'], ['ziraat-katilim-payfor']])(
+    'creates the %s PayForPos gateway from the shipped test config',
+    (bank) => {
+      const account = AccountFactory.createPayForPosAccount(bank, 'm', 'u', 'p', 'k')
+      const gateway = PosFactory.createPosGateway(account, posTestConfig)
+      expect(gateway).toBeInstanceOf(PayForPos)
+      expect(gateway.getAccount()).toBe(account)
+      expect(gateway.getCardTypeMapping()).toStrictEqual({})
+      expect(gateway.getCurrencies()).toHaveLength(6)
+    },
+  )
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-PayFor account for a PayForPos bank', () => {
+    expect(() => PosFactory.createPosGateway(assecoAccount('qnbfinansbank-payfor'), posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(assecoAccount('qnbfinansbank-payfor'), posTestConfig)).toThrow(
+      'Bank [qnbfinansbank-payfor] is configured for PayForPos and needs a PayForPosAccount.',
+    )
+  })
+
+  // addition: the PayFor client posts the order inquiry to the configured endpoint
+  it('sends a PayForPos status to the QNB test endpoint', async () => {
+    const calls: { url: string; body: string }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), body: String(init?.body) })
+      return new Response('<PayforResponse/>', { status: 200 })
+    }) as unknown as typeof fetch
+    const account = AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'm', 'u', 'p', 'k')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    await gateway.status({ id: '2020110828BC' } as never)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe('https://vpostest.qnb.com.tr/Gateway/XMLGate.aspx')
+    expect(calls[0]?.body).toContain('PayforRequest')
+    expect(calls[0]?.body).toContain('<OrgOrderId>2020110828BC</OrgOrderId>')
+    expect(calls[0]?.body).toContain('<TxnType>OrderInquiry</TxnType>')
+  })
+
+  // addition: the Ziraat Katilim entry uses its own host, language and member id
+  it('sends a PayForPos status of Ziraat Katilim to its test endpoint', async () => {
+    const calls: { url: string; body: string }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), body: String(init?.body) })
+      return new Response('<PayforResponse/>', { status: 200 })
+    }) as unknown as typeof fetch
+    const account = AccountFactory.createPayForPosAccount('ziraat-katilim-payfor', 'm', 'u', 'p', 'k', '12')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    await gateway.status({ id: '2020110828BC' } as never)
+    expect(calls[0]?.url).toBe('https://payfortestziraatkatilim.cordisnetwork.com/Mpi/XMLGate.aspx')
+    expect(calls[0]?.body).toContain('<Lang>TR</Lang>')
+    expect(calls[0]?.body).toContain('<MbrId>12</MbrId>')
   })
 
   it('creates an AkbankPos gateway from the shipped test config', () => {
@@ -371,6 +424,7 @@ describe('PosFactory.createPosGateway', () => {
       GarantiPos: (bank: string) => AccountFactory.createGarantiPosAccount(bank, 'm', 'u', 'p', 't', 'k'),
       PosNetPos: (bank: string) => AccountFactory.createPosNetPosAccount(bank, 'm', 't', 'p', 'k'),
       PosNetV1Pos: (bank: string) => AccountFactory.createPosNetPosAccount(bank, 'm', 't', 'p', 'k'),
+      PayForPos: (bank: string) => AccountFactory.createPayForPosAccount(bank, 'm', 'u', 'p', 'k'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

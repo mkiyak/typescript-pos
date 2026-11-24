@@ -9,6 +9,7 @@ import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
+import { PayForPos } from '../../../src/gateway/PayForPos.js'
 import { PosNetPos } from '../../../src/gateway/PosNetPos.js'
 import { PosNetV1Pos } from '../../../src/gateway/PosNetV1Pos.js'
 
@@ -16,6 +17,7 @@ const accountFor = (gatewayClass: string, key: string) => {
   if (gatewayClass === 'AssecoPos') return AccountFactory.createAssecoPosAccount(key, 'c', 'u', 'p', 'k')
   if (gatewayClass === 'AkbankPos') return AccountFactory.createAkbankPosAccount(key, 'm', 't', 'k')
   if (gatewayClass === 'GarantiPos') return AccountFactory.createGarantiPosAccount(key, 'm', 'u', 'p', 't', 'k')
+  if (gatewayClass === 'PayForPos') return AccountFactory.createPayForPosAccount(key, 'm', 'u', 'p', 'k')
   if (gatewayClass === 'PosNetPos' || gatewayClass === 'PosNetV1Pos')
     return AccountFactory.createPosNetPosAccount(key, 'm', 't', 'p', 'k')
   return AccountFactory.createPayFlexPosAccount(key, 'm', 'p', 't')
@@ -26,7 +28,7 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos and PosNetV1Pos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos and PayForPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
       expect([
@@ -37,6 +39,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         'AkbankPos',
         'PosNetPos',
         'PosNetV1Pos',
+        'PayForPos',
       ]).toContain(bank.class)
     }
   })
@@ -52,6 +55,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
       AkbankPos,
       PosNetPos,
       PosNetV1Pos,
+      PayForPos,
     }[
       bank.class as
         | 'AssecoPos'
@@ -61,6 +65,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         | 'AkbankPos'
         | 'PosNetPos'
         | 'PosNetV1Pos'
+        | 'PayForPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -270,5 +275,61 @@ describe('Akbank POS endpoints', () => {
       },
     })
     expect(Object.isFrozen(posTestConfig.banks['akbank-pos'].gateway_endpoints)).toBe(true)
+  })
+})
+
+// addition: shipped PayFor entries (no hash-check switch exists in this library)
+describe('PayFor endpoints', () => {
+  const entry = (name: string, base: string, files: [string, string, string], lang?: string) => ({
+    name,
+    class: 'PayForPos',
+    ...(lang ? { lang } : {}),
+    gateway_endpoints: {
+      payment_api: `${base}/${files[0]}`,
+      gateway_3d: `${base}/${files[1]}`,
+      gateway_3d_host: `${base}/${files[2]}`,
+    },
+  })
+
+  it('production uses the live hosts', () => {
+    expect(posProductionConfig.banks['qnbfinansbank-payfor']).toStrictEqual(
+      entry('QNBFinansbank-PayFor', 'https://vpos.qnb.com.tr/Gateway', ['XMLGate.aspx', 'Default.aspx', '3DHost.aspx']),
+    )
+    expect(posProductionConfig.banks['ziraat-katilim-payfor']).toStrictEqual(
+      entry(
+        'ZiraatKatilim-PayFor',
+        'https://vpos.ziraatkatilim.com.tr/Mpi',
+        ['XMLGate.aspx', 'Default.aspx', '3Dhost.aspx'],
+        'tr',
+      ),
+    )
+  })
+
+  it('test uses the test hosts', () => {
+    expect(posTestConfig.banks['qnbfinansbank-payfor']).toStrictEqual(
+      entry('QNBFinansbank-PayFor', 'https://vpostest.qnb.com.tr/Gateway', [
+        'XMLGate.aspx',
+        'Default.aspx',
+        '3DHost.aspx',
+      ]),
+    )
+    expect(posTestConfig.banks['ziraat-katilim-payfor']).toStrictEqual(
+      entry(
+        'ZiraatKatilim-PayFor',
+        'https://payfortestziraatkatilim.cordisnetwork.com/Mpi',
+        ['XMLGate.aspx', 'Default.aspx', '3DHost.aspx'],
+        'tr',
+      ),
+    )
+  })
+
+  it('both entries are deeply frozen and carry no hash-check switch', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      for (const key of ['qnbfinansbank-payfor', 'ziraat-katilim-payfor'] as const) {
+        expect(Object.isFrozen(cfg.banks[key])).toBe(true)
+        expect(Object.isFrozen(cfg.banks[key].gateway_endpoints)).toBe(true)
+        expect(cfg.banks[key]).not.toHaveProperty('disable_3d_hash_check')
+      }
+    }
   })
 })

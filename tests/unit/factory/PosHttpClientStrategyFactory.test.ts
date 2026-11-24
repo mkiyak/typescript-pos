@@ -33,9 +33,9 @@ const payForConfig: GatewayConfig = {
   name: 'QNBFinansbank-PayFor',
   class: 'PayForPos',
   gateway_endpoints: {
-    payment_api: 'https://vpostest.qnbfinansbank.com/Gateway/XMLGate.aspx',
-    gateway_3d: 'https://vpostest.qnbfinansbank.com/Gateway/Default.aspx',
-    gateway_3d_host: 'https://vpostest.qnbfinansbank.com/Gateway/3DHost.aspx',
+    payment_api: 'https://vpostest.qnb.com.tr/Gateway/XMLGate.aspx',
+    gateway_3d: 'https://vpostest.qnb.com.tr/Gateway/Default.aspx',
+    gateway_3d_host: 'https://vpostest.qnb.com.tr/Gateway/3DHost.aspx',
   },
 }
 

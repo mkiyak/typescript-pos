@@ -9,10 +9,12 @@ export type PosTestBank =
   | 'vakifbank'
   | 'vakifbank-cp'
   | 'yapikredi'
+  | 'qnbfinansbank-payfor'
+  | 'ziraat-katilim-payfor'
   | 'ziraat-vpos'
 
 /**
- * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos and PosNetV1Pos banks (the VakifBank test API
+ * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos and PayForPos banks (the VakifBank test API
  * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it (not AkbankPos: its entry sets neither `test_mode` nor `lang`, the language comes from `order.lang`); for the
  * Asseco and PayFlex gateways the environment is selected by the endpoint URLs. The `garanti` entry sets `test_mode: true`
  * because the Garanti test environment needs `Mode TEST` in every request.
@@ -71,6 +73,25 @@ export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
       class: 'PayFlexCPV4Pos',
       gateway_endpoints: {
         payment_api: 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment',
+      },
+    },
+    'qnbfinansbank-payfor': {
+      name: 'QNBFinansbank-PayFor',
+      class: 'PayForPos',
+      gateway_endpoints: {
+        payment_api: 'https://vpostest.qnb.com.tr/Gateway/XMLGate.aspx',
+        gateway_3d: 'https://vpostest.qnb.com.tr/Gateway/Default.aspx',
+        gateway_3d_host: 'https://vpostest.qnb.com.tr/Gateway/3DHost.aspx',
+      },
+    },
+    'ziraat-katilim-payfor': {
+      name: 'ZiraatKatilim-PayFor',
+      class: 'PayForPos',
+      lang: 'tr',
+      gateway_endpoints: {
+        payment_api: 'https://payfortestziraatkatilim.cordisnetwork.com/Mpi/XMLGate.aspx',
+        gateway_3d: 'https://payfortestziraatkatilim.cordisnetwork.com/Mpi/Default.aspx',
+        gateway_3d_host: 'https://payfortestziraatkatilim.cordisnetwork.com/Mpi/3DHost.aspx',
       },
     },
     yapikredi: {

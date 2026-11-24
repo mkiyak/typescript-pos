@@ -59,6 +59,8 @@ describe('public index', () => {
         'AkbankPos',
         'PosNetPos',
         'PosNetV1Pos',
+        'PayForPos',
+        'PayForPosAccount',
         'PosNetPosAccount',
         'AssecoPosAccount',
         'AkbankPosAccount',
@@ -109,6 +111,13 @@ describe('public index', () => {
     expect(yapikredi).toBeInstanceOf(mod.PosNetPosAccount)
     const albaraka = mod.AccountFactory.createPosNetPosAccount('albaraka', 'm', 't', 'p', 'k')
     expect(mod.PosFactory.createPosGateway(albaraka, mod.posTestConfig)).toBeInstanceOf(mod.PosNetV1Pos)
+  })
+
+  // addition: the PayFor gateway is reachable from the public entry point
+  it('PosFactory creates the PayFor gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createPayForPosAccount('qnbfinansbank-payfor', 'm', 'u', 'p', 'k')
+    expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.PayForPos)
+    expect(account).toBeInstanceOf(mod.PayForPosAccount)
   })
 
   it('PosFactory creates the Akbank gateway from the shipped test config', () => {

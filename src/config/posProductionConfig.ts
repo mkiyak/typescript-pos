@@ -16,9 +16,11 @@ export type PosProductionBank =
   | 'ziraat-vpos'
   | 'ziraat-asseco'
   | 'yapikredi'
+  | 'qnbfinansbank-payfor'
+  | 'ziraat-katilim-payfor'
 
 /**
- * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos and PosNetV1Pos banks (the VakifBank
+ * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos and PayForPos banks (the VakifBank
  * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default. The `akbank-pos` entry sets no `lang` or
  * `test_mode`: AkbankPos takes the language from `order.lang` and the environment from the endpoint URLs.
  *
@@ -124,6 +126,25 @@ export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeCo
         payment_api: 'https://sanalpos.ziraatbank.com.tr/v4/v3/Vposreq.aspx',
         gateway_3d: 'https://mpi.ziraatbank.com.tr/Enrollment.aspx',
         query_api: 'https://sanalpos.ziraatbank.com.tr/v4/UIWebService/Search.aspx',
+      },
+    },
+    'qnbfinansbank-payfor': {
+      name: 'QNBFinansbank-PayFor',
+      class: 'PayForPos',
+      gateway_endpoints: {
+        payment_api: 'https://vpos.qnb.com.tr/Gateway/XMLGate.aspx',
+        gateway_3d: 'https://vpos.qnb.com.tr/Gateway/Default.aspx',
+        gateway_3d_host: 'https://vpos.qnb.com.tr/Gateway/3DHost.aspx',
+      },
+    },
+    'ziraat-katilim-payfor': {
+      name: 'ZiraatKatilim-PayFor',
+      class: 'PayForPos',
+      lang: 'tr',
+      gateway_endpoints: {
+        payment_api: 'https://vpos.ziraatkatilim.com.tr/Mpi/XMLGate.aspx',
+        gateway_3d: 'https://vpos.ziraatkatilim.com.tr/Mpi/Default.aspx',
+        gateway_3d_host: 'https://vpos.ziraatkatilim.com.tr/Mpi/3Dhost.aspx',
       },
     },
     yapikredi: {
