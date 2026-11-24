@@ -185,6 +185,13 @@ describe('PayForPosQueryResponseDataMapper', () => {
     expect(actual.status).toBeNull()
   })
 
+  // addition: a day with exactly one transaction decodes from XML as a single record, like an order report
+  it('reads a single-record day report as one transaction', () => {
+    const actual = mapper.mapHistoryResponse(fixture('success_pay_response.json'))
+    expect(actual.trans_count).toBe(1)
+    expect(actual.status).toBe('approved')
+  })
+
   it('maps a PaymentRequestExtended that is a string to no transactions', () => {
     const actual = mapper.mapHistoryResponse({ PaymentRequestExtended: 'x' })
     expect(actual.transactions).toEqual([])

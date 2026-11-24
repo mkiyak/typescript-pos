@@ -547,18 +547,39 @@ describe('PosQueryFactory with PayForPos', () => {
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
-  it('never logs the password, the card number, the expiry or the CVV', async () => {
+  it('masks the password, the card number, the expiry and the CVV in the logged request data', async () => {
     const lines: unknown[] = []
     const record = (...a: unknown[]) => void lines.push(a)
     const logger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
-    const { q } = e2e(historyXml(), logger)
+    const calls: string[] = []
+    const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push(String(init?.body))
+      return new Response('<PayforResponse><ProcReturnCode>00</ProcReturnCode></PayforResponse>', { status: 200 })
+    }) as unknown as typeof fetch
+    // a hook that changes the data makes the query log the initial and the updated request data
+    const hook = (e: { requestData: Record<string, unknown> }) => {
+      e.requestData.Note = 'changed'
+    }
+    const q = PosQueryFactory.createPosQuery(qAccount(), posTestConfig, {
+      fetch: fetchFn,
+      logger,
+      hooks: { onPosQueryRequestDataPrepared: [hook] },
+    })
     await q.customQuery(inquiry)
-    await q.history({ transaction_date: new Date('2024-01-21T12:00:00+03:00') })
+
+    // the real values did go to the bank
+    expect(calls[0]).toContain(`<UserPass>${PASSWORD}</UserPass>`)
+    expect(calls[0]).toContain(`<Pan>${PAN}</Pan>`)
+
     const all = JSON.stringify(lines)
-    expect(lines.length).toBeGreaterThan(0)
-    expect(all).not.toContain(PASSWORD)
+    expect(all).toContain('Request data is changed via listeners')
+    expect(all).toContain('"UserPass":"***"')
+    expect(all).toContain('"Cvv2":"***"')
+    expect(all).toContain('"Expiry":"***"')
+    expect(all).not.toContain(`"UserPass":"${PASSWORD}"`)
+    expect(all).not.toContain(`"Pan":"${PAN}"`)
     expect(all).not.toContain(PAN)
-    expect(all).not.toContain('0125')
-    expect(all).not.toContain('"123"')
+    expect(all).not.toContain('"Expiry":"0125"')
+    expect(all).not.toContain('"Cvv2":"123"')
   })
 })

@@ -3,7 +3,8 @@ import type { CardType } from '../../../PosInterface.js'
 export type QueryStatus = 'approved' | 'declined'
 
 export type PosQueryHistoryResponse = Record<string, unknown> & {
-  status: QueryStatus
+  /** null when the bank's answer carries no overall result (for example a day report that lists transactions). */
+  status: QueryStatus | null
   error_message: string | null
   all: unknown
 }

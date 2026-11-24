@@ -42,7 +42,7 @@ export class PayForPosQueryResponseDataMapper extends AbstractQueryResponseDataM
 
     const transactions: Raw[] = []
     let procReturnCode: string | null = null
-    let status: string | null = null
+    let status: PosQueryHistoryResponse['status'] = null
     let errorMessage: string | null = null
 
     if (isRecord(extended) && isRecord(extended.PaymentRequest) && isRecord(exactExtended)) {
@@ -55,6 +55,8 @@ export class PayForPosQueryResponseDataMapper extends AbstractQueryResponseDataM
       }
       errorMessage = text(extended.PaymentRequest, 'ErrMsg')
     } else if (Array.isArray(extended) && Array.isArray(exactExtended)) {
+      // a day report with several transactions; a day with exactly one transaction decodes from XML as a single
+      // record and is handled by the branch above like an order report
       for (const [index, item] of extended.entries()) {
         const exactItem: unknown = exactExtended[index]
         if (!isRecord(item) || !isRecord(item.PaymentRequest) || !isRecord(exactItem)) continue
@@ -68,7 +70,7 @@ export class PayForPosQueryResponseDataMapper extends AbstractQueryResponseDataM
       proc_return_code: procReturnCode,
       error_code: failed ? procReturnCode : null,
       error_message: failed ? errorMessage : null,
-      status: status as PosQueryHistoryResponse['status'],
+      status,
       trans_count: transactions.length,
       transactions,
       all: values,
