@@ -70,7 +70,7 @@ export abstract class AbstractHttpClient {
 
     let decoded: Record<string, unknown>
     try {
-      decoded = await this.decode(this.responseText(response), txType, paymentModel)
+      decoded = await this.decode(this.responseText(response, txType), txType, paymentModel)
     } catch (e) {
       this.logger.error('parsing bank response failed', {
         status_code: response.status,
@@ -117,7 +117,7 @@ export abstract class AbstractHttpClient {
   }
 
   /** The response body handed to `decode()`. Default: the body decoded as UTF-8. */
-  protected responseText(response: HttpTransportResponse): string {
+  protected responseText(response: HttpTransportResponse, _txType?: ClientTxType): string {
     return response.body
   }
 

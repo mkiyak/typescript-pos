@@ -140,14 +140,36 @@ describe('KuveytPosAuthenticationResponseDecoder', () => {
     ).toStrictEqual({ a: 'Şeker' })
   })
 
-  it('decodes UTF-8 bytes when the declaration is UTF-8 or unknown', () => {
+  it('decodes UTF-8 bytes when the declaration is UTF-8 or names no charset', () => {
     expect(
       KuveytPosAuthenticationResponseDecoder.decode('<?xml version="1.0" encoding="UTF-8"?><r><a>%C5%9Eeker</a></r>'),
     ).toStrictEqual({ a: 'Şeker' })
-    expect(
-      KuveytPosAuthenticationResponseDecoder.decode('<?xml version="1.0" encoding="x-nope"?><r><a>%C5%9Eeker</a></r>'),
-    ).toStrictEqual({ a: 'Şeker' })
+    expect(KuveytPosAuthenticationResponseDecoder.decode('<r><a>%C5%9Eeker</a></r>')).toStrictEqual({ a: 'Şeker' })
   })
+
+  // addition: only the charsets the bank uses are decoded; a declaration cannot pick any other decoder
+  it.each([
+    ['iso-8859-1', '%E7'],
+    ['ISO-8859-9', '%DE'],
+    ['windows-1254', '%DE'],
+    ['Windows-1254', '%DE'],
+    ['utf-8', '%C5%9E'],
+    ['UTF8', '%C5%9E'],
+  ])('accepts the declared charset %s', (charset, bytes) => {
+    const actual = KuveytPosAuthenticationResponseDecoder.decode(
+      `<?xml version="1.0" encoding="${charset}"?><r><a>${bytes}eker</a></r>`,
+    )
+    expect(typeof actual.a).toBe('string')
+  })
+
+  it.each(['UTF-7', 'UTF-32', 'UTF-16', 'x-nope', 'cp037', 'shift_jis'])(
+    'refuses the declared charset %s',
+    (charset) => {
+      expect(() =>
+        KuveytPosAuthenticationResponseDecoder.decode(`<?xml version="1.0" encoding="${charset}"?><r><a>x</a></r>`),
+      ).toThrow(PosError)
+    },
+  )
 
   // addition: K7, hostile input is refused without echoing it
   it.each([

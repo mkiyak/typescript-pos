@@ -59,6 +59,11 @@ describe('KuveytPosCrypt (ported)', () => {
     expect(verify(KM, {})).toBe(false)
   })
 
+  // addition: the callback is untrusted, so a callback that is no object is unsigned instead of a TypeError
+  it.each([null, undefined, 'text', 5, true])('check3DHash of the non-object callback %j is false', (data) => {
+    expect(crypt.check3DHash(KM, data as never)).toBe(false)
+  })
+
   it.each([
     [
       { MerchantId: '80', UserName: 'apiuser', MerchantOrderId: 'ORDER-123', Amount: 7256 },

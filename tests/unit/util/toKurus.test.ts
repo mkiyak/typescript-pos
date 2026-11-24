@@ -29,6 +29,12 @@ describe('toKurus', () => {
     expect(toKurus(Number('100.25'))).toBe(10025)
   })
 
+  // addition: B6 decimal text is not a number, even for a caller that ignores the type
+  it("refuses the text '100.25'", () => {
+    // @ts-expect-error the type takes numbers only
+    expect(() => toKurus('100.25')).toThrow(PosError)
+  })
+
   it('the result is an integer', () => {
     for (const a of [0.07, 0.57, 1.13, 2.675, 33.33, 1234.56]) expect(Number.isInteger(toKurus(a))).toBe(true)
   })
@@ -50,7 +56,7 @@ describe('toKurus', () => {
   })
 
   it('accepts the largest amount below 1e13', () => {
-    expect(toKurus(9999999999999.99)).toBe(Math.round(9999999999999.99 * 100))
+    expect(toKurus(9999999999999.99)).toBe(999999999999999)
   })
 
   it('half a kuruş rounds up like a two decimal amount', () => {

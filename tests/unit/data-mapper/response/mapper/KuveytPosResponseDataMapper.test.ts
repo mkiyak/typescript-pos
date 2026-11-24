@@ -332,7 +332,7 @@ describe('KuveytPosResponseDataMapper', () => {
       expect(actual.amount).toBeNull()
     })
 
-    // addition: a callback that authenticated the card is not a payment until the provision says so
+    // deviation: the card authentication alone is not a payment; nothing was booked until the provision says so
     it('map3DPaymentData of an approved callback and no provision never reports an approval', () => {
       for (const missing of [null, {}]) {
         const actual: Data = realMapper().map3DPaymentData(callback(), missing, TX_TYPE.PAY_AUTH, order)
@@ -404,7 +404,7 @@ describe('KuveytPosResponseDataMapper', () => {
       expect(actual.error_code).toBe('51')
     })
 
-    // addition: the callback id covered by the signature wins over the browser-posted copy inside the message
+    // deviation: the signed callback id wins over the browser-posted copy inside the message, which no signature covers
     it('prefers the top-level order id of the callback', () => {
       const data = callback()
       data.VPosMessage.MerchantOrderId = 'forged'

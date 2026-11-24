@@ -94,9 +94,23 @@ describe('KuveytPosHttpClient', () => {
     expect(new Headers(request.init.headers).get('Content-Type')).toBe('text/xml; charset=UTF-8')
   })
 
+  // addition: the 3D form page is HTML, handed back as UTF-8 even when its first bytes look like an XML declaration
+  it('decodes the 3D form page as UTF-8 whatever an XML declaration says', async () => {
+    const page = '<?xml version="1.0" encoding="ISO-8859-9"?><html>Şeker</html>'
+    const c = createClient(fakeFetch([], page))
+    const actual = await c.request(
+      TX_TYPE.INTERNAL_3D_FORM_BUILD,
+      MODEL.THREE_D_SECURE,
+      { 'request-data': 'x' },
+      { id: '123' },
+      `${API_URL}/ThreeDModelPayGate`,
+    )
+    expect(actual).toStrictEqual({ html: page })
+  })
+
+  // deviation: the answer to a provision must carry a response code, so the fixture has one
   it('request', async () => {
     const sent: Sent[] = []
-    // deviation: ruling (final fix wave) the answer to a provision must carry a response code
     const c = createClient(
       fakeFetch(sent, '<response><ResponseCode>00</ResponseCode><result>success</result></response>'),
     )

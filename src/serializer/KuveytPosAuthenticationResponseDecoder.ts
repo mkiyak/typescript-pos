@@ -45,11 +45,18 @@ function urlDecodeBytes(value: string): Buffer {
   return Buffer.concat(chunks)
 }
 
-/** The text in the charset the XML declaration names (UTF-8 when it names none, UTF-8/UTF-16 or an unknown one). */
+/** The charsets the bank uses; a declaration naming anything else is refused instead of picking another decoder. */
+const SINGLE_BYTE_CHARSET = /^(?:iso-?8859-?(?:1|9)|latin-?1|windows-?1254|cp1254)$/i
+const UTF8_CHARSET = /^utf-?8$/i
+
+/** The text in the charset the XML declaration names (UTF-8 when it names none). */
 function bytesToText(bytes: Buffer): string {
   const declared = DECLARED_ENCODING.exec(bytes.subarray(0, 200).toString('latin1'))?.[1]
-  if (declared !== undefined && !/^utf-?(?:8|16)/i.test(declared) && iconv.encodingExists(declared)) {
+  if (declared !== undefined && SINGLE_BYTE_CHARSET.test(declared)) {
     return iconv.decode(bytes, declared)
+  }
+  if (declared !== undefined && !UTF8_CHARSET.test(declared)) {
+    throw invalid()
   }
 
   return new TextDecoder('utf-8', { fatal: true }).decode(bytes)

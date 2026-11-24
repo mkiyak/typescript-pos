@@ -3,7 +3,7 @@ import { KuveytPosCrypt } from '../../../../../src/crypt/KuveytPosCrypt.js'
 import { VakifKatilimPosRequestDataMapper } from '../../../../../src/data-mapper/request/mapper/VakifKatilimPosRequestDataMapper.js'
 import { VakifKatilimPosRequestValueFormatter } from '../../../../../src/data-mapper/request/value-formatter/VakifKatilimPosRequestValueFormatter.js'
 import { VakifKatilimPosRequestValueMapper } from '../../../../../src/data-mapper/request/value-mapper/VakifKatilimPosRequestValueMapper.js'
-import { PosError, UnsupportedTransactionTypeError } from '../../../../../src/errors.js'
+import { PosError, UnsupportedPaymentModelError, UnsupportedTransactionTypeError } from '../../../../../src/errors.js'
 import { AccountFactory } from '../../../../../src/factory/AccountFactory.js'
 import { CreditCardFactory } from '../../../../../src/factory/CreditCardFactory.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE, type TxType } from '../../../../../src/PosInterface.js'
@@ -633,7 +633,7 @@ describe('VakifKatilimPosRequestDataMapper', () => {
     // addition: only the 3D Secure model starts on the server
     it.each([MODEL.NON_SECURE, MODEL.THREE_D_HOST, MODEL.THREE_D_PAY])('refuses the model %s', (model) => {
       expect(() => mapper.create3DFormInitializeRequestData(V, formOrder(), model, TX_TYPE.PAY_AUTH, card)).toThrow(
-        PosError,
+        UnsupportedPaymentModelError,
       )
     })
 
@@ -807,6 +807,11 @@ describe('VakifKatilimPosRequestDataMapper', () => {
       ['id', { id: undefined }],
       ['remote_order_id', { remote_order_id: undefined }],
       ['a bank order id with a space', { remote_order_id: '1 2' }],
+      // addition: the id starts with a letter or a digit
+      ['a bank order id that starts with a hyphen', { remote_order_id: '-5' }],
+      ['a bank order id that is only an underscore', { remote_order_id: '_' }],
+      ['an order id that starts with a hyphen', { id: '-5' }],
+      ['an order id that starts with an underscore', { id: '_1' }],
     ])('refuses a missing or malformed %s', (_name, patch) => {
       expect(() => mapper.createRefundRequestData(V, { ...cancelOrder(), ...patch }, TX_TYPE.REFUND)).toThrow(PosError)
     })

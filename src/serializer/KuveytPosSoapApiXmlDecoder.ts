@@ -20,8 +20,13 @@ function stripNamespaceDeclarations(value: unknown, depth: number): unknown {
     out[key] = stripNamespaceDeclarations(item, depth + 1)
   }
 
+  const keys = Object.keys(out)
   // An element that only declared namespaces is an empty element.
-  return Object.keys(out).length === 0 && Object.keys(value).length > 0 ? '' : out
+  if (keys.length === 0 && Object.keys(value).length > 0) return ''
+  // An element that declared a namespace around plain text is that text.
+  if (keys.length === 1 && keys[0] === '#' && typeof out['#'] === 'string') return out['#']
+
+  return out
 }
 
 /**

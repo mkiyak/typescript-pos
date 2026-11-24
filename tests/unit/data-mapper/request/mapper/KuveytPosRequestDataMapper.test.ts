@@ -436,7 +436,7 @@ describe('KuveytPosRequestDataMapper', () => {
     })
 
     // addition: B7
-    it.each(['sipariş1', 'a b', '', 'x'.repeat(65), undefined, true, { a: 1 }, Number.NaN])(
+    it.each(['sipariş1', 'a b', '', 'x'.repeat(65), undefined, true, { a: 1 }, Number.NaN, '-5', '_', '_a', -5])(
       'rejects the order id %j',
       (id) => {
         const order = formOrder()
@@ -521,7 +521,7 @@ describe('KuveytPosRequestDataMapper', () => {
     })
 
     // addition: B7
-    it.each(['sipariş1', 'a b', '', 'x'.repeat(65)])('rejects the order id %j', (id) => {
+    it.each(['sipariş1', 'a b', '', 'x'.repeat(65), '-5', '_'])('rejects the order id %j', (id) => {
       const order = refOrder(1.01)
       order.id = id
       expect(() => mapper.createCancelRequestData(KM, order)).toThrow(PosError)
@@ -672,6 +672,17 @@ describe('KuveytPosRequestDataMapper', () => {
         end_date: new Date('2023-07-08T22:44:31+03:00'),
       }) as { GetMerchantOrderDetail: { request: Record<string, unknown> } }
       expect(actual.GetMerchantOrderDetail.request.OrderId).toBe('114293600')
+    })
+
+    // addition: a zero or empty bank order id means "all orders of the merchant order id", like an absent one
+    it.each([0, ''])('treats the bank order id %j as absent', (id) => {
+      const actual = mapper.createStatusRequestData(KM, {
+        id: '2023070849CD',
+        remote_order_id: id as never,
+        start_date: new Date('2022-07-08T22:44:31+03:00'),
+        end_date: new Date('2023-07-08T22:44:31+03:00'),
+      }) as { GetMerchantOrderDetail: { request: Record<string, unknown> } }
+      expect(actual.GetMerchantOrderDetail.request.OrderId).toBe(0)
     })
 
     it('requires the order id', () => {

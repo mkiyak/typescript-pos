@@ -106,8 +106,9 @@ export class KuveytPosHttpClient extends AbstractHttpClient {
     return encodeIso88591(toIso88591Xml(encoded.data))
   }
 
-  protected override responseText(response: HttpTransportResponse): string {
-    return decodeXmlResponseText(response)
+  /** The form page is HTML in UTF-8; only XML answers follow the charset of their declaration. */
+  protected override responseText(response: HttpTransportResponse, txType?: ClientTxType): string {
+    return txType === TX_TYPE.INTERNAL_3D_FORM_BUILD ? response.body : decodeXmlResponseText(response)
   }
 
   protected override decode(

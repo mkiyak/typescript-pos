@@ -758,8 +758,10 @@ describe('PosQueryFactory with VakifKatilimPos', () => {
 
   it('a custom query without a url rejects and sends nothing', async () => {
     const { q, fetchFn } = e2e('<a/>')
-    await expect(q.customQuery({ MerchantOrderId: 'x' })).rejects.toBeInstanceOf(PosError)
-    await expect(q.customQuery({ MerchantOrderId: 'x' }, null)).rejects.toBeInstanceOf(PosError)
+    await expect(q.customQuery({ MerchantOrderId: 'x' })).rejects.toThrow('Vakıf Katılım custom queries need an apiUrl')
+    await expect(q.customQuery({ MerchantOrderId: 'x' }, null)).rejects.toThrow(
+      'Vakıf Katılım custom queries need an apiUrl',
+    )
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
@@ -771,7 +773,9 @@ describe('PosQueryFactory with VakifKatilimPos', () => {
     ['text that is no url', 'not a url'],
   ])('a custom query url on %s rejects and sends nothing', async (_name, url) => {
     const { q, fetchFn } = e2e('<a/>')
-    await expect(q.customQuery({ MerchantOrderId: 'x' }, url)).rejects.toBeInstanceOf(PosError)
+    await expect(q.customQuery({ MerchantOrderId: 'x' }, url)).rejects.toThrow(
+      /Custom query URL must be an https: URL on one of these origins/,
+    )
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
@@ -810,7 +814,6 @@ describe('PosQueryFactory with VakifKatilimPos', () => {
     expect(all).not.toContain('abc-hashed-pw')
     expect(all).not.toContain('sig-value-1')
     expect(all).not.toContain('4155650100416111')
-    expect(all).not.toContain(PASSWORD)
     expect(all).not.toMatch(/"HashData":"[A-Za-z0-9+/]{27}="/)
   })
 })

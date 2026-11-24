@@ -85,6 +85,13 @@ describe('KuveytPosSoapApiXmlDecoder', () => {
     expect(() => KuveytPosSoapApiXmlDecoder.decode(xml)).toThrow(PosHttpError)
   })
 
+  // addition: K6, an element that only declared a namespace around its text is that text
+  it('collapses a text element that declares a namespace', () => {
+    expect(
+      KuveytPosSoapApiXmlDecoder.decode('<s:Envelope xmlns:s="x"><s:Body><R xmlns="z">ok</R></s:Body></s:Envelope>'),
+    ).toStrictEqual({ R: 'ok' })
+  })
+
   // addition: K6, a very deep answer is refused instead of overflowing the stack
   it('refuses a body nested too deeply', () => {
     const deep = `${'<a>'.repeat(200)}x${'</a>'.repeat(200)}`

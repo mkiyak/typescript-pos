@@ -73,6 +73,10 @@ export class KuveytPosCrypt extends AbstractCrypt<BoaPosAccount> {
    * logged; only the order id is.
    */
   check3DHash(account: BoaPosAccount, data: GatewayResponseData): boolean {
+    if (typeof data !== 'object' || data === null) {
+      this.logger.error('hash check failed', { order_id: undefined })
+      return false
+    }
     const received: unknown = ownValue(data, 'HashData')
     const merchantOrderId: unknown = ownValue(data, 'MerchantOrderId')
     const responseCode: unknown = ownValue(data, 'ResponseCode')

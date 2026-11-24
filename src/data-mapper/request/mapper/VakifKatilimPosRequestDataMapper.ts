@@ -1,5 +1,5 @@
 import type { KuveytPosCrypt } from '../../../crypt/KuveytPosCrypt.js'
-import { PosError, UnsupportedTransactionTypeError } from '../../../errors.js'
+import { PosError, UnsupportedPaymentModelError, UnsupportedTransactionTypeError } from '../../../errors.js'
 import type { BoaPosAccount } from '../../../model/account/BoaPosAccount.js'
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
@@ -105,7 +105,7 @@ export class VakifKatilimPosRequestDataMapper extends AbstractRequestDataMapper<
     creditCard: CreditCard | null = null,
   ): Record<string, unknown> {
     if (paymentModel !== MODEL.THREE_D_SECURE) {
-      throw new PosError(`Unsupported payment model: ${String(paymentModel)}`)
+      throw new UnsupportedPaymentModelError(`Unsupported payment model: ${String(paymentModel)}`)
     }
     this.assertSale(txType)
     const defaults = this.applyPaymentDefaults(order)
@@ -132,7 +132,7 @@ export class VakifKatilimPosRequestDataMapper extends AbstractRequestDataMapper<
     }
 
     if (creditCard !== null && creditCard !== undefined) {
-      this.addCard(requestData, creditCard, false)
+      this.addEnrollmentCard(requestData, creditCard)
     }
 
     requestData.HashData = this.sign(account, requestData)
@@ -167,7 +167,7 @@ export class VakifKatilimPosRequestDataMapper extends AbstractRequestDataMapper<
       CurrencyCode: currency,
       TransactionSecurity: this.valueMapper.mapSecureType(MODEL.NON_SECURE),
     }
-    this.addCard(requestData, creditCard, true)
+    this.addSaleCard(requestData, creditCard)
     requestData.HashData = this.sign(account, requestData)
 
     return requestData
@@ -231,6 +231,7 @@ export class VakifKatilimPosRequestDataMapper extends AbstractRequestDataMapper<
       // Every other type maps to another bank operation; a refund request must never become a sale or a cancel.
       throw new UnsupportedTransactionTypeError(`Unsupported refund transaction type: ${String(refundTxType)}`)
     }
+    // Validation only: a refund path must never be reachable for a type the order cannot carry.
     this.orderTxType(order)
     const orderId = orderIdOf(order)
     const remoteOrderId = this.remoteOrderId(order)
@@ -319,19 +320,23 @@ export class VakifKatilimPosRequestDataMapper extends AbstractRequestDataMapper<
     return result
   }
 
-  /** Card fields of the enrollment and the sale; the holder name is empty text, never `null`. */
-  private addCard(requestData: Record<string, unknown>, creditCard: CreditCard, holderLast: boolean): void {
-    const holder = creditCard.getHolderName() ?? ''
-    if (!holderLast) {
-      requestData.CardHolderName = holder
-    }
+  /** Card fields of the enrollment: the holder name comes first, and is empty text, never `null`. */
+  private addEnrollmentCard(requestData: Record<string, unknown>, creditCard: CreditCard): void {
+    requestData.CardHolderName = creditCard.getHolderName() ?? ''
+    this.addCardNumberAndExpiry(requestData, creditCard)
+  }
+
+  /** Card fields of the sale: the holder name comes last, and is empty text, never `null`. */
+  private addSaleCard(requestData: Record<string, unknown>, creditCard: CreditCard): void {
+    this.addCardNumberAndExpiry(requestData, creditCard)
+    requestData.CardHolderName = creditCard.getHolderName() ?? ''
+  }
+
+  private addCardNumberAndExpiry(requestData: Record<string, unknown>, creditCard: CreditCard): void {
     requestData.CardNumber = creditCard.getNumber()
     requestData.CardExpireDateYear = this.valueFormatter.formatCardExpDate(creditCard, 'CardExpireDateYear')
     requestData.CardExpireDateMonth = this.valueFormatter.formatCardExpDate(creditCard, 'CardExpireDateMonth')
     requestData.CardCVV2 = creditCard.getCvv()
-    if (holderLast) {
-      requestData.CardHolderName = holder
-    }
   }
 
   /** Signs a snapshot of the fields, so the crypt sees exactly what is sent and cannot alter it. */
@@ -382,7 +387,9 @@ export class VakifKatilimPosRequestDataMapper extends AbstractRequestDataMapper<
   private remoteOrderId(order: PosOrder): string {
     const id = orderTextOf(order, 'remote_order_id')
     if (!ORDER_ID_PATTERN.test(id)) {
-      throw new PosError('The bank order id may only hold letters, digits, underscores and hyphens (at most 64).')
+      throw new PosError(
+        'The bank order id may only hold letters, digits, underscores and hyphens (at most 64) and must start with a letter or a digit.',
+      )
     }
     return id
   }

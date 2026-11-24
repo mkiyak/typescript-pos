@@ -4,8 +4,11 @@ import { ownValue } from '../../../util/ownValue.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
 import { required } from '../../../util/required.js'
 
-/** Order ids are signed and posted as plain ASCII: letters, digits, underscore and hyphen, at most 64 characters. */
-export const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+/**
+ * Order ids are signed and posted as plain ASCII: letters, digits, underscore and hyphen, at most 64 characters,
+ * starting with a letter or a digit.
+ */
+export const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 
 /** The 3D authentication packet is base64 text. */
 export const MD_PATTERN = /^[A-Za-z0-9+/=]{1,1024}$/
@@ -18,7 +21,9 @@ export function orderIdOf(order: PosOrder): string {
   const raw: unknown = required(order, 'id')
   const id = typeof raw === 'string' || (typeof raw === 'number' && Number.isFinite(raw)) ? String(raw) : ''
   if (!ORDER_ID_PATTERN.test(id)) {
-    throw new PosError('The order id may only hold letters, digits, underscores and hyphens (at most 64).')
+    throw new PosError(
+      'The order id may only hold letters, digits, underscores and hyphens (at most 64) and must start with a letter or a digit.',
+    )
   }
   return id
 }

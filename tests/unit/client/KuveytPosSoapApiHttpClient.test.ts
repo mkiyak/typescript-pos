@@ -154,6 +154,61 @@ describe('KuveytPosSoapApiHttpClient', () => {
     expect(error.message).not.toContain('4111111111111111')
   })
 
+  // addition: K6, bare base64 credential-like values never reach the message
+  it.each([
+    ['2xx answer', 200],
+    ['non-2xx answer', 500],
+  ])('masks base64 tokens in a fault text of a %s', async (_n, status) => {
+    const token = 'c77dFssAnYSy6O2MJo+5tMYtGVc='
+    const c = createClient(fakeFetch([], fault(`<faultstring>bad hash ${token} here</faultstring>`), status))
+    const error = await c
+      .request(TX_TYPE.CANCEL, MODEL.NON_SECURE, { foo: 'bar' }, { id: '1' }, API_URL)
+      .catch((e) => e)
+    expect(error.message).not.toContain(token)
+    expect(error.message).toContain('bad hash')
+  })
+
+  it.each([
+    ['2xx answer', 200],
+    ['non-2xx answer', 500],
+  ])('masks the own hash password in a fault text of a %s', async (_n, status) => {
+    const secret = 'pass-word-hash'
+    const c = createClient(fakeFetch([], fault(`<faultstring>bad ${secret} here</faultstring>`), status))
+    const error = await c
+      .request(
+        TX_TYPE.CANCEL,
+        MODEL.NON_SECURE,
+        { DrawBack: { request: { VPosMessage: { HashPassword: secret } } } },
+        { id: '1' },
+        API_URL,
+      )
+      .catch((e) => e)
+    expect(error).toBeInstanceOf(PosHttpError)
+    expect(error.message).not.toContain(secret)
+    expect(error.message).toContain('bad')
+  })
+
+  it('does not leave a piece of a secret at the end of a shortened fault text', async () => {
+    const secret = 'S3cretHashPassw0rd'
+    const c = createClient(fakeFetch([], fault(`<faultstring>${'a'.repeat(250)}${secret}</faultstring>`), 200))
+    const error = await c
+      .request(TX_TYPE.CANCEL, MODEL.NON_SECURE, { HashPassword: secret }, { id: '1' }, API_URL)
+      .catch((e) => e)
+    expect(error.message).not.toContain('S3cret')
+  })
+
+  // addition: K6, a fault text read from the raw body has its entities decoded
+  it.each([
+    ['a 500 answer', 500, 'Bank SOAP fault: a & b < c'],
+    ['a 200 answer', 200, 'Bank SOAP fault: a & b < c'],
+  ])('decodes the entities of a fault text in %s', async (_n, status, message) => {
+    const c = createClient(fakeFetch([], fault('<faultstring>a &amp; b &lt; c</faultstring>'), status))
+    const error = await c
+      .request(TX_TYPE.CANCEL, MODEL.NON_SECURE, { foo: 'bar' }, { id: '1' }, API_URL)
+      .catch((e) => e)
+    expect(error.message).toBe(message)
+  })
+
   it('reads a fault from a non-2xx answer under another prefix', async () => {
     const c = createClient(fakeFetch([], fault('<faultstring>boom</faultstring>', 'soap:'), 500))
     const error = await c

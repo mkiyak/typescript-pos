@@ -4,6 +4,7 @@ import { XmlEncoder } from './XmlEncoder.js'
 const SOAP_ENVELOPE_NS = 'http://schemas.xmlsoap.org/soap/envelope/'
 const SERVICE_NS = 'http://boa.net/BOA.Integration.VirtualPos/Service'
 const ELEMENT_NAME = /^[A-Za-z_][A-Za-z0-9_.-]*$/
+const ATTRIBUTE_NAME = /^[A-Za-z_][A-Za-z0-9_.:-]*$/
 const MAX_DEPTH = 32
 
 /** Every element of the request is in the service namespace; attributes (`@…`) and text (`#`) keep their keys. */
@@ -14,7 +15,13 @@ function prefixKeys(value: unknown, depth: number): unknown {
 
   const out: Record<string, unknown> = {}
   for (const [key, item] of Object.entries(value)) {
-    if (key.startsWith('@') || key === '#') {
+    if (key === '#') {
+      out[key] = item
+      continue
+    }
+    if (key.startsWith('@')) {
+      // An attribute name becomes markup too.
+      if (!ATTRIBUTE_NAME.test(key.slice(1))) throw new PosError('SOAP request contains an invalid attribute name')
       out[key] = item
       continue
     }

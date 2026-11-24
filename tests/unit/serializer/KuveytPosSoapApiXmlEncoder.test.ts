@@ -78,6 +78,19 @@ describe('KuveytPosSoapApiXmlEncoder', () => {
     expect(() => KuveytPosSoapApiXmlEncoder.encode({ a: { 'b c': 'x' } })).toThrow(PosError)
   })
 
+  // addition: K6, attribute names become markup too
+  it('refuses an attribute name that could carry markup', () => {
+    expect(() => KuveytPosSoapApiXmlEncoder.encode({ a: { '@x="1"><evil/><b y': 'v', '#': 't' } })).toThrow(PosError)
+    expect(() => KuveytPosSoapApiXmlEncoder.encode({ a: { '@b c': 'v' } })).toThrow(PosError)
+    expect(() => KuveytPosSoapApiXmlEncoder.encode({ a: { '@': 'v' } })).toThrow(PosError)
+  })
+
+  it('keeps a plain attribute', () => {
+    expect(KuveytPosSoapApiXmlEncoder.encode({ a: { '@id': '1', '#': 't' } })).toBe(
+      `${OPEN}<ser:a id="1">t</ser:a>${CLOSE}`,
+    )
+  })
+
   // addition: K6, repeated elements keep the prefix
   it('prefixes every item of a list', () => {
     expect(KuveytPosSoapApiXmlEncoder.encode({ a: [{ b: 1 }, { b: 2 }] })).toBe(

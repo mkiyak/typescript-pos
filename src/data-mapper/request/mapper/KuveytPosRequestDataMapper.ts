@@ -396,7 +396,8 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
 
   private optionalBankOrderId(order: PosOrder): string | null {
     const value: unknown = order.remote_order_id
-    if (value === undefined || value === null) return null
+    // Zero and empty text mean "every order of the merchant order id", like an absent value.
+    if (value === undefined || value === null || value === 0 || value === '') return null
     return this.bankOrderId(order)
   }
 }
