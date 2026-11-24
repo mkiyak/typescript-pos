@@ -30,8 +30,10 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
   unclear answer after a provision or sale throws instead of being read as a decline: keep the order pending and
   check `pos.status`.
 - **Vakıf Katılım (`VakifKatilimPos`).** The same for 3D Secure. Every approved 3D Host payment is confirmed with one
-  status request, because the 3D Host form carries the hashed API password and anyone who loaded it can sign callbacks:
-  restrict the API to your server IP addresses, and re-query `pos.status` before acting on a 3D Host alert.
+  status request, because the 3D Host form carries the hashed API password. With your merchant number, customer
+  number and user name, whoever loaded the form can sign callbacks and also cancel, refund and status requests through
+  the bank's API. Restrict the API at the bank to your own server IP addresses, and re-query `pos.status` before
+  acting on a 3D Host alert, which may be forged.
 - **POSNET (`PosNetPos`).** The 3D result is decrypted by the bank and its MAC is verified before any money moves;
   the bank-resolved order id, amount, currency and installment count must equal your order's (`OrderMismatchError`,
   nothing charged). The check cannot be disabled.

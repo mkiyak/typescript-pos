@@ -65,8 +65,8 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
 - **The signature is always verified.** A callback that carries the bank's `HashData` is verified for every outcome;
   a wrong hash throws `HashMismatchError`, and an approval must carry it. It cannot be switched off. The bank signs
   only the order id, the response code and its own order id; amount, currency and installment count are not
-  signed, which is why they are bound to your order below. A callback value that is not plain text is rejected before
-  anything else.
+  signed, which is why they are bound to your order below. The signed fields must be plain text, `MD` must be text and `VPosMessage` a record; any other value that is not
+  plain text becomes null.
 - **Unsigned callbacks** can only become a decline, and `require_3d_hash: true` rejects unsigned declines too. An
   unsigned decline carries none of the callback's values except bounded decline reasons, and never sets
   `requires_manual_review`.
@@ -87,7 +87,7 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
 
 ## Order ids and amounts
 
-- An order id is 1 to 64 letters, digits, `_` or `-`. Use ids of one fixed length (zero-padded numbers or UUID-based
+- An order id is 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit. Use ids of one fixed length (zero-padded numbers or UUID-based
   ids): one id must never be another id plus extra characters, because the signed values have no separators.
 - Amounts go to the bank in kuruş, rounded like PHP `number_format` (`1.15` becomes `115`).
 

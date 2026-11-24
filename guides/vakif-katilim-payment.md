@@ -39,6 +39,13 @@ Other operations: `status`, `cancel`, full `refund` and `orderHistory` (a date r
 everything. Use a full refund or a cancel. Pass `transaction_type: 'pre'` on the order when you cancel or refund a
 pre-authorization.
 
+Order fields these operations need besides `id`: `remote_order_id` (the bank's own order id, from the payment answer)
+for cancel, refund and post-authorization; `amount` for cancel, except for a pre-authorization, which is reversed as a
+whole; `ip` (the customer's address) for post-authorization.
+
+The `vakif-katilim` entry of `posTestConfig` points at the bank's production host: the config has no separate test
+host for this bank, so use test credentials the bank gave you and never real cards with it.
+
 ## 3D Host flow
 
 1. Persist the order (`id`, `amount`, `currency`, `installment`) and tie it to the customer's session.
@@ -54,10 +61,13 @@ const form = await pos.get3DFormData(order, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH
 const response = await pos.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, null, callbackBody)
 ```
 
-> **Warning: the 3D Host form carries your hashed API password.** That is how the bank's page works, so anyone who
-> loaded the page can sign callbacks. The library therefore never trusts a 3D Host callback by itself: every approval
-> is confirmed with one status request, and only the bank's record decides. Ask the bank to restrict the API to your
-> server IP addresses; prefer 3D Secure when that is not possible.
+> **Warning: the 3D Host form carries your hashed API password.** That is how the bank's page works. Anyone who
+> loaded the page holds that password together with your merchant number, customer number and user name, so they can
+> sign callbacks and also cancel, refund and status requests for your merchant through the bank's API. The library
+> therefore never trusts a 3D Host callback by itself: every approval
+> is confirmed with one status request, and only the bank's record decides. Restrict the API at the bank to your own
+> server IP addresses, treat every 3D Host alert as possibly forged, and prefer 3D Secure when the restriction is not
+> possible.
 
 Every approved 3D Host payment is confirmed with that status request before it is returned: the bank's record must
 hold exactly one order for this order id, successful and not a non-secure sale, with your amount and currency, no
@@ -104,14 +114,14 @@ from your order; the callback only lends the bank's session value.
 
 ## Order ids and amounts
 
-- An order id is 1 to 64 letters, digits, `_` or `-`. Use ids of one fixed length (zero-padded or UUID-based): one id
+- An order id is 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit. Use ids of one fixed length (zero-padded or UUID-based): one id
   must never be another id plus extra characters, because the signed values have no separators.
 - Amounts go to the bank in kuruş, rounded like PHP `number_format` (`1.15` becomes `115`).
 
 ## Order history
 
 `pos.orderHistory({ start_date, end_date })` lists the orders of a date range (Türkiye time); `auth_code` optionally
-filters by authorization code.
+filters by authorization code. The bank's list is read once: at most the first 100 records come back.
 
 ## Queries
 
