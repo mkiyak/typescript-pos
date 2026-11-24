@@ -1,5 +1,15 @@
 # typescript-pos
 
+## 0.2.0
+
+### Minor Changes
+
+- acab172: Add PayFlexCPV4Pos for the VakıfBank Common Payment hosted page (3D Pay / 3D Host sale and pre-auth, server-side result confirmation, status query).
+
+### Patch Changes
+
+- 29503cd: Mask JSON-encoded secrets and ExpireMonth/ExpireYear fields in logs and HTTP error snippets.
+
 ## 0.1.1
 
 ### Patch Changes
