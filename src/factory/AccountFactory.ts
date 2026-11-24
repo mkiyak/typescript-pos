@@ -3,8 +3,9 @@ import { AkbankPosAccount } from '../model/account/AkbankPosAccount.js'
 import { AssecoPosAccount } from '../model/account/AssecoPosAccount.js'
 import { GarantiPosAccount } from '../model/account/GarantiPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
+import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
 
-/** Account factories for the Asseco, PayFlex, Garanti and Akbank gateways. */
+/** Account factories for the Asseco, PayFlex, Garanti, Akbank and POSNET gateways. */
 export const AccountFactory = {
   createAssecoPosAccount(
     bank: string,
@@ -63,5 +64,15 @@ export const AccountFactory = {
     subMerchantId: string | null = null,
   ): AkbankPosAccount {
     return new AkbankPosAccount(bank, merchantSafeId, terminalSafeId, secretKey, subMerchantId)
+  },
+
+  createPosNetPosAccount(
+    bank: string,
+    merchantId: string,
+    terminalId: string,
+    posNetId: string,
+    secretKey: string | null = null,
+  ): PosNetPosAccount {
+    return new PosNetPosAccount(bank, merchantId, posNetId, terminalId, secretKey)
   },
 } as const

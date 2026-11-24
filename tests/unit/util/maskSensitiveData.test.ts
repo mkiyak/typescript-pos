@@ -194,4 +194,47 @@ describe('maskSensitiveData', () => {
     expect(body).not.toContain('c2VjcmV0U2lnbmF0dXJl')
     expect(body).toContain('"other":"x"')
   })
+
+  // addition: card and MAC fields of the POSNET and JSON card APIs
+  it('masks card, enc key and MAC keys', () => {
+    const out = maskSensitiveData({
+      ccno: '5555444433332222',
+      expDate: '2201',
+      cvc: '123',
+      Cvc2: '056',
+      CardNo: '5400619360964581',
+      ExpiredDate: '2001',
+      encKey: 'k',
+      mac: 'm',
+      Mac: 'm',
+      MAC: 'm',
+    })
+    for (const value of Object.values(out)) expect(value).toBe('***')
+  })
+
+  it('masks POSNET XML card fields and MAC', () => {
+    const out = maskSensitiveData(
+      'xmldata=<?xml version="1.0"?>\n<posnetRequest><oosRequestData><ccno>5555444433332222</ccno><expDate>2201</expDate><cvc>123</cvc></oosRequestData><mac>abc=</mac></posnetRequest>',
+    )
+    expect(out).toContain('<ccno>***</ccno>')
+    expect(out).toContain('<expDate>***</expDate>')
+    expect(out).toContain('<cvc>***</cvc>')
+    expect(out).toContain('<mac>***</mac>')
+    expect(out).not.toContain('5555444433332222')
+    expect(out).not.toContain('abc=')
+  })
+
+  it('masks JSON card fields and MAC', () => {
+    const out = maskSensitiveData(
+      '{"CardInformationData":{"CardNo":"5400619360964581","Cvc2":"056","ExpireDate":"2001"},"MAC":"x"}',
+    )
+    expect(out).toContain('"CardNo":"***"')
+    expect(out).toContain('"Cvc2":"***"')
+    expect(out).toContain('"ExpireDate":"***"')
+    expect(out).toContain('"MAC":"***"')
+  })
+
+  it('leaves MacParams values readable', () => {
+    expect(maskSensitiveData({ MacParams: 'MerchantNo:TerminalNo' })).toEqual({ MacParams: 'MerchantNo:TerminalNo' })
+  })
 })

@@ -6,6 +6,7 @@ import { AkbankPosAccount } from '../../../src/model/account/AkbankPosAccount.js
 import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js'
 import { GarantiPosAccount } from '../../../src/model/account/GarantiPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
+import { PosNetPosAccount } from '../../../src/model/account/PosNetPosAccount.js'
 import { CARD_CLASS } from '../../../src/PosInterface.js'
 import { maskSensitiveData } from '../../../src/util/maskSensitiveData.js'
 
@@ -161,6 +162,46 @@ describe('createGarantiPosAccount', () => {
   })
 })
 
+describe('AccountFactory PosNet', () => {
+  it('createPosNetPosAccount non-secure', () => {
+    const a = AccountFactory.createPosNetPosAccount('yapikredi', '6706598320', '67005551', '27426457')
+    expect(a).toBeInstanceOf(PosNetPosAccount)
+    expect(a.getBankName()).toBe('yapikredi')
+    expect(a.getMerchantId()).toBe('6706598320')
+    expect(a.getPosNetId()).toBe('27426457')
+    expect(a.getTerminalId()).toBe('67005551')
+    // addition: no secret key is a typed error
+    expect(() => a.getSecretKey()).toThrow(MissingAccountInfoError)
+  })
+
+  it('createPosNetPosAccount 3D secure', () => {
+    const key = '10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10'
+    const a = AccountFactory.createPosNetPosAccount('yapikredi', '6706598320', '67005551', '27426457', key)
+    expect(a.getMerchantId()).toBe('6706598320')
+    expect(a.getPosNetId()).toBe('27426457')
+    expect(a.getTerminalId()).toBe('67005551')
+    expect(a.getSecretKey()).toBe(key)
+  })
+
+  // addition: blank credentials are rejected
+  it.each([
+    ['merchant', ['', '67005551', '27426457']],
+    ['merchant', ['  ', '67005551', '27426457']],
+    ['terminal', ['6706598320', '', '27426457']],
+    ['terminal', ['6706598320', '  ', '27426457']],
+    ['posNetId', ['6706598320', '67005551', '']],
+    ['posNetId', ['6706598320', '67005551', '  ']],
+  ] as const)('rejects blank %s', (_n, [m, t, p]) => {
+    expect(() => AccountFactory.createPosNetPosAccount('yapikredi', m, t, p)).toThrow(MissingAccountInfoError)
+  })
+
+  it.each(['', '  '])('rejects blank secret %j', (secret) => {
+    expect(() => AccountFactory.createPosNetPosAccount('yapikredi', 'M', 'T', 'P', secret)).toThrow(
+      MissingAccountInfoError,
+    )
+  })
+})
+
 describe('account credential leakage', () => {
   const accounts = [
     ['Asseco', () => AccountFactory.createAssecoPosAccount('akbank', 'mid', 'USER1', 'PW1', 'SK1')],
@@ -180,13 +221,24 @@ describe('account credential leakage', () => {
         ),
     ],
     ['Akbank', () => AccountFactory.createAkbankPosAccount('akbank-pos', 'mid', 'APIUSER', 'kdsnsksl', 'SUB1')],
+    ['PosNet', () => AccountFactory.createPosNetPosAccount('yapikredi', 'mid', 'TERM1', '27426457', 'SK1')],
   ] as const
 
   it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
     const a = make()
     const outputs = [JSON.stringify(a), JSON.stringify(maskSensitiveData(a)), inspect(a, { depth: 5 })]
     for (const out of outputs) {
-      for (const secret of ['PW1', 'SK1', 'USER1', 'TERM1', 'PROVRFN', 'refund-pass', 'kdsnsksl', 'APIUSER'])
+      for (const secret of [
+        'PW1',
+        'SK1',
+        'USER1',
+        'TERM1',
+        'PROVRFN',
+        'refund-pass',
+        'kdsnsksl',
+        'APIUSER',
+        '27426457',
+      ])
         expect(out).not.toContain(secret)
     }
     expect(JSON.stringify(a)).toContain('mid')

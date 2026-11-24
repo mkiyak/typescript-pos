@@ -5,7 +5,7 @@ import type { ResponseValueFormatterInterface } from './ResponseValueFormatterIn
 const PHP_NUMERIC = /^[ \t\n\r\v\f]*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?[ \t\n\r\v\f]*$/
 
 /** PHP `(int)` cast of a string or null. */
-function phpInt(value: string | null | undefined): number {
+export function phpInt(value: string | null | undefined): number {
   if (value === null || value === undefined) return 0
   if (PHP_NUMERIC.test(value)) {
     const n = Math.trunc(Number(value))
@@ -16,7 +16,7 @@ function phpInt(value: string | null | undefined): number {
 }
 
 /** PHP `(float)` cast of a string or number. */
-function phpFloat(value: string | number): number {
+export function phpFloat(value: string | number): number {
   if (typeof value === 'number') return value
   const n = Number.parseFloat(value.replace(/^[ \t\n\r\v\f]+/, ''))
   return Number.isFinite(n) ? n : 0

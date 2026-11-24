@@ -35,6 +35,12 @@ const SENSITIVE_KEYS = new Set([
   'authhash',
   'creditcard',
   'expireddate',
+  'ccno',
+  'expdate',
+  'cvc2',
+  'cardno',
+  'enckey',
+  'mac',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -63,6 +69,13 @@ const SENSITIVE_TAGS = [
   'SecretKey',
   'StoreKey',
   'auth-hash',
+  'ccno',
+  'expDate',
+  'cvc',
+  'Cvc2',
+  'CardNo',
+  'encKey',
+  'mac',
 ]
 const XML_PATTERN = new RegExp(`(<(${SENSITIVE_TAGS.join('|')})(?:\\s[^>]*)?>)[^<]*(</\\2\\s*>)`, 'gi')
 const QUERY_PATTERN = new RegExp(`(?<![A-Za-z0-9_])(${SENSITIVE_TAGS.join('|')})=[^&\\s"']*`, 'gi')
