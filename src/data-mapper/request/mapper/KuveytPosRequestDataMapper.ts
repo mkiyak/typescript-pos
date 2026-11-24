@@ -20,23 +20,23 @@ import {
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
-import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
-import { required } from '../../../util/required.js'
 import type { KuveytPosRequestValueFormatter } from '../value-formatter/KuveytPosRequestValueFormatter.js'
 import type { KuveytPosRequestValueMapper } from '../value-mapper/KuveytPosRequestValueMapper.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
-
-/** Order ids are signed and posted as plain ASCII: letters, digits, underscore and hyphen, at most 64 characters. */
-const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+import {
+  MD_PATTERN,
+  optionalTextOf,
+  orderAmountOf,
+  orderDateOf,
+  orderIdOf,
+  orderRecordOf,
+  orderStringOf,
+  orderTextOf,
+  orderUrlOf,
+} from './boaOrderFields.js'
 
 /** The bank's own order id is a positive integer of at most 19 digits. */
 const BANK_ORDER_ID_PATTERN = /^[1-9]\d{0,18}$/
-
-/** The 3D authentication packet is base64 text. */
-const MD_PATTERN = /^[A-Za-z0-9+/=]{1,1024}$/
-
-/** Return URLs are signed as text: plain printable ASCII only, so the bank hashes the same bytes we do. */
-const URL_PATTERN = /^https?:\/\/[\x21-\x7E]+$/i
 
 /** A status query without dates looks back this far. */
 const STATUS_LOOKBACK_MS = 360 * 24 * 60 * 60 * 1000
@@ -74,11 +74,11 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
   ): Record<string, unknown> {
     this.assertSale(txType)
     const defaults = this.applyPaymentDefaults(order)
-    const orderId = this.orderId(defaults)
-    const amount = String(this.valueFormatter.formatAmount(this.amount(defaults)))
+    const orderId = orderIdOf(defaults)
+    const amount = String(this.valueFormatter.formatAmount(orderAmountOf(defaults)))
     const installment = this.installment(defaults)
     const currency = this.currency(defaults)
-    const ip = this.string(defaults, 'ip')
+    const ip = orderStringOf(defaults, 'ip')
     const md: unknown = ownValue(responseData, 'MD')
     if (typeof md !== 'string' || !MD_PATTERN.test(md)) {
       throw new PosError('3D callback authentication values are malformed')
@@ -121,16 +121,16 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
     }
     this.assertSale(txType)
     const defaults = this.applyPaymentDefaults(order)
-    const orderId = this.orderId(defaults)
-    const kurus = this.valueFormatter.formatAmount(this.amount(defaults))
+    const orderId = orderIdOf(defaults)
+    const kurus = this.valueFormatter.formatAmount(orderAmountOf(defaults))
     const installment = this.installment(defaults)
     const currency = this.currency(defaults)
-    const okUrl = this.url(defaults, 'success_url')
-    const failUrl = this.url(defaults, 'fail_url')
-    const ip = this.string(defaults, 'ip')
-    const channel = this.string(defaults, 'payment_channel')
-    const buyer = this.record(defaults, 'buyer')
-    const billing = this.record(defaults, 'billing_address')
+    const okUrl = orderUrlOf(defaults, 'success_url')
+    const failUrl = orderUrlOf(defaults, 'fail_url')
+    const ip = orderStringOf(defaults, 'ip')
+    const channel = orderStringOf(defaults, 'payment_channel')
+    const buyer = orderRecordOf(defaults, 'buyer')
+    const billing = orderRecordOf(defaults, 'billing_address')
 
     const requestData: Record<string, unknown> = {
       ...this.accountData(account),
@@ -150,15 +150,15 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
         DeviceChannel: channel,
       },
       CardHolderData: {
-        BillAddrCity: this.optionalText(billing, 'city'),
-        BillAddrCountry: this.optionalText(billing, 'country'),
-        BillAddrLine1: this.optionalText(billing, 'address'),
-        BillAddrPostCode: this.optionalText(billing, 'zip_code'),
-        BillAddrState: this.optionalText(billing, 'state'),
-        Email: this.optionalText(buyer, 'email'),
+        BillAddrCity: optionalTextOf(billing, 'city'),
+        BillAddrCountry: optionalTextOf(billing, 'country'),
+        BillAddrLine1: optionalTextOf(billing, 'address'),
+        BillAddrPostCode: optionalTextOf(billing, 'zip_code'),
+        BillAddrState: optionalTextOf(billing, 'state'),
+        Email: optionalTextOf(buyer, 'email'),
         MobilePhone: {
-          Cc: this.optionalText(buyer, 'gsm_number_cc'),
-          Subscriber: this.optionalText(buyer, 'gsm_number'),
+          Cc: optionalTextOf(buyer, 'gsm_number_cc'),
+          Subscriber: optionalTextOf(buyer, 'gsm_number'),
         },
       },
     }
@@ -186,8 +186,8 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
   ): Record<string, unknown> {
     this.assertSale(txType)
     const defaults = this.applyPaymentDefaults(order)
-    const orderId = this.orderId(defaults)
-    const kurus = this.valueFormatter.formatAmount(this.amount(defaults))
+    const orderId = orderIdOf(defaults)
+    const kurus = this.valueFormatter.formatAmount(orderAmountOf(defaults))
     const installment = this.installment(defaults)
     const currency = this.currency(defaults)
 
@@ -218,11 +218,11 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
   }
 
   createStatusRequestData(account: BoaPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = orderIdOf(order)
     const currency = this.currency(order)
     const now = Date.now()
-    const startDate = this.date(order, 'start_date', new Date(now - STATUS_LOOKBACK_MS))
-    const endDate = this.date(order, 'end_date', new Date(now))
+    const startDate = orderDateOf(order, 'start_date', new Date(now - STATUS_LOOKBACK_MS))
+    const endDate = orderDateOf(order, 'end_date', new Date(now))
     const remoteOrderId = this.optionalBankOrderId(order)
 
     const vposMessage: Record<string, unknown> = {
@@ -291,12 +291,12 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
     txType: TxType,
     kind: 'full' | 'refund',
   ): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = orderIdOf(order)
     const remoteOrderId = this.bankOrderId(order)
-    const refRetNum = this.text(order, 'ref_ret_num')
-    const authCode = this.text(order, 'auth_code')
-    const transactionId = this.text(order, 'transaction_id')
-    const kurus = this.valueFormatter.formatAmount(this.amount(order))
+    const refRetNum = orderTextOf(order, 'ref_ret_num')
+    const authCode = orderTextOf(order, 'auth_code')
+    const transactionId = orderTextOf(order, 'transaction_id')
+    const kurus = this.valueFormatter.formatAmount(orderAmountOf(order))
     const currency = this.currency(order)
 
     const vposMessage: Record<string, unknown> = {
@@ -378,24 +378,6 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
     }
   }
 
-  private orderId(order: PosOrder): string {
-    const raw: unknown = required(order, 'id')
-    const id = typeof raw === 'string' || (typeof raw === 'number' && Number.isFinite(raw)) ? String(raw) : ''
-    if (!ORDER_ID_PATTERN.test(id)) {
-      throw new PosError('The order id may only hold letters, digits, underscores and hyphens (at most 64).')
-    }
-    return id
-  }
-
-  /** The order amount as a positive number; the kuruş conversion rejects anything below one kuruş. */
-  private amount(order: PosOrder): number {
-    const amount = parseOrderAmount(required(order, 'amount'))
-    if (!(amount > 0)) {
-      throw new PosError('The order amount must be a positive number.')
-    }
-    return amount
-  }
-
   private installment(order: PosOrder): string {
     return this.valueFormatter.formatInstallment(parseInstallment(order.installment))
   }
@@ -404,50 +386,8 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
     return this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY)
   }
 
-  private url(order: PosOrder, key: 'success_url' | 'fail_url'): string {
-    const value: unknown = required(order, key)
-    if (typeof value !== 'string' || !URL_PATTERN.test(value)) {
-      throw new PosError(`Order field "${key}" must be an http(s) URL of printable ASCII characters.`)
-    }
-    return value
-  }
-
-  /** A required order value that is non-empty text. */
-  private string(order: PosOrder, key: string): string {
-    const value: unknown = required(order, key)
-    if (typeof value !== 'string') {
-      throw new PosError(`Order field "${key}" must be text`)
-    }
-    return value
-  }
-
-  /** A required order value that is text or a finite number, as text. */
-  private text(order: PosOrder, key: string): string {
-    const value: unknown = required(order, key)
-    if (typeof value === 'string') return value
-    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-    throw new PosError(`Order field "${key}" must be text`)
-  }
-
-  private record(order: PosOrder, key: string): Record<string, unknown> {
-    const value: unknown = required(order, key)
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      throw new PosError(`Order field "${key}" must be an object`)
-    }
-    return value as Record<string, unknown>
-  }
-
-  /** A text value of a nested order object; absent is an empty string, anything but text or a number is refused. */
-  private optionalText(source: Record<string, unknown>, key: string): string {
-    const value = ownValue(source, key)
-    if (value === undefined || value === null) return ''
-    if (typeof value === 'string') return value
-    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
-    throw new PosError(`Order value "${key}" must be text or a number`)
-  }
-
   private bankOrderId(order: PosOrder): string {
-    const id = this.text(order, 'remote_order_id')
+    const id = orderTextOf(order, 'remote_order_id')
     if (!BANK_ORDER_ID_PATTERN.test(id)) {
       throw new PosError('The bank order id must be a positive whole number.')
     }
@@ -458,14 +398,5 @@ export class KuveytPosRequestDataMapper extends AbstractRequestDataMapper<BoaPos
     const value: unknown = order.remote_order_id
     if (value === undefined || value === null) return null
     return this.bankOrderId(order)
-  }
-
-  private date(order: PosOrder, key: 'start_date' | 'end_date', fallback: Date): Date {
-    const value: unknown = order[key]
-    if (value === undefined || value === null) return fallback
-    if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
-      throw new PosError(`Order field "${key}" must be a valid Date`)
-    }
-    return value
   }
 }
