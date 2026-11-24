@@ -8,6 +8,7 @@ export type PosProductionBank =
   | 'finansbank'
   | 'denizbank'
   | 'garanti'
+  | 'kuveytpos'
   | 'halkbank'
   | 'teb'
   | 'isbank'
@@ -21,7 +22,7 @@ export type PosProductionBank =
   | 'ziraat-katilim-payfor'
 
 /**
- * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos and InterPos banks (the VakifBank
+ * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos and KuveytPos banks (the VakifBank
  * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default. The `akbank-pos` entry sets no `lang` or
  * `test_mode`: AkbankPos takes the language from `order.lang` and the environment from the endpoint URLs.
  *
@@ -79,6 +80,15 @@ export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeCo
       gateway_endpoints: {
         payment_api: 'https://sanalposprov.garanti.com.tr/VPServlet',
         gateway_3d: 'https://sanalposprov.garanti.com.tr/servlet/gt3dengine',
+      },
+    },
+    kuveytpos: {
+      name: 'kuveyt-pos',
+      class: 'KuveytPos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalpos.kuveytturk.com.tr/ServiceGateWay/Home',
+        query_api:
+          'https://boa.kuveytturk.com.tr/BOA.Integration.WCFService/BOA.Integration.VirtualPos/VirtualPosService.svc/Basic',
       },
     },
     halkbank: {

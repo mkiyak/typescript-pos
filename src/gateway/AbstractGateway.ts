@@ -72,6 +72,11 @@ export type GatewayConfig = {
    * without it an unsigned callback is accepted only as a decline whose result carries the order's id and bounded
    * decline reasons (nothing is provisioned, confirmed or flagged for review); an unsigned callback that reports 3D
    * success or an approval is always rejected. A present `HASH` is always verified, for every payment model.
+   *
+   * KuveytPos: reject any 3D callback that carries no `HashData` (`HashMismatchError`), declines included. Default
+   * false: without it an unsigned callback is accepted only as a decline whose result carries the order's id and
+   * bounded decline reasons (nothing is provisioned or flagged for review); an unsigned callback with response code
+   * `00` is always rejected. A present `HashData` is always verified.
    */
   require_3d_hash?: boolean
 }

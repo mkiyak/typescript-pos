@@ -8,6 +8,7 @@ import { AkbankPos } from '../../../src/gateway/AkbankPos.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { InterPos } from '../../../src/gateway/InterPos.js'
+import { KuveytPos } from '../../../src/gateway/KuveytPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
@@ -19,6 +20,7 @@ const accountFor = (gatewayClass: string, key: string) => {
   if (gatewayClass === 'AkbankPos') return AccountFactory.createAkbankPosAccount(key, 'm', 't', 'k')
   if (gatewayClass === 'GarantiPos') return AccountFactory.createGarantiPosAccount(key, 'm', 'u', 'p', 't', 'k')
   if (gatewayClass === 'InterPos') return AccountFactory.createInterPosAccount(key, 's', 'u', 'p', 'k')
+  if (gatewayClass === 'KuveytPos') return AccountFactory.createBoaPosAccount(key, 'm', 'u', 'c', 'k')
   if (gatewayClass === 'PayForPos') return AccountFactory.createPayForPosAccount(key, 'm', 'u', 'p', 'k')
   if (gatewayClass === 'PosNetPos' || gatewayClass === 'PosNetV1Pos')
     return AccountFactory.createPosNetPosAccount(key, 'm', 't', 'p', 'k')
@@ -30,7 +32,7 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos and InterPos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos and KuveytPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
       expect([
@@ -43,6 +45,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         'PosNetV1Pos',
         'PayForPos',
         'InterPos',
+        'KuveytPos',
       ]).toContain(bank.class)
     }
   })
@@ -60,6 +63,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
       PosNetV1Pos,
       PayForPos,
       InterPos,
+      KuveytPos,
     }[
       bank.class as
         | 'AssecoPos'
@@ -71,6 +75,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         | 'PosNetV1Pos'
         | 'PayForPos'
         | 'InterPos'
+        | 'KuveytPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -366,6 +371,46 @@ describe('InterPos endpoints', () => {
       for (const key of ['lang', 'test_mode', 'disable_3d_hash_check']) {
         expect(cfg.banks.denizbank).not.toHaveProperty(key)
       }
+    }
+  })
+})
+
+// addition: K12 shipped KuveytPos entries (the test entry keeps the bank's language; no test_mode, gateway_3d or
+// hash-check switch)
+describe('KuveytPos endpoints', () => {
+  it('production uses the live hosts', () => {
+    expect(posProductionConfig.banks.kuveytpos).toStrictEqual({
+      name: 'kuveyt-pos',
+      class: 'KuveytPos',
+      gateway_endpoints: {
+        payment_api: 'https://sanalpos.kuveytturk.com.tr/ServiceGateWay/Home',
+        query_api:
+          'https://boa.kuveytturk.com.tr/BOA.Integration.WCFService/BOA.Integration.VirtualPos/VirtualPosService.svc/Basic',
+      },
+    })
+  })
+
+  it('test uses the test hosts and Turkish', () => {
+    expect(posTestConfig.banks.kuveytpos).toStrictEqual({
+      name: 'kuveyt-pos',
+      class: 'KuveytPos',
+      gateway_endpoints: {
+        payment_api: 'https://boatest.kuveytturk.com.tr/boa.virtualpos.services/Home',
+        query_api:
+          'https://boatest.kuveytturk.com.tr/BOA.Integration.WCFService/BOA.Integration.VirtualPos/VirtualPosService.svc/Basic',
+      },
+      lang: 'tr',
+    })
+  })
+
+  it('both entries are deeply frozen and carry no test_mode, gateway_3d or hash-check switch', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      expect(Object.isFrozen(cfg.banks.kuveytpos)).toBe(true)
+      expect(Object.isFrozen(cfg.banks.kuveytpos.gateway_endpoints)).toBe(true)
+      expect(cfg.banks.kuveytpos).not.toHaveProperty('test_mode')
+      expect(cfg.banks.kuveytpos).not.toHaveProperty('disable_3d_hash_check')
+      expect(cfg.banks.kuveytpos).not.toHaveProperty('require_3d_hash')
+      expect(cfg.banks.kuveytpos.gateway_endpoints).not.toHaveProperty('gateway_3d')
     }
   })
 })

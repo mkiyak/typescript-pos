@@ -7,6 +7,7 @@ export type PosTestBank =
   | 'asseco'
   | 'denizbank'
   | 'garanti'
+  | 'kuveytpos'
   | 'vakifbank'
   | 'vakifbank-cp'
   | 'yapikredi'
@@ -15,7 +16,7 @@ export type PosTestBank =
   | 'ziraat-vpos'
 
 /**
- * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos and InterPos banks (the VakifBank test API
+ * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos and KuveytPos banks (the VakifBank test API
  * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it (not AkbankPos: its entry sets neither `test_mode` nor `lang`, the language comes from `order.lang`); for the
  * Asseco and PayFlex gateways the environment is selected by the endpoint URLs. The `garanti` entry sets `test_mode: true`
  * because the Garanti test environment needs `Mode TEST` in every request.
@@ -68,6 +69,16 @@ export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
         payment_api: 'https://sanalposprovtest.garantibbva.com.tr/VPServlet',
         gateway_3d: 'https://sanalposprovtest.garantibbva.com.tr/servlet/gt3dengine',
       },
+    },
+    kuveytpos: {
+      name: 'kuveyt-pos',
+      class: 'KuveytPos',
+      gateway_endpoints: {
+        payment_api: 'https://boatest.kuveytturk.com.tr/boa.virtualpos.services/Home',
+        query_api:
+          'https://boatest.kuveytturk.com.tr/BOA.Integration.WCFService/BOA.Integration.VirtualPos/VirtualPosService.svc/Basic',
+      },
+      lang: 'tr',
     },
     vakifbank: {
       name: 'VakifBank-VPOS',

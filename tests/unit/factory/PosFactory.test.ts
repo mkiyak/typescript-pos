@@ -10,6 +10,7 @@ import { AkbankPos } from '../../../src/gateway/AkbankPos.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { InterPos } from '../../../src/gateway/InterPos.js'
+import { KuveytPos } from '../../../src/gateway/KuveytPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
@@ -230,6 +231,47 @@ describe('PosFactory.createPosGateway', () => {
     expect(calls[0]?.body).toBe(
       'UserCode=u&UserPass=p&ShopCode=s&orgOrderId=2020110828BC&TxnType=StatusHistory&SecureType=NonSecure&Lang=tr',
     )
+    expect(result.status).toBe('declined')
+  })
+
+  it('creates the kuveytpos KuveytPos gateway from the shipped test config', () => {
+    const account = AccountFactory.createBoaPosAccount('kuveytpos', '496', 'apiuser1', '400235', 'Api123')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(KuveytPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(Object.keys(gateway.getCardTypeMapping())).toHaveLength(3)
+    expect(gateway.getCurrencies()).toHaveLength(3)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-BOA account for a KuveytPos bank', () => {
+    const wrong = AccountFactory.createInterPosAccount('kuveytpos', 's', 'u', 'p', 'k')
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
+      'Bank [kuveytpos] is configured for KuveytPos and needs a BoaPosAccount.',
+    )
+  })
+
+  // addition: K6 status goes to the SOAP query endpoint, signed with the account's hashed password
+  it('sends a KuveytPos status to the Kuveyt test SOAP endpoint', async () => {
+    const calls: { url: string; headers: Headers; body: string }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), headers: new Headers(init?.headers), body: String(init?.body) })
+      return new Response(
+        '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><GetMerchantOrderDetailResponse/></s:Body></s:Envelope>',
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+    const account = AccountFactory.createBoaPosAccount('kuveytpos', '496', 'apiuser1', '400235', 'Api123')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    const result = await gateway.status({ id: '2023070849CD' } as never)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(posTestConfig.banks.kuveytpos.gateway_endpoints.query_api)
+    expect(calls[0]?.headers.get('SOAPAction')).toBe(
+      'http://boa.net/BOA.Integration.VirtualPos/Service/IVirtualPosService/GetMerchantOrderDetail',
+    )
+    expect(calls[0]?.body).toContain('<ser:MerchantOrderId>2023070849CD</ser:MerchantOrderId>')
+    expect(calls[0]?.body).not.toContain('Api123')
     expect(result.status).toBe('declined')
   })
 
@@ -463,6 +505,7 @@ describe('PosFactory.createPosGateway', () => {
       PosNetV1Pos: (bank: string) => AccountFactory.createPosNetPosAccount(bank, 'm', 't', 'p', 'k'),
       PayForPos: (bank: string) => AccountFactory.createPayForPosAccount(bank, 'm', 'u', 'p', 'k'),
       InterPos: (bank: string) => AccountFactory.createInterPosAccount(bank, 's', 'u', 'p', 'k'),
+      KuveytPos: (bank: string) => AccountFactory.createBoaPosAccount(bank, '1', 'u', '2', 'p'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

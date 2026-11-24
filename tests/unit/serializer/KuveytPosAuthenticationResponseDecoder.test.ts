@@ -188,4 +188,30 @@ describe('KuveytPosAuthenticationResponseDecoder', () => {
     expect(() => KuveytPosAuthenticationResponseDecoder.decode(undefined as never)).toThrow(PosError)
     expect(() => KuveytPosAuthenticationResponseDecoder.decode({ a: 1 } as never)).toThrow(PosError)
   })
+
+  // addition: Task 4/5, the shapes the gateway must refuse reach it as lists and records, never as text
+  it.each([
+    [
+      'a duplicated MerchantOrderId is a list',
+      '<r><MerchantOrderId>A</MerchantOrderId><MerchantOrderId>B</MerchantOrderId></r>',
+      { MerchantOrderId: ['A', 'B'] },
+    ],
+    [
+      'an attributed ResponseCode is a record',
+      '<r><ResponseCode a="1">00</ResponseCode></r>',
+      { ResponseCode: { '@a': '1', '#': '00' } },
+    ],
+    [
+      'a ResponseCode with a child is a record',
+      '<r><ResponseCode><b>00</b></ResponseCode></r>',
+      { ResponseCode: { b: '00' } },
+    ],
+    [
+      'a duplicated message Amount is a list',
+      '<r><VPosMessage><Amount>1</Amount><Amount>00</Amount></VPosMessage></r>',
+      { VPosMessage: { Amount: ['1', '00'] } },
+    ],
+  ])('%s', (_name, xml, expected) => {
+    expect(KuveytPosAuthenticationResponseDecoder.decode(encodeURIComponent(xml))).toStrictEqual(expected)
+  })
 })
