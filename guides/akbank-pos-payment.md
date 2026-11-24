@@ -72,7 +72,10 @@ concatenation of its values, so ids with a single shape keep it unambiguous wher
 - **The signature cannot be switched off.** The callback carries a `hash` over the fields named in `hashParams`. 3D Pay
   and 3D Host callbacks must always be signed, a decline included. A 3D Secure callback without 3D success (response
   code other than `VPS-0000`) moves no money and maps as declined; a 3D-successful one must be signed. A signed
-  callback whose decisive fields are malformed throws `HashMismatchError`, and so does a wrong hash. Comparisons are
+  callback whose decisive fields are malformed throws `HashMismatchError`, and so does a wrong hash. Careful: for a 3D Pay
+  or 3D Host callback, a `HashMismatchError` about malformed fields (valid hash, unexpected format) can come from a genuine
+  approved callback, so the card may have been charged. Re-check the order with `orderHistory` before you tell the customer
+  the payment failed. Comparisons are
   constant time. A callback value that is not a plain string (an object or an array) is rejected with `PosError`
   before anything else.
 - **The callback is bound to the order.** A mismatch throws `OrderMismatchError` (`field` names the value).

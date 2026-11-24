@@ -17,7 +17,8 @@ export type PosProductionBank =
 
 /**
  * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos and AkbankPos banks (the VakifBank
- * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default.
+ * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default. The `akbank-pos` entry sets no `lang` or
+ * `test_mode`: AkbankPos takes the language from `order.lang` and the environment from the endpoint URLs.
  *
  * Deeply frozen: spread an entry into a new object to change it
  * (`{ ...posProductionConfig.banks.vakifbank, require_3d_hash: true }`).

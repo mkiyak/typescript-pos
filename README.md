@@ -163,7 +163,9 @@ with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.c
 4. Sensitive data (PAN, CVV, expiry, passwords, store keys) is masked before it reaches the logger.
 5. Constant-time hash comparison; the Asseco hash uses the exact natural, case-insensitive key ordering the bank expects.
 6. Extra Asseco, Garanti and Akbank safeguards: the returned order id, amount and payment model (Garanti: also terminal and currency) are compared with the order
-   (`OrderMismatchError`, with `paymentMayHaveCompleted` when the bank approved); an authorized-but-3D-failed
+   (`OrderMismatchError`, with `paymentMayHaveCompleted` when the bank approved); for Akbank the callback's order id and
+   merchant/terminal are checked directly, and the amount, currency, transaction type, installment count and order status are
+   confirmed through the bank's order history; an authorized-but-3D-failed
    response is declined and flagged `requires_manual_review`.
 7. Extra PayFlex safeguards: strict 3D rule (Status `Y`, ECI `02`/`05`, CAVV, `MdStatus` 1 when present), callback
    amount, currency and merchant binding, optional `require_3d_hash`.

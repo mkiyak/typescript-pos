@@ -166,7 +166,9 @@ olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos` ise `hi
 4. Hassas veri (PAN, CVV, son kullanma, şifreler, store key) logger'a ulaşmadan maskelenir.
 5. Sabit zamanlı hash karşılaştırması; Asseco hash'i bankanın beklediği doğal, büyük/küçük harf duyarsız anahtar sıralamasını birebir kullanır.
 6. Ek Asseco, Garanti ve Akbank korumaları: dönen sipariş numarası, tutar ve ödeme modeli (Garanti'de ayrıca terminal ve para birimi) siparişle karşılaştırılır
-   (`OrderMismatchError`; banka onay verdiyse `paymentMayHaveCompleted` ile); provizyon verilmiş ama 3D başarısız
+   (`OrderMismatchError`; banka onay verdiyse `paymentMayHaveCompleted` ile); Akbank'ta callback'teki sipariş numarası ve
+   üye işyeri/terminal doğrudan, tutar, para birimi, işlem türü, taksit sayısı ve sipariş durumu ise bankanın sipariş geçmişi
+   üzerinden doğrulanır; provizyon verilmiş ama 3D başarısız
    cevap `declined` olur ve `requires_manual_review` ile işaretlenir.
 7. Ek PayFlex korumaları: katı 3D kuralı (Status `Y`, ECI `02`/`05`, CAVV, varsa `MdStatus` 1), callback tutar, para
    birimi ve üye işyeri bağlaması, isteğe bağlı `require_3d_hash`.

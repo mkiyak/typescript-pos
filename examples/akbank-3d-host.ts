@@ -38,7 +38,6 @@ export async function startPayment(orderId: string, amount: number) {
     amount, // major unit: 10.5 = 10,50 TL
     currency: 'TRY',
     installment: 0,
-    ip: '203.0.113.10', // the customer's IP
     success_url: 'https://shop.example.com/pos/callback',
     fail_url: 'https://shop.example.com/pos/callback',
   }
@@ -58,7 +57,10 @@ export async function handleCallback(
     return { paid: response.status === 'approved', review: response.requires_manual_review === true, response }
   } catch (error) {
     if (error instanceof HashMismatchError) {
-      return { paid: false, review: false } // forged, unsigned or corrupted callback
+      // A wrong hash is a forged or unsigned callback. A hash error about malformed fields can also come from a genuine
+      // approved callback in an unexpected format, so the card may have been charged: re-check with
+      // pos.orderHistory(order) before you tell the customer the payment failed.
+      return { paid: false, review: true }
     }
     if (error instanceof OrderMismatchError) {
       // The callback does not belong to this order, or the bank did not confirm the payment. When

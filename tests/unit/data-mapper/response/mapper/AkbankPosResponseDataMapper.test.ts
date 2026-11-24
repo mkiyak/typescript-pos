@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AkbankPosResponseDataMapper } from '../../../../../src/data-mapper/response/mapper/AkbankPosResponseDataMapper.js'
 import { BasicResponseValueFormatter } from '../../../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
@@ -91,7 +92,7 @@ describe('AkbankPosResponseDataMapper', () => {
     expect(mapper.extractMdStatus(responseData)).toBe(expected)
   })
 
-  // deviation: A22 status queries are not supported by this gateway
+  // deviation: A22 the bank API has no status request, so mapping a status response is refused
   it('mapStatusResponse is not supported', () => {
     expect(() => mapper.mapStatusResponse({})).toThrow(NotImplementedError)
   })
@@ -225,6 +226,10 @@ describe('AkbankPosResponseDataMapper', () => {
 
   describe('additions', () => {
     const order: PosOrder = { id: '202404207281', amount: 1.01, currency: CURRENCY.TRY, installment: 0 } as PosOrder
+    const SECRET =
+      '3230323330393034313735303032363031353172675f357637355f3273387373745f7233725f73323333383737335f323272383774767276327672323531355f'
+    const H = (s: string): string =>
+      createHmac('sha512', Buffer.from(SECRET, 'utf8')).update(s, 'utf8').digest('base64')
     const declinedHostApproved = {
       txnCode: '1000',
       responseCode: 'VPS-1005',
@@ -239,7 +244,7 @@ describe('AkbankPosResponseDataMapper', () => {
       rrn: '411224360676',
       batchNumber: '46',
       hashParams: 'txnCode+responseCode',
-      hash: 'zF0sbk//9luDy8Zg0Q/R39TRXXCHrq7MQziTHBxjVU0iaE5AntVkFv0JNCE4AkF5i7DHC7czyqplDkIfVrTpAQ==',
+      hash: H('1000VPS-1005'),
     }
 
     // addition: A9 host approved, API declined
