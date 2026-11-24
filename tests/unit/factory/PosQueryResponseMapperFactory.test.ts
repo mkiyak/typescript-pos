@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { AkbankPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/AkbankPosQueryResponseDataMapper.js'
 import { GarantiPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/GarantiPosQueryResponseDataMapper.js'
+import { PayForPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/PayForPosQueryResponseDataMapper.js'
 import { AssecoPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/AssecoPosResponseValueFormatter.js'
 import { BasicResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
 import { GarantiPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/GarantiPosResponseValueFormatter.js'
@@ -9,6 +10,7 @@ import { AssecoPosResponseValueMapper } from '../../../src/data-mapper/response/
 import { GarantiPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/GarantiPosResponseValueMapper.js'
 import { PayFlexCPV4PosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayFlexCPV4PosResponseValueMapper.js'
 import { PayFlexV4PosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayFlexV4PosResponseValueMapper.js'
+import { PayForPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayForPosResponseValueMapper.js'
 import { PosQueryResponseMapperFactory } from '../../../src/factory/PosQueryResponseMapperFactory.js'
 import { noopLogger } from '../../../src/logger.js'
 
@@ -44,6 +46,17 @@ describe('PosQueryResponseMapperFactory', () => {
         noopLogger,
       ),
     ).toBeInstanceOf(GarantiPosQueryResponseDataMapper)
+  })
+
+  it('testCreateForGatewayReturnsCorrectMapper PayForPos', () => {
+    expect(
+      PosQueryResponseMapperFactory.createForGateway(
+        'PayForPos',
+        new BasicResponseValueFormatter(),
+        new PayForPosResponseValueMapper(),
+        noopLogger,
+      ),
+    ).toBeInstanceOf(PayForPosQueryResponseDataMapper)
   })
 
   // addition: the other two gateways of this version have no query response mapper either

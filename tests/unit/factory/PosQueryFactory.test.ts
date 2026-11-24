@@ -15,8 +15,10 @@ import { AssecoPosQuery } from '../../../src/pos-query/AssecoPosQuery.js'
 import { GarantiPosQuery } from '../../../src/pos-query/GarantiPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../../../src/pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../../../src/pos-query/PayFlexV4PosQuery.js'
+import { PayForPosQuery } from '../../../src/pos-query/PayForPosQuery.js'
 import { PosNetPosQuery } from '../../../src/pos-query/PosNetPosQuery.js'
 import { PosNetV1PosQuery } from '../../../src/pos-query/PosNetV1PosQuery.js'
+import { XmlEncoder } from '../../../src/serializer/XmlEncoder.js'
 
 const assecoConfig: PosConfig = {
   banks: {
@@ -447,5 +449,116 @@ describe('PosQueryFactory with PosNetPos and PosNetV1Pos', () => {
     for (const secret of [Y_KEY, A_KEY, '4048090000000001', '2411', '"ExpireDate":"2411"', '<expDate>2411<']) {
       expect(text).not.toContain(secret)
     }
+  })
+})
+
+describe('PosQueryFactory with PayForPos', () => {
+  const PASSWORD = 'UcBN0'
+  const PAN = '4155650100416111'
+  const qAccount = () =>
+    AccountFactory.createPayForPosAccount(
+      'qnbfinansbank-payfor',
+      '085300000009704',
+      'QNB_API_KULLANICI_3DPAY',
+      PASSWORD,
+      '12345678',
+    )
+  const zAccount = () =>
+    AccountFactory.createPayForPosAccount(
+      'ziraat-katilim-payfor',
+      '085300000009704',
+      'ZIRAATKATILIM_API_KULLANICI_3DPAY',
+      PASSWORD,
+      '12345678',
+      '12',
+    )
+  const ENDPOINT = 'https://vpostest.qnb.com.tr/Gateway/XMLGate.aspx'
+
+  it('creates the query class from the shipped test config', () => {
+    expect(PosQueryFactory.createPosQuery(qAccount(), posTestConfig)).toBeInstanceOf(PayForPosQuery)
+    expect(PosQueryFactory.createPosQuery(zAccount(), posTestConfig)).toBeInstanceOf(PayForPosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('PayForPos')).toBe(PayForPosQuery)
+  })
+
+  it('rejects an AssecoPosAccount for the PayFor bank', () => {
+    expect(() => PosQueryFactory.createPosQuery(assecoAccount('qnbfinansbank-payfor'), posTestConfig)).toThrow(PosError)
+  })
+
+  // addition: end to end through the real mappers, client and decoder with a fake fetch
+  function e2e(answer: string, logger?: PosLogger) {
+    const calls: Array<{ url: string; body: string }> = []
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), body: String(init?.body) })
+      return new Response(answer, { status: 200 })
+    }) as unknown as typeof fetch
+    const q = PosQueryFactory.createPosQuery(qAccount(), posTestConfig, { fetch: fetchFn, logger })
+    return { q, calls, fetchFn }
+  }
+
+  const historyXml = () => {
+    const fixture = JSON.parse(
+      readFileSync(new URL('../test_data/payfor/history/success_pay_response.json', import.meta.url), 'utf8'),
+    ) as Record<string, unknown>
+    // the attributes of the root element are dropped
+    for (const key of Object.keys(fixture)) if (key.startsWith('@')) delete fixture[key]
+    return XmlEncoder.encode(fixture, { rootName: 'PayforResponse', encoding: 'UTF-8' })
+  }
+  const inquiry = {
+    SecureType: 'Inquiry',
+    TxnType: 'ParaPuanInquiry',
+    Pan: PAN,
+    Expiry: '0125',
+    Cvv2: '123',
+  }
+
+  it('custom query posts PayforRequest XML with the account fields after the caller fields', async () => {
+    const { q, calls } = e2e('<PayforResponse><ProcReturnCode>00</ProcReturnCode></PayforResponse>')
+    const result = await q.customQuery(inquiry)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(ENDPOINT)
+    const body = calls[0]?.body ?? ''
+    expect(body).toContain('<PayforRequest>')
+    expect(body).toContain(
+      `<Cvv2>123</Cvv2><MerchantId>085300000009704</MerchantId><UserCode>QNB_API_KULLANICI_3DPAY</UserCode><UserPass>${PASSWORD}</UserPass><MbrId>5</MbrId>`,
+    )
+    expect(result).toEqual({ ProcReturnCode: '00' })
+  })
+
+  it('history posts the Türkiye day and maps the report', async () => {
+    const { q, calls } = e2e(historyXml())
+    const result = await q.history({ transaction_date: new Date('2024-01-21T12:00:00+03:00') })
+
+    const body = calls[0]?.body ?? ''
+    expect(calls[0]?.url).toBe(ENDPOINT)
+    expect(body).toContain('<ReqDate>20240121</ReqDate>')
+    expect(body).toContain('<SecureType>Report</SecureType>')
+    expect(body).toContain('<TxnType>TxnHistory</TxnType>')
+    expect(result.status).toBe('approved')
+    expect(result.trans_count).toBe(1)
+    const first = (result.transactions as Array<Record<string, unknown>>)[0]
+    expect(first?.order_id).toBe('202401212A22')
+    expect(first?.transaction_time).toEqual(new Date('2024-01-21T21:40:47+03:00'))
+  })
+
+  it('a URL on a foreign origin rejects before anything is sent', async () => {
+    const { q, fetchFn } = e2e('<PayforResponse/>')
+    await expect(q.customQuery(inquiry, 'https://evil.example/x')).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('never logs the password, the card number, the expiry or the CVV', async () => {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    const logger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
+    const { q } = e2e(historyXml(), logger)
+    await q.customQuery(inquiry)
+    await q.history({ transaction_date: new Date('2024-01-21T12:00:00+03:00') })
+    const all = JSON.stringify(lines)
+    expect(lines.length).toBeGreaterThan(0)
+    expect(all).not.toContain(PASSWORD)
+    expect(all).not.toContain(PAN)
+    expect(all).not.toContain('0125')
+    expect(all).not.toContain('"123"')
   })
 })

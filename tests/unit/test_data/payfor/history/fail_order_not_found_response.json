@@ -38,7 +38,7 @@
       "AlphaCode": "TL",
       "Ecommerce": "1",
       "Accept": "*\/*",
-      "Agent": "Symfon\u0079 HttpClient\/Curl",
+      "Agent": "test-client\/1.0",
       "MrcCountryCode": "792",
       "MrcName": "3D PAY TEST ISYERI",
       "MerchantHomeUrl": "https:\/\/vpostest.qnbfinansbank.com\/",

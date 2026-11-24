@@ -5,6 +5,7 @@ import { AssecoPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-qu
 import { GarantiPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/GarantiPosQueryRequestDataMapper.js'
 import { PayFlexCPV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayFlexCPV4PosQueryRequestDataMapper.js'
 import { PayFlexV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayFlexV4PosQueryRequestDataMapper.js'
+import { PayForPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayForPosQueryRequestDataMapper.js'
 import { PosNetPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PosNetPosQueryRequestDataMapper.js'
 import { PosNetV1PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PosNetV1PosQueryRequestDataMapper.js'
 import { AkbankPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/AkbankPosRequestValueFormatter.js'
@@ -12,6 +13,7 @@ import { AssecoPosRequestValueFormatter } from '../../../src/data-mapper/request
 import { GarantiPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/GarantiPosRequestValueFormatter.js'
 import { PayFlexCPV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexCPV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
+import { PayForPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayForPosRequestValueFormatter.js'
 import { PosNetPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PosNetPosRequestValueFormatter.js'
 import { PosNetV1PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PosNetV1PosRequestValueFormatter.js'
 import { AkbankPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/AkbankPosRequestValueMapper.js'
@@ -19,6 +21,7 @@ import { AssecoPosRequestValueMapper } from '../../../src/data-mapper/request/va
 import { GarantiPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/GarantiPosRequestValueMapper.js'
 import { PayFlexCPV4PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayFlexCPV4PosRequestValueMapper.js'
 import { PayFlexV4PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
+import { PayForPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayForPosRequestValueMapper.js'
 import { PosNetPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PosNetPosRequestValueMapper.js'
 import { PosNetV1PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PosNetV1PosRequestValueMapper.js'
 import { GatewayClassNotConfiguredError } from '../../../src/errors.js'
@@ -43,6 +46,7 @@ const rows = [
     PayFlexV4PosRequestValueMapper,
     PayFlexV4PosRequestValueFormatter,
   ],
+  ['PayForPos', PayForPosQueryRequestDataMapper, PayForPosRequestValueMapper, PayForPosRequestValueFormatter],
   ['PosNetPos', PosNetPosQueryRequestDataMapper, PosNetPosRequestValueMapper, PosNetPosRequestValueFormatter],
   ['PosNetV1Pos', PosNetV1PosQueryRequestDataMapper, PosNetV1PosRequestValueMapper, PosNetV1PosRequestValueFormatter],
 ] as const
