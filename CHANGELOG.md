@@ -1,5 +1,11 @@
 # typescript-pos
 
+## 0.5.0
+
+### Minor Changes
+
+- 9303957: Add the AkbankPos gateway (Akbank virtual POS API: 3D Secure, 3D Pay, 3D Host, non-secure, pre/post auth, cancel, refund, order history, recurring) with signed requests, callback hash and order checks and bank-confirmed 3D Pay/Host results, and AkbankPosQuery with custom queries and transaction history.
+
 ## 0.4.0
 
 ### Minor Changes
