@@ -50,6 +50,9 @@ export type GatewayConfig = {
    * Garanti 3D Pay: reject a callback that carries no `hash` (`HashMismatchError`). Default false, because the
    * bank sends some error callbacks unsigned; without it an unsigned callback is accepted only when it maps as
    * declined and its `procreturncode` is not `00`.
+   *
+   * AkbankPos: no effect. The bank signs every callback; a 3D Pay / 3D Host callback without a valid hash is always
+   * rejected, and an unsigned 3D Secure callback is accepted only as a decline (nothing is provisioned).
    */
   require_3d_hash?: boolean
 }
