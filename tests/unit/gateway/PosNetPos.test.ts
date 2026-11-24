@@ -1321,7 +1321,11 @@ describe('PosNetPos (end to end) callback checks before any request', () => {
     ['too long BankPacket', { ...callbackC, BankPacket: 'A'.repeat(8193) }, PACKETS_MALFORMED],
     [
       'inherited Sign',
-      Object.assign(Object.create({ Sign: 'AB' }), { ...callbackC, Sign: undefined }),
+      // addition: 'AB' is valid hex, so only an own-property read keeps the inherited Sign from reaching the bank
+      Object.assign(Object.create({ Sign: 'AB' }), {
+        MerchantPacket: callbackC.MerchantPacket,
+        BankPacket: callbackC.BankPacket,
+      }),
       PACKETS_MALFORMED,
     ],
   ] as Array<[string, Data, string]>)('rejects %s (PosError, nothing sent)', async (_name, callback, message) => {
