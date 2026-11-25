@@ -48,7 +48,7 @@ describe('ParamPosRequestValueMapper', () => {
     expect(() => mapper.mapTxType(TX_TYPE.PAY_AUTH, null)).toThrow(PosError)
   })
 
-  // addition: only a sale is redirected to the foreign currency operation; the cancel, refund, status and
+  // deviation: P2 (only a pay sale is redirected, 3D Host excluded) - only a sale is redirected to the foreign currency operation; the cancel, refund, status and
   // post-auth of a foreign currency order keep their usual operation
   it.each([
     [TX_TYPE.CANCEL, 'TP_Islem_Iptal_Iade_Kismi2'],

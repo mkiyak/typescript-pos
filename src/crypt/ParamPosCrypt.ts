@@ -11,7 +11,7 @@ const LOG_VALUE_LIMIT = 64
 
 /** A base64 SHA-1 digest: 20 bytes, 27 characters and one padding character. */
 const HASH_PATTERN = /^[A-Za-z0-9+/]{27}=$/
-const ORDER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+export const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 const CURRENCY_CODE = /^\d{4}$/
 
 /**
@@ -142,7 +142,7 @@ export class ParamPosCrypt extends AbstractCrypt<ParamPosAccount> {
    * recomputed later without any stored state. A weak API password still weakens it: use a strong one.
    */
   create3DHostTransactionId(account: ParamPosAccount, orderId: string, kurus: number, currencyCode: string): string {
-    if (typeof orderId !== 'string' || !ORDER_ID.test(orderId)) {
+    if (typeof orderId !== 'string' || !ORDER_ID_PATTERN.test(orderId)) {
       throw new PosError('Param transaction id: the order id is not valid')
     }
     if (typeof kurus !== 'number' || !Number.isSafeInteger(kurus) || kurus <= 0) {

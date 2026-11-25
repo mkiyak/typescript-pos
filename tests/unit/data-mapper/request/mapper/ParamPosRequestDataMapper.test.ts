@@ -380,14 +380,15 @@ describe('ParamPosRequestDataMapper', () => {
         }),
       ],
       [
+        // deviation: the pre-authorization signature covers the return URLs, so they are always required and sent
         'pre-auth',
-        orderNs(),
+        orderNs({ fail_url: 'https://domain.com/fail' }),
         TX_TYPE.PAY_PRE_AUTH,
         'TP_Islem_Odeme_OnProv_WMD',
         registerBody({
           secure: 'NS',
           amount: '100,25',
-          urls: false,
+          urls: true,
           hash: 'jsLYSB3lJ81leFgDLw4D8PbXURs=',
           islemId: 'rand',
         }),
@@ -432,6 +433,54 @@ describe('ParamPosRequestDataMapper', () => {
       const real = makeMapper(new ParamPosCrypt())
       const actual = real.createNonSecurePaymentRequestData(PA, orderNs(), TX_TYPE.PAY_AUTH, card)
       expect(((actual['soap:Body'] as Data).TP_WMD_UCD as Data).Islem_Hash).toBe(RH6)
+    })
+
+    // addition: a TRY pre-authorization signs the return URLs, so the real crypt must be able to sign it
+    it('signs a TRY non-secure pre-authorization with the real crypt', () => {
+      const real = makeMapper(new ParamPosCrypt())
+      const order = orderNs({ fail_url: 'https://domain.com/fail' })
+      const actual = real.createNonSecurePaymentRequestData(PA, order, TX_TYPE.PAY_PRE_AUTH, card)
+      const body = (actual['soap:Body'] as Data).TP_Islem_Odeme_OnProv_WMD as Data
+      expect(body.Islem_Hash).toMatch(/^[A-Za-z0-9+/]{27}=$/)
+      expect(body.Basarili_URL).toBe('https://domain.com/success')
+      expect(body.Hata_URL).toBe('https://domain.com/fail')
+    })
+
+    it('needs both return URLs for a TRY pre-authorization', () => {
+      crypt.generateRandomString.mockReturnValue('ID')
+      crypt.createHash.mockReturnValue('H')
+      for (const key of ['success_url', 'fail_url']) {
+        expect(() =>
+          mapper.createNonSecurePaymentRequestData(
+            PA,
+            orderNs({ fail_url: 'https://domain.com/fail', [key]: undefined }),
+            TX_TYPE.PAY_PRE_AUTH,
+            card,
+          ),
+        ).toThrow(PosError)
+      }
+    })
+
+    // addition: every request the mapper can emit is signable by the real crypt
+    it.each([
+      [MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, 'TRY'],
+      [MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, 'USD'],
+      [MODEL.THREE_D_SECURE, TX_TYPE.PAY_PRE_AUTH, 'TRY'],
+      [MODEL.THREE_D_PAY, TX_TYPE.PAY_AUTH, 'TRY'],
+      [MODEL.THREE_D_PAY, TX_TYPE.PAY_AUTH, 'EUR'],
+      [MODEL.NON_SECURE, TX_TYPE.PAY_AUTH, 'TRY'],
+      [MODEL.NON_SECURE, TX_TYPE.PAY_AUTH, 'GBP'],
+      [MODEL.NON_SECURE, TX_TYPE.PAY_PRE_AUTH, 'TRY'],
+      [MODEL.NON_SECURE, TX_TYPE.PAY_PRE_AUTH, 'USD'],
+    ] as const)('signs %s %s %s with the real crypt', (model, txType, currency) => {
+      const real = makeMapper(new ParamPosCrypt())
+      const order = order3d({ currency })
+      const actual =
+        model === MODEL.NON_SECURE
+          ? real.createNonSecurePaymentRequestData(PA, order, txType, card)
+          : real.create3DFormInitializeRequestData(PA, order, model, txType, card)
+      const [body] = Object.values(actual['soap:Body'] as Data) as [Data]
+      expect(body.Islem_Hash).toMatch(/^[A-Za-z0-9+/]{27}=$/)
     })
 
     // addition: a foreign currency request without return URLs never reaches the bank
@@ -699,6 +748,21 @@ describe('ParamPosRequestDataMapper', () => {
         islemGUID: '8b6868fe-a553-4164-a7cc-528461f21759',
       }),
     )
+  })
+
+  // addition: an order that is not an object is a PosError, never a TypeError
+  it.each([null, undefined, 'x', 5, []])('rejects the order %j', (order) => {
+    const o = order as never
+    const cb = { md: 'a', islemGUID: '8b6868fe-a553-4164-a7cc-528461f21759' }
+    expect(() => mapper.createStatusRequestData(PA, o)).toThrow(PosError)
+    expect(() => mapper.createCancelRequestData(PA, o)).toThrow(PosError)
+    expect(() => mapper.createRefundRequestData(PA, o, TX_TYPE.REFUND)).toThrow(PosError)
+    expect(() => mapper.createNonSecurePostAuthPaymentRequestData(PA, o)).toThrow(PosError)
+    expect(() => mapper.createNonSecurePaymentRequestData(PA, o, TX_TYPE.PAY_AUTH, card)).toThrow(PosError)
+    expect(() => mapper.create3DFormInitializeRequestData(PA, o, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card)).toThrow(
+      PosError,
+    )
+    expect(() => mapper.create3DPaymentRequestData(PA, o, TX_TYPE.PAY_AUTH, cb)).toThrow(PosError)
   })
 
   it('has no order history request', () => {

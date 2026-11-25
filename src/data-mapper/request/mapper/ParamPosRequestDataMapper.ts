@@ -11,21 +11,21 @@ import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxTy
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
-import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
 import { isSet } from '../../../util/required.js'
 import type { ParamPosRequestValueFormatter } from '../value-formatter/ParamPosRequestValueFormatter.js'
 import type { ParamPosRequestValueMapper } from '../value-mapper/ParamPosRequestValueMapper.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
-
-const XMLNS = 'https://turkpos.com.tr/'
-
-/** Order ids are signed and posted as plain ASCII: a letter or digit first, then letters, digits, `_` and `-`, at most 64. */
-const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
-
-/** Return URLs: http(s) and printable ASCII only, so they cannot smuggle blanks or other schemes. */
-const URL_PATTERN = /^https?:\/\/[\x21-\x7E]+$/i
-
-const IP_PATTERN = /^[0-9A-Fa-f.:]{2,45}$/
+import {
+  accountData,
+  envelope,
+  isRecord,
+  orderAmount,
+  orderValue,
+  readOrderId,
+  requestIp,
+  returnUrl,
+  XMLNS,
+} from './paramRequestFields.js'
 
 /** The bank's transaction GUID of a 3D Secure session. */
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -40,9 +40,6 @@ const UCD_VALUE_LIMIT = 2048
 
 /** The bank-built 3D page is kept whole; a page of this size is not a payment page. */
 const HTML_LIMIT = 1_048_576
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value)
 
 /**
  * Creates request data for Param SOAP requests. Every request is `{ 'soap:Body': { <operation>: body } }` and the
@@ -74,14 +71,14 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
     responseData: Record<string, unknown>,
   ): Record<string, unknown> {
     this.assertSaleTxType(txType)
-    const orderId = this.orderId(order)
-    this.orderAmount(order, txType)
+    const orderId = readOrderId(order)
+    orderAmount(this.valueFormatter, order, txType)
     const md = this.sessionField(responseData, 'md', MD_PATTERN)
     const islemGuid = this.sessionField(responseData, 'islemGUID', GUID_PATTERN)
 
-    return this.envelope({
+    return envelope({
       TP_WMD_Pay: {
-        ...this.accountData(account),
+        ...accountData(account),
         '@xmlns': XMLNS,
         UCD_MD: md,
         Islem_GUID: islemGuid,
@@ -111,7 +108,7 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
     const expYear = this.valueFormatter.formatCardExpDate(creditCard, 'KK_SK_Yil')
 
     const body: Record<string, unknown> = {
-      ...this.accountData(account),
+      ...accountData(account),
       '@xmlns': XMLNS,
       Islem_Guvenlik_Tip: this.valueMapper.mapSecureType(paymentModel),
       Islem_ID: this.transactionId(),
@@ -145,7 +142,7 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
     const soapAction = this.soapActionOf(order, MODEL.NON_SECURE, txType)
 
     const body: Record<string, unknown> = {
-      ...this.accountData(account),
+      ...accountData(account),
       '@xmlns': XMLNS,
       Islem_Guvenlik_Tip: this.valueMapper.mapSecureType(MODEL.NON_SECURE),
       Islem_ID: this.transactionId(),
@@ -158,6 +155,9 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
     }
     if (values.currencyCode !== null) {
       body.Doviz_Kodu = values.currencyCode
+    }
+    // The signatures of a foreign currency sale and of a pre-authorization cover the return URLs.
+    if (values.currencyCode !== null || txType === TX_TYPE.PAY_PRE_AUTH) {
       body.Basarili_URL = values.successUrl
       body.Hata_URL = values.failUrl
     }
@@ -166,12 +166,12 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
   }
 
   createNonSecurePostAuthPaymentRequestData(account: ParamPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
-    const amount = this.orderAmount(order, TX_TYPE.PAY_POST_AUTH)
+    const orderId = readOrderId(order)
+    const amount = orderAmount(this.valueFormatter, order, TX_TYPE.PAY_POST_AUTH)
 
-    return this.envelope({
+    return envelope({
       [this.valueMapper.mapTxType(TX_TYPE.PAY_POST_AUTH)]: {
-        ...this.accountData(account),
+        ...accountData(account),
         '@xmlns': XMLNS,
         Prov_ID: '',
         Prov_Tutar: amount,
@@ -181,11 +181,11 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
   }
 
   createStatusRequestData(account: ParamPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = readOrderId(order)
 
-    return this.envelope({
+    return envelope({
       [this.valueMapper.mapTxType(TX_TYPE.STATUS)]: {
-        ...this.accountData(account),
+        ...accountData(account),
         '@xmlns': XMLNS,
         Siparis_ID: orderId,
       },
@@ -194,13 +194,13 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
 
   /** Cancelling a sale needs the amount (a missing one would be sent as zero); a pre-authorization is cancelled whole. */
   createCancelRequestData(account: ParamPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = readOrderId(order)
     const original = this.originalTxType(order)
 
     if (original === TX_TYPE.PAY_PRE_AUTH) {
-      return this.envelope({
+      return envelope({
         [this.valueMapper.mapTxType(TX_TYPE.CANCEL, null, { transaction_type: original })]: {
-          ...this.accountData(account),
+          ...accountData(account),
           '@xmlns': XMLNS,
           Prov_ID: null,
           Siparis_ID: orderId,
@@ -208,11 +208,11 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
       })
     }
 
-    const amount = this.orderAmount(order, TX_TYPE.CANCEL)
+    const amount = orderAmount(this.valueFormatter, order, TX_TYPE.CANCEL)
 
-    return this.envelope({
+    return envelope({
       [this.valueMapper.mapTxType(TX_TYPE.CANCEL, null, { transaction_type: original })]: {
-        ...this.accountData(account),
+        ...accountData(account),
         '@xmlns': XMLNS,
         Durum: 'IPTAL',
         Siparis_ID: orderId,
@@ -226,12 +226,12 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
       // Every other type is another bank operation; a refund request must never become a sale or a cancel.
       throw new UnsupportedTransactionTypeError(`Unsupported refund transaction type: ${String(refundTxType)}`)
     }
-    const orderId = this.orderId(order)
-    const amount = this.orderAmount(order, refundTxType)
+    const orderId = readOrderId(order)
+    const amount = orderAmount(this.valueFormatter, order, refundTxType)
 
-    return this.envelope({
+    return envelope({
       [this.valueMapper.mapTxType(refundTxType)]: {
-        ...this.accountData(account),
+        ...accountData(account),
         '@xmlns': XMLNS,
         Durum: 'IADE',
         Siparis_ID: orderId,
@@ -350,21 +350,21 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
     successUrl: string
     failUrl: string
   } {
-    const orderId = this.orderId(order)
-    const amount = this.orderAmount(order, txType)
-    const installment = this.valueFormatter.formatInstallment(parseInstallment(ownValue(order, 'installment')))
+    const orderId = readOrderId(order)
+    const amount = orderAmount(this.valueFormatter, order, txType)
+    const installment = this.valueFormatter.formatInstallment(parseInstallment(orderValue(order, 'installment')))
     const currency = this.currency(order)
-    const ip = this.ip(order)
+    const ip = requestIp(order)
     const foreign = currency.code !== null
-    const urls = needsUrls || foreign
+    const urls = needsUrls || foreign || txType === TX_TYPE.PAY_PRE_AUTH
     return {
       orderId,
       amount,
       installment,
       ip,
       currencyCode: currency.code,
-      successUrl: urls ? this.url(order, 'success_url') : '',
-      failUrl: urls ? this.url(order, 'fail_url') : '',
+      successUrl: urls ? returnUrl(order, 'success_url') : '',
+      failUrl: urls ? returnUrl(order, 'fail_url') : '',
     }
   }
 
@@ -385,7 +385,7 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
     if (typeof hash !== 'string' || hash === '') {
       throw new PosError('The request signature is missing')
     }
-    return this.envelope({ [soapAction]: { ...body, Islem_Hash: hash } })
+    return envelope({ [soapAction]: { ...body, Islem_Hash: hash } })
   }
 
   private transactionId(): string {
@@ -408,24 +408,6 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
     }
   }
 
-  private accountData(account: ParamPosAccount): {
-    G: { CLIENT_CODE: string; CLIENT_USERNAME: string; CLIENT_PASSWORD: string }
-    GUID: string
-  } {
-    return {
-      G: {
-        CLIENT_CODE: account.getMerchantId(),
-        CLIENT_USERNAME: account.getUsername(),
-        CLIENT_PASSWORD: account.getPassword(),
-      },
-      GUID: account.getSecretKey(),
-    }
-  }
-
-  private envelope(body: Record<string, unknown>): { 'soap:Body': Record<string, unknown> } {
-    return { 'soap:Body': body }
-  }
-
   private assertSaleTxType(txType: TxType): void {
     if (txType !== TX_TYPE.PAY_AUTH && txType !== TX_TYPE.PAY_PRE_AUTH) {
       throw new UnsupportedTransactionTypeError(`Unsupported transaction type: ${String(txType)}`)
@@ -434,7 +416,7 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
 
   /** The kind of payment an order was made with; an order without one is a sale. */
   private originalTxType(order: PosOrder): TxType {
-    const value: unknown = ownValue(order, 'transaction_type')
+    const value: unknown = orderValue(order, 'transaction_type')
     if (!isSet(value)) {
       return TX_TYPE.PAY_AUTH
     }
@@ -444,54 +426,15 @@ export class ParamPosRequestDataMapper extends AbstractRequestDataMapper<ParamPo
     return value
   }
 
-  private orderId(order: PosOrder): string {
-    const raw: unknown = ownValue(order, 'id')
-    if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isFinite(raw))) {
-      throw new PosError('The order id must be text or a number.')
-    }
-    const id = String(raw)
-    if (!ORDER_ID_PATTERN.test(id)) {
-      throw new PosError(
-        'The order id may only hold letters, digits, underscores and hyphens, and must start with a letter or digit (at most 64).',
-      )
-    }
-    return id
-  }
-
-  /** The amount as the bank writes it for the transaction; a missing, non-numeric, zero or sub-kuruş amount never reaches the bank. */
-  private orderAmount(order: PosOrder, txType: TxType): string {
-    const raw: unknown = ownValue(order, 'amount')
-    if (!isSet(raw) || raw === '') {
-      throw new PosError('Order field "amount" is required')
-    }
-    return this.valueFormatter.formatAmount(parseOrderAmount(raw), txType)
-  }
-
   /** The currency of the order (TRY when absent) and its bank code when it is not Turkish lira. */
   private currency(order: PosOrder | null): { code: string | null } {
-    const raw: unknown = order === null || order === undefined ? undefined : ownValue(order, 'currency')
+    const raw: unknown = order === null || order === undefined ? undefined : orderValue(order, 'currency')
     const currency: unknown = raw ?? CURRENCY.TRY
     if (typeof currency !== 'string') {
       throw new PosError('The order currency must be text.')
     }
     const code = this.valueMapper.mapCurrency(currency as never)
     return { code: currency === CURRENCY.TRY ? null : String(code) }
-  }
-
-  private ip(order: PosOrder): string {
-    const ip: unknown = ownValue(order, 'ip')
-    if (typeof ip !== 'string' || !IP_PATTERN.test(ip)) {
-      throw new PosError('Order field "ip" must be an IPv4 or IPv6 address.')
-    }
-    return ip
-  }
-
-  private url(order: PosOrder, key: 'success_url' | 'fail_url'): string {
-    const url: unknown = ownValue(order, key)
-    if (typeof url !== 'string' || !URL_PATTERN.test(url)) {
-      throw new PosError(`Order field "${key}" must be an http(s) URL without blanks or non-ASCII characters.`)
-    }
-    return url
   }
 
   /** A session field of the callback: an own string in the shape the bank uses, else the request is not built. */
