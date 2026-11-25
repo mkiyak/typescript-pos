@@ -93,7 +93,7 @@ refund or collect the difference. The 3D Host token request is made from your se
 ## Notification handler
 
 ```ts
-import { HashMismatchError, MODEL, OrderMismatchError, PayTrPos, TX_TYPE } from 'typescript-pos'
+import { MODEL, OrderMismatchError, PayTrPos, TX_TYPE } from 'typescript-pos'
 
 async function notificationUrl(body: Record<string, string>): Promise<'OK'> {
   const id = PayTrPos.notificationOrderId(body) // unverified: only to load the order
