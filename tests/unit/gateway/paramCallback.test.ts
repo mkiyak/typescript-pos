@@ -328,12 +328,9 @@ describe('paramRecordConfirms', () => {
   })
 
   it.each([
-    ['no answer', {}, ['order_status', 'one status record', 'none'], false],
     ['Sonuc 0', statusAnswer(record(), '0'), ['order_status', 'one status record', 'none'], false],
-    ['Sonuc text', statusAnswer(record(), 'x'), ['order_status', 'one status record', 'none'], false],
-    ['no DT_Bilgi', statusAnswer(undefined), ['order_status', 'one status record', 'none'], false],
+    ['Sonuc -1 without record', statusAnswer(undefined, '-1'), ['order_status', 'one status record', 'none'], false],
     ['DT_Bilgi list', statusAnswer([record(), record()]), ['order_status', 'one status record', 'list'], false],
-    ['DT_Bilgi text', statusAnswer('x'), ['order_status', 'one status record', 'none'], false],
     ['other order', statusAnswer(record({ Siparis_ID: 'OTHER' })), ['order_id', '20250119BACB', 'OTHER'], false],
     ['Durum FAIL', statusAnswer(record({ Durum: 'FAIL' })), ['order_status', 'SUCCESS', 'FAIL'], false],
     ['Odeme_Sonuc 0', statusAnswer(record({ Odeme_Sonuc: '0' })), ['order_status', 'SUCCESS', 'SUCCESS 0'], false],
@@ -355,6 +352,29 @@ describe('paramRecordConfirms', () => {
       expect(check.evidence).toBe(evidence)
     },
   )
+
+  // addition: an answer that cannot be read leaves the payment outcome unknown (never a declared failure)
+  it.each([
+    ['no answer (204)', {}],
+    ['no result record', { TP_Islem_Sorgulama4Response: '' }],
+    ['no result code', { TP_Islem_Sorgulama4Response: { TP_Islem_Sorgulama4Result: { DT_Bilgi: record() } } }],
+    ['a text result code', statusAnswer(record(), 'x')],
+    ['a list result code', statusAnswer(record(), ['1'])],
+    ['a success code without record', statusAnswer(undefined)],
+    ['a success code with a text record', statusAnswer('x')],
+    ['a success code with an empty record', statusAnswer('')],
+  ] as Array<[string, Data]>)('%s is unreadable', (_name, answer) => {
+    const check = paramRecordConfirms(answer, EXPECTED)
+    expect(check.unreadable).toBe(true)
+    expect(check.failure).toBeNull()
+    expect(check.evidence).toBe(false)
+  })
+
+  it('a readable answer is not unreadable', () => {
+    expect(paramRecordConfirms(statusAnswer(record()), EXPECTED).unreadable).toBe(false)
+    expect(paramRecordConfirms(statusAnswer(record(), '0'), EXPECTED).unreadable).toBe(false)
+    expect(paramRecordConfirms(statusAnswer([record()]), EXPECTED).unreadable).toBe(false)
+  })
 
   it('compares the installment count with one counting as none', () => {
     expect(paramRecordConfirms(statusAnswer(record({ Taksit: '0' })), EXPECTED).failure).toBeNull()

@@ -62,6 +62,11 @@ export class ParamPosHttpClient extends AbstractHttpClient {
     return this.txTypes === undefined || this.txTypes.includes(txType)
   }
 
+  /** The account's credentials in the request body; a fault text that echoes them is masked in every log line. */
+  protected override logSecrets(requestData: Record<string, unknown>): readonly string[] {
+    return requestSecrets(requestData)
+  }
+
   /** Public here (protected in the base class) so callers can see where a transaction is posted. */
   override getApiUrl(txType: ClientTxType, paymentModel: PaymentModel): string {
     return super.getApiUrl(txType, paymentModel)

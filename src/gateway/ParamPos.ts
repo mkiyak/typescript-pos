@@ -80,6 +80,7 @@ type Approval = {
 
 const UNKNOWN_OUTCOME = 'Bank answer carries no result code; the payment outcome is unknown'
 const UNKNOWN_CANCEL_OUTCOME = 'Bank answer carries no result; the outcome is unknown'
+const UNKNOWN_STATUS_OUTCOME = 'Bank status answer could not be read; the payment outcome is unknown'
 
 /** One installment is a single payment, like none. */
 function normalizedInstallment(count: number): number {
@@ -119,19 +120,22 @@ function own(data: Record<string, unknown>, key: string): unknown {
  * - An approval has its signed fields pinned to their exact formats (the values run together without separators),
  *   otherwise `HashMismatchError('3D callback fields are malformed')`, and must name this order before any request
  *   (`OrderMismatchError`, nothing attached): the card check's order id and, when sent, its amount in exact kuruş; the
- *   payment result's order id. The card check's `md` may end in digits and an order id may start with them, so a
- *   genuine approval can also verify for another order whose id is a suffix of the real one; that re-read cannot be
- *   approved, because the provision answer and the status record must both name this order.
+ *   payment result's order id. The card check's `md` may end in digits and an order id may start with them, and the
+ *   3D result `1` sits between them, so a genuine approval can also verify for another order id made by moving digits
+ *   across that boundary: a shorter id (a suffix of the real one) or a longer one (digits of `md` in front of it).
+ *   Such a re-read cannot be approved, because the provision answer and the status record must both name this order.
  * - A card check with 3D result `1` is provisioned with one request (no provision on any other 3D result, so a payment
- *   approved although 3D Secure failed cannot occur on this path). An answer without a result code, or with a success
- *   code but no receipt, is a `PosHttpError` naming the URL: the outcome is unknown, so it is never a decline a
- *   merchant could retry. A declined provision is returned as the bank's decline for this order. An approved one must
+ *   approved although 3D Secure failed cannot occur on this path). An answer without a result code, with a success
+ *   code but no receipt, or with a failure code and a receipt, is a `PosHttpError` naming the URL: the outcome is
+ *   unknown, so it is never a decline a merchant could retry. A declined provision is returned as the bank's decline for this order. An approved one must
  *   name this order (otherwise `OrderMismatchError` with the result attached and flagged for manual review).
  * - Every approval (provisioned card check, 3D Pay, foreign currency) is confirmed with exactly one status request for
  *   the order id before it is returned. The bank's record must show a successful payment of this order with the
  *   reported receipt, of the transaction type (`SALE`, or `PRE_AUTH` for `pre`), the order amount in exact kuruş,
  *   nothing refunded and the order's installment count (one counting as none); it carries no currency. A record that
- *   does not confirm is an `OrderMismatchError`. The result is attached and flagged for manual review only when the
+ *   does not confirm (a failure code, a list of records, or a record that differs) is an `OrderMismatchError`; a
+ *   status answer that cannot be read (empty, no result, no integer result code, a success code without a record) is a
+ *   `PosHttpError` naming the URL, since the payment may have completed. The result is attached and flagged for manual review only when the
  *   bank shows money moved (an approved provision, or a record of a successful payment of this order with a
  *   receipt): a payment result callback anyone could forge raises no alert by itself. Errors of the status request
  *   propagate (the payment may have completed: query `status` before retrying).
@@ -456,15 +460,13 @@ export class ParamPos extends AbstractGateway<ParamPosAccount> {
     if (callbackOrderId !== expected.orderId) {
       this.fail('order_id', expected.orderId, callbackOrderId, expected.orderId)
     }
-    if (shape === 'md' && Object.hasOwn(callback, 'transactionAmount') && callback.transactionAmount !== undefined) {
-      if (amountKurus(callback.transactionAmount, 'comma') !== expected.kurus) {
+    const amount: unknown =
+      shape === 'md' && Object.hasOwn(callback, 'transactionAmount') ? callback.transactionAmount : null
+    // A null amount is an absent one (like every null callback value): the provision carries the order's amount.
+    if (amount !== undefined && amount !== null) {
+      if (amountKurus(amount, 'comma') !== expected.kurus) {
         // No provision is sent, so no money moves: a payer who completed an older cart is not charged.
-        this.fail(
-          'amount',
-          numberFormat2(expected.amount).replace('.', ','),
-          String(callback.transactionAmount),
-          expected.orderId,
-        )
+        this.fail('amount', numberFormat2(expected.amount).replace('.', ','), String(amount), expected.orderId)
       }
     }
   }
@@ -494,6 +496,11 @@ export class ParamPos extends AbstractGateway<ParamPosAccount> {
     const dekont = ownString(result, 'Dekont_ID') ?? ''
     // A success code without a receipt contradicts itself: whether money moved is unknown.
     if (code > 0 && !POS_INT.test(dekont)) {
+      this.unknownOutcome(client, txType, paymentModel, expected.orderId)
+    }
+
+    // A failure code with a receipt contradicts itself as well.
+    if (code <= 0 && POS_INT.test(dekont)) {
       this.unknownOutcome(client, txType, paymentModel, expected.orderId)
     }
 
@@ -543,7 +550,8 @@ export class ParamPos extends AbstractGateway<ParamPosAccount> {
       statusOrder,
       MODEL.NON_SECURE,
     )
-    const answer = await this.sendRequest(TX_TYPE.STATUS, MODEL.NON_SECURE, requestData, statusOrder)
+    const client = this.getClient(TX_TYPE.STATUS, MODEL.NON_SECURE)
+    const answer = await client.request(TX_TYPE.STATUS, MODEL.NON_SECURE, requestData, statusOrder, null)
     const check = paramRecordConfirms(answer, {
       siparisId: expected.orderId,
       dekont: approval.dekont,
@@ -563,6 +571,13 @@ export class ParamPos extends AbstractGateway<ParamPosAccount> {
       threeDAll: approval.threeDAll,
     }
 
+    if (check.unreadable) {
+      // The answer says nothing about the payment, which may have completed: query `status` before retrying.
+      this.logger.error('bank status answer could not be read', { order_id: echo(expected.orderId) })
+      throw new PosHttpError(UNKNOWN_STATUS_OUTCOME, {
+        url: this.requestUrl(client, TX_TYPE.STATUS, MODEL.NON_SECURE),
+      })
+    }
     if (check.failure !== null) {
       const [field, wanted, actual] = check.failure
       if (approval.evidence) {

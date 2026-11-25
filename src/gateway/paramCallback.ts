@@ -81,9 +81,16 @@ export type RecordExpectations = {
 
 /**
  * What a status answer yields: its record (empty when there is none), whether the record shows a completed payment
- * of the order id with a receipt (evidence that money moved) and the first way it fails to confirm the approval.
+ * of the order id with a receipt (evidence that money moved), the first way it fails to confirm the approval, and
+ * whether the answer could not be read at all (no answer, no result, no integer result code, or a success code
+ * without a record): such an answer says nothing about the payment, so the caller reports an unknown outcome.
  */
-export type RecordCheck = { record: Record<string, unknown>; evidence: boolean; failure: Mismatch | null }
+export type RecordCheck = {
+  record: Record<string, unknown>
+  evidence: boolean
+  failure: Mismatch | null
+  unreadable: boolean
+}
 
 /** The values of the order an approved result is built from. */
 export type OrderValues = { orderId: string; amount: number; currency: string }
@@ -283,15 +290,20 @@ export function trustedDecline(
  * text), never mapped display values. The answer must hold one record (a list cannot be attributed); the record
  * must name the order id, show a successful payment, carry the reported receipt, be of the transaction type, hold
  * the order amount in exact kuruş, nothing refunded and the order's installment count. The record carries no
- * currency. Evidence that money moved is a record of a successful payment of this order id with a receipt number.
+ * currency. A failure code or a list of records is a failed confirmation; an answer that cannot be read is
+ * `unreadable`. Evidence that money moved is a record of a successful payment of this order id with a receipt number.
  */
 export function paramRecordConfirms(answer: unknown, expected: RecordExpectations): RecordCheck {
   const result = child(child(answer, 'TP_Islem_Sorgulama4Response'), 'TP_Islem_Sorgulama4Result')
   const rawRecord: unknown = result !== null && Object.hasOwn(result, 'DT_Bilgi') ? result.DT_Bilgi : undefined
   const code = result === null ? null : parseCode(own(result, 'Sonuc'))
-  if (code === null || code <= 0 || !isRecord(rawRecord)) {
-    const actual = code !== null && code > 0 && Array.isArray(rawRecord) ? 'list' : 'none'
-    return { record: {}, evidence: false, failure: ['order_status', 'one status record', actual] }
+  if (code === null || (code > 0 && !isRecord(rawRecord) && !Array.isArray(rawRecord))) {
+    return { record: {}, evidence: false, failure: null, unreadable: true }
+  }
+  // A failure code is the bank's own word that it holds no such payment; a list cannot be attributed to one payment.
+  if (code <= 0 || !isRecord(rawRecord)) {
+    const actual = code > 0 ? 'list' : 'none'
+    return { record: {}, evidence: false, failure: ['order_status', 'one status record', actual], unreadable: false }
   }
 
   const record = rawRecord
@@ -306,7 +318,7 @@ export function paramRecordConfirms(answer: unknown, expected: RecordExpectation
     paymentCode > 0 &&
     siparisId === expected.siparisId &&
     POS_INT.test(dekont)
-  const closed = (failure: Mismatch): RecordCheck => ({ record, evidence, failure })
+  const closed = (failure: Mismatch): RecordCheck => ({ record, evidence, failure, unreadable: false })
 
   if (siparisId !== expected.siparisId) {
     return closed(['order_id', expected.siparisId, siparisId])
@@ -337,7 +349,7 @@ export function paramRecordConfirms(answer: unknown, expected: RecordExpectation
     return closed(['installment', String(expected.installment), text('Taksit')])
   }
 
-  return { record, evidence, failure: null }
+  return { record, evidence, failure: null, unreadable: false }
 }
 
 /** The installment count of a status record, one counting as none (0); null when it cannot be read. */

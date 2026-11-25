@@ -1250,6 +1250,17 @@ const mismatch = async (promise: Promise<unknown>): Promise<OrderMismatchError> 
   return err as OrderMismatchError
 }
 
+const UNKNOWN_STATUS = 'Bank status answer could not be read; the payment outcome is unknown'
+
+/** Status answers that do not say whether the payment exists. */
+const UNREADABLE_STATUS: Array<[string, () => Reply]> = [
+  ['no content (204)', () => new Response(null, { status: 204 })],
+  ['an empty response', () => soapAnswer('TP_Islem_Sorgulama4', null)],
+  ['no result code', () => soapAnswer('TP_Islem_Sorgulama4', { DT_Bilgi: bankRecord(), Sonuc_Str: 'x' })],
+  ['a text result code', () => soapAnswer('TP_Islem_Sorgulama4', { DT_Bilgi: bankRecord(), Sonuc: 'x' })],
+  ['a success code without record', () => soapAnswer('TP_Islem_Sorgulama4', { Sonuc: '1', Sonuc_Str: 'Başarılı' })],
+]
+
 const NO_HASH = new HashMismatchError('3D callback has no hash')
 const MALFORMED = new HashMismatchError('3D callback fields are malformed')
 const UNKNOWN_OUTCOME = 'Bank answer carries no result code; the payment outcome is unknown'
@@ -1455,6 +1466,58 @@ describe('ParamPos (end to end) 3D Secure', () => {
     expect(err.paymentMayHaveCompleted).toBe(true)
   })
 
+  // addition: review fix, a status answer that cannot be read after an approved provision is an unknown outcome
+  it.each(UNREADABLE_STATUS)('a status answer with %s after the provision is an unknown outcome', async (_n, reply) => {
+    const { sent, promise } = run(CS5, ORDER_MD, { answer: { TP_Islem_Sorgulama4: reply } })
+    const err = await promise.catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect((err as PosHttpError).message).toBe(UNKNOWN_STATUS)
+    expect((err as PosHttpError).url).toBe(PAYMENT_API)
+    expect(sent.map((s) => s.op)).toStrictEqual(['TP_WMD_Pay', 'TP_Islem_Sorgulama4'])
+  })
+
+  // addition: review fix, a declined provision code with a receipt contradicts itself
+  it('a provision answer with a failure code and a receipt is an unknown outcome', async () => {
+    const { sent, promise } = run(CS5, ORDER_MD, {
+      answer: {
+        TP_WMD_Pay: () =>
+          soapAnswer('TP_WMD_Pay', {
+            Sonuc: '-1',
+            Sonuc_Ack: 'x',
+            Dekont_ID: '3007295376',
+            Siparis_ID: '202412292160',
+          }),
+      },
+    })
+    const err = await promise.catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect((err as PosHttpError).message).toBe(UNKNOWN_OUTCOME)
+    expect(sent).toHaveLength(1)
+  })
+
+  // addition: review fix, the re-split also yields longer order ids (digits of md move into the order id)
+  it('a CS5 re-split into the longer order id 901000001202412292160 is never approved', async () => {
+    const longer = { ...CS5, md: CS5.md.slice(0, -9), orderId: '901000001202412292160' }
+    expect(MDH(longer)).toBe(CS5.islemHash)
+    const order: PosOrder = { id: '901000001202412292160', amount: 10.01, currency: CURRENCY.TRY, installment: 0 }
+    const { sent, promise } = run(longer, order)
+    const err = await mismatch(promise)
+    expect(err.field).toBe('order_status')
+    expect(err.paymentMayHaveCompleted).toBe(true)
+    expect(sent.map((s) => s.op)).toStrictEqual(['TP_WMD_Pay', 'TP_Islem_Sorgulama4'])
+    // and a provision answer for the original order is an order mismatch
+    const original = run(longer, order, { answer: { TP_WMD_Pay: () => soapAnswer('TP_WMD_Pay', PROVISION_RESULT) } })
+    expect((await mismatch(original.promise)).field).toBe('order_id')
+  })
+
+  // addition: review fix, a null amount is an absent amount (the order's amount is provisioned)
+  it('a card check with a null transactionAmount is bound like one without amount', async () => {
+    const { sent, promise } = run({ ...CS5, transactionAmount: null })
+    const res = (await promise) as Data
+    expect(res.status).toBe('approved')
+    expect(sent).toHaveLength(2)
+  })
+
   // addition: P13 an error of the status request propagates unchanged (outcome unknown)
   it('a fault of the status request propagates', async () => {
     const { sent, promise } = run(CS5, ORDER_MD, { answer: { TP_Islem_Sorgulama4: () => soapFault('busy') } })
@@ -1609,6 +1672,26 @@ describe('ParamPos (end to end) payment result callbacks', () => {
     const err = await mismatch(run(CP1, ORDER_CP1, { records }).promise)
     expect(err.paymentMayHaveCompleted).toBe(false)
     expect(err.response).toBeUndefined()
+  })
+
+  // addition: review fix, a status answer that cannot be read after a 3D Pay or foreign approval is an unknown outcome
+  it.each(UNREADABLE_STATUS)('a status answer with %s after CP1 is an unknown outcome', async (_n, reply) => {
+    const { sent, promise } = run(CP1, ORDER_CP1, { answer: { TP_Islem_Sorgulama4: reply } })
+    const err = await promise.catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect((err as PosHttpError).message).toBe(UNKNOWN_STATUS)
+    expect((err as PosHttpError).url).toBe(PAYMENT_API)
+    expect(sent).toHaveLength(1)
+  })
+
+  it('an empty status answer after CP4 is an unknown outcome', async () => {
+    const { promise } = run(
+      CP4,
+      ORDER_CP4,
+      { answer: { TP_Islem_Sorgulama4: () => new Response(null, { status: 204 }) } },
+      MODEL.THREE_D_SECURE,
+    )
+    await expect(promise).rejects.toThrow(new PosHttpError(UNKNOWN_STATUS, { url: PAYMENT_API }))
   })
 
   // addition: CP1 re-split (dekont 300730069, amount 510,01) verifies but is malformed or not confirmed
@@ -2003,6 +2086,48 @@ describe('ParamPos (end to end) money requests', () => {
 })
 
 describe('ParamPos (end to end) masking', () => {
+  const recorder = () => {
+    const records: unknown[] = []
+    const record =
+      (level: string) =>
+      (...args: unknown[]) =>
+        records.push([level, ...args])
+    const logger: PosLogger = {
+      debug: record('debug'),
+      info: record('info'),
+      warn: record('warn'),
+      error: record('error'),
+    }
+    return { records, logger }
+  }
+
+  // addition: review fix, a SOAP fault echoing the request's credentials never reaches a log line (200 and 500)
+  it.each([
+    ['200', 200, `Server was unable to process request. ${G} ${PASSWORD}`],
+    ['500', 500, `Server was unable to process request. ${G} ${PASSWORD}`],
+    // the credentials sit where the transport cuts its 500-character body snippet
+    ['500, cut through the GUID', 500, `${'x '.repeat(155)}${G} ${PASSWORD}`],
+  ] as Array<[string, number, string]>)(
+    'a fault on %s echoing the GUID and the password is masked in every log',
+    async (_n, status, text) => {
+      const { records, logger } = recorder()
+      const { fetchImpl } = bankFetch({
+        answer: { TP_Islem_Sorgulama4: () => new Response(soapFault(text), { status }) },
+      })
+      const err = await realGateway(fetchImpl, { logger })
+        .payment(MODEL.THREE_D_PAY, ORDER_CP1, 'pay', null, cb(CP1))
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      const logged = JSON.stringify(records)
+      expect(logged).toMatch(/api request failed|parsing bank response failed/)
+      expect(logged).toContain('***')
+      expect(logged).not.toContain(G)
+      expect(logged).not.toContain(G.slice(0, 8))
+      expect(logged).not.toContain(PASSWORD)
+      expect((err as Error).message).not.toContain(G)
+    },
+  )
+
   // addition: C6/P20 nothing secret reaches the logger
   it('never logs the password, the GUID, the card number, the CVV or a callback hash', async () => {
     const records: unknown[] = []

@@ -14,6 +14,29 @@ const CONTENT_TYPES: Record<EncodedData['format'], string> = {
   json: 'application/json',
 }
 
+/** The shortest piece of a secret that is masked where a text was cut through it. */
+const MIN_SECRET_PIECE = 3
+
+/**
+ * The text with every occurrence of the secrets masked, and a trailing piece of one (a text shortened elsewhere may
+ * end inside a secret) masked too. Without secrets the text is returned as it is.
+ */
+function hideSecrets(text: string, secrets: readonly string[]): string {
+  let out = text
+  for (const secret of secrets) {
+    if (secret === '') continue
+    out = out.split(secret).join('***')
+    for (let length = secret.length - 1; length >= MIN_SECRET_PIECE; length--) {
+      if (out.endsWith(secret.slice(0, length))) {
+        out = `${out.slice(0, out.length - length)}***`
+        break
+      }
+    }
+  }
+
+  return out
+}
+
 /** Payment transaction types and query types both go through the HTTP clients. */
 export type ClientTxType = TxType | QueryType
 
@@ -51,12 +74,21 @@ export abstract class AbstractHttpClient {
         this.headers(txType, paymentModel, encoded),
       )
     } catch (e) {
+      const secrets = this.logSecrets(requestData)
       this.logger.error('api request failed', {
         url: target,
         tx_type: txType,
         order_id: order.id,
-        error: e,
-        ...(e instanceof PosHttpError ? { status_code: e.status, response: e.bodySnippet } : {}),
+        error:
+          secrets.length === 0 || !(e instanceof Error)
+            ? e
+            : { name: e.name, message: hideSecrets(e.message, secrets) },
+        ...(e instanceof PosHttpError
+          ? {
+              status_code: e.status,
+              response: e.bodySnippet === undefined ? undefined : hideSecrets(e.bodySnippet, secrets),
+            }
+          : {}),
       })
       throw e
     }
@@ -72,10 +104,11 @@ export abstract class AbstractHttpClient {
     try {
       decoded = await this.decode(this.responseText(response, txType), txType, paymentModel)
     } catch (e) {
+      const secrets = this.logSecrets(requestData)
       this.logger.error('parsing bank response failed', {
         status_code: response.status,
-        response: maskSensitiveData(response.body).slice(0, 500),
-        message: e instanceof Error ? e.message : String(e),
+        response: hideSecrets(maskSensitiveData(response.body), secrets).slice(0, 500),
+        message: hideSecrets(e instanceof Error ? e.message : String(e), secrets),
       })
       if (e instanceof PosHttpError && e.url === '') {
         throw new PosHttpError(
@@ -89,6 +122,14 @@ export abstract class AbstractHttpClient {
 
     this.checkFailResponseData(txType, decoded, order)
     return decoded
+  }
+
+  /**
+   * Values of this request that must never reach a log line, such as credentials a bank may echo in an error text.
+   * None by default; a client whose requests carry credentials in the body names them.
+   */
+  protected logSecrets(_requestData: Record<string, unknown>): readonly string[] {
+    return []
   }
 
   /** Overridable for gateways whose URL depends on the transaction. */
