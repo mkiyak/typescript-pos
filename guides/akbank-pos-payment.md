@@ -132,3 +132,8 @@ installment needs `recurring_id` and `recurringOrderInstallmentNumber` as well.
 - Bank times without a UTC offset are Türkiye time (UTC+03:00).
 - `post-auth`, 3D Secure provisioning and non-secure payments need the customer `ip` in the order; a missing one is
   rejected with `PosError` before any request.
+- An order id is 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit (a number is taken only as a
+  safe non-negative integer); anything else throws `PosError` before a request is sent.
+- **Unclear answers.** After a payment, post-authorization, 3D provision or refund, an answer without a result (an empty body, no result
+  code) throws `PosHttpError` and is never mapped to `declined`: the outcome is unknown, so keep the order pending and
+  check `pos.orderHistory(order)` before any retry. See [Outcome unknown](./security.md#outcome-unknown).

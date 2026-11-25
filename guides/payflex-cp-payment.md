@@ -74,7 +74,7 @@ Use the same stored value for `pos.status(...)` when the callback never arrives.
 
 | Field | Notes |
 | --- | --- |
-| `id` | Letters, digits and `-` only; anything else is rejected with `PosError` before any request |
+| `id` | 1 to 64 letters, digits and `-`, starting with a letter or digit (no `_`); anything else is rejected with `PosError` before any request |
 | `amount`, `currency` | Required; the bank answer is compared against them |
 | `installment` | Number of installments, `0` for a single payment |
 | `success_url`, `fail_url` | Required, public HTTPS |
@@ -84,8 +84,8 @@ Use the same stored value for `pos.status(...)` when the callback never arrives.
 
 ## What is checked
 
-An approved query answer must belong to your order. The order id, amount (in the cents sent to the bank) and currency
-are always compared. The merchant id, transaction type, transaction id (the order's, otherwise the callback's) and
+An approved query answer must belong to your order. The order id and the amount (in the cents sent to the bank) are
+always compared, and so is the currency: an answer that carries no currency code is accepted only for TRY orders. The merchant id, transaction type, transaction id (the order's, otherwise the callback's) and
 payment token (the order's) are compared when the bank answer carries them. A mismatch throws `OrderMismatchError`;
 its `paymentMayHaveCompleted` is `true` because the bank approved something, so check the bank panel and void or
 refund it if it is not yours. For a payment token mismatch the error's `expected` / `actual` describe the tokens

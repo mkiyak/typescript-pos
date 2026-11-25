@@ -42,7 +42,7 @@ post-authorization (`TX_TYPE.PAY_POST_AUTH`), `cancel`, `refund` (partial when `
 
 | Field | Notes |
 | --- | --- |
-| `id` | Letters, digits, `_` and `-`, at most 64 characters, unique per attempt. It is used as the conversation id **and** the basket id. |
+| `id` | Letters, digits, `_` and `-`, starting with a letter or digit, at most 64 characters, unique per attempt. It is used as the conversation id **and** the basket id. |
 | `amount`, `currency` | Major unit (`10.5` is 10,50 TL, at most two decimals); `TRY`, `USD`, `EUR`, `GBP`, `JPY` or `RUB`. |
 | `installment` | `1` to `12` (API models). |
 | `success_url` | Your callback URL: the browser (3D Secure) or iyzico (3D Host) posts the result there. |

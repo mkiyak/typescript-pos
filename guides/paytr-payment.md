@@ -40,7 +40,7 @@ post-authorization, cancel and order history are not offered (`pos.orderHistory`
 
 | Field | Notes |
 | --- | --- |
-| `id` | Unique per attempt, letters and digits only, at most 64 characters (PayTR documents letters and digits only). |
+| `id` | Unique per attempt: letters, digits, `_` and `-`, starting with a letter or digit, at most 64 characters (PayTR documents letters and digits only, so prefer those). |
 | `amount`, `currency` | Major unit (`10.5` is 10,50 TL); `TRY`, `USD`, `EUR`, `GBP` or `RUB`. |
 | `installment` | `0`, or `2` to `12`. For 3D Host it is the highest plan the payer may pick. |
 | `ip` | The payer's IP address. |

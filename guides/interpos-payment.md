@@ -106,6 +106,12 @@ extra characters at either end, for example `12` and `1200`, because the signed 
   safe non-negative integer); anything else throws `PosError` before a request is sent.
 - Amounts are sent with up to two decimals, rounded like PHP `number_format`.
 
+## Unclear answers
+
+After a payment, post-authorization, 3D provision or refund, an answer without a result (an empty body, no result code)
+throws `PosHttpError` and is never mapped to `declined`: the outcome is unknown, so keep the order pending and check
+`pos.status(order)` before any retry. See [Outcome unknown](./security.md#outcome-unknown).
+
 ## Queries
 
 `InterPosQuery` (see [queries](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)) offers

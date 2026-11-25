@@ -75,17 +75,19 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
   count the bank decrypted must be this order's; otherwise `OrderMismatchError` is thrown and nothing has been
   charged. Look the order up by the unguessable token in your callback URL, never by a field of the callback.
 - **A failed 3D never charges.** A callback whose 3D status is not 1 to 4 is mapped as `declined` without a provision
-  request. Half 3D (`md_status` 2 to 4) continues as the bank allows. On a declined result, the echoed remote order
-  id, amount and currency come from the bank's answer before the MAC check, so do not treat them as authoritative:
-  use your own order.
+  request. Half 3D (`md_status` 2 to 4) continues as the bank allows. A declined result may carry values that the
+  bank resolved from the unsigned packets (the remote order id, amount and currency, taken before the MAC check): never
+  use its order id to look up an order, and rely on your own order.
 - **Replays.** Posting the same packets again is refused by the bank at provision time. Still, complete each order
   once: mark it paid in an idempotent update.
-- **Unexpected errors.** A network error (`PosHttpError`, timeout) during provisioning means the outcome is unknown:
-  keep the order pending and re-check it with `pos.status(order)`.
+- **Unexpected errors.** A network error (`PosHttpError`, timeout) during provisioning, or a provision answer that
+  carries no result, throws `PosHttpError`: the outcome is unknown, so keep the order pending and re-check it with
+  `pos.status(order)`. The same holds for a payment, post-authorization or refund answer without a result.
 
 ## Order ids
 
-- 1 to 20 characters: letters, digits, `_` or `-`. The library pads the id with zeros to the length the bank
+- 1 to 20 characters: letters, digits, `_` or `-`, starting with a letter or digit (a number is taken only as a safe
+  non-negative integer). The library pads the id with zeros to the length the bank
   wants, so two ids that differ only in leading zeros are the same order for the bank. Use ids of one fixed length
   (zero-padded numbers or UUID-based) and one id per attempt.
 - Status, cancel and refund find 3D orders under the bank's own prefix; the library adds it. They need

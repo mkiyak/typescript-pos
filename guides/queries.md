@@ -21,8 +21,9 @@ plus `allowedApiOrigins` (see below). The object is stateless: every method retu
 
 ## `history` and `orderHistory`
 
-`gateway.orderHistory(order)` reports one order. `query.history(data)` lists transactions without an order. Neither
-replaces the other.
+`gateway.orderHistory(order)` reports one order (see [After a payment](./after-payment.md)). `query.history(data)` lists
+transactions without an order. Neither replaces the other; a gateway without `orderHistory` (PayTR and Param, for
+example) may still offer `history`, as the table below shows.
 
 ## What the shipped gateways support
 

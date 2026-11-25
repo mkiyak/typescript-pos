@@ -119,6 +119,11 @@ password of the account. A refund is partial when `amount` is lower than `order_
 
 - Amounts are sent in kuruş (10,50 TL is `1050`), rounded like PHP `number_format`.
 - Bank times without a UTC offset are Türkiye time (UTC+03:00).
-- The order needs `id` and `amount`. The 3D form and the first payment request also need `ip`; a missing one is
+- The order needs `id` and `amount`. The 3D form and a payment without 3D also need `ip`; a missing one is
   rejected with `PosError` before any request. The 3D Secure provision takes the customer IP from the callback, and
   `status`, `cancel`, `refund` and post-authorization default `ip` to an empty string.
+- An order id is 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit (a number is taken only as a
+  safe non-negative integer); anything else throws `PosError` before a request is sent.
+- **Unclear answers.** After a payment, post-authorization, 3D provision or refund, an answer without a result (an empty body, no result
+  code) throws `PosHttpError` and is never mapped to `declined`: the outcome is unknown, so keep the order pending and
+  check `pos.status(order)` before any retry. See [Outcome unknown](./security.md#outcome-unknown).

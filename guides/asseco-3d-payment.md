@@ -101,3 +101,8 @@ lower), `pos.status({ id })`, `pos.orderHistory({ id })`. Pre-/post-authorizatio
 - Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00).
 - Non-ASCII order data (e.g. `İşbank Ödeme`) is hashed as UTF-8 and verified correctly.
 - Request bodies are sent as ISO-8859-9, as the NestPay API expects.
+- An order id is 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit (a number is taken only as a
+  safe non-negative integer); anything else throws `PosError` before a request is sent. Instalment suffixes such as `202210121ABC-2` stay valid.
+- **Unclear answers.** After a payment, post-authorization, 3D Secure provision or refund, an answer without a result (an empty body, no result
+  code) throws `PosHttpError` and is never mapped to `declined`: the outcome is unknown, so keep the order pending and
+  check `pos.status(order)` before any retry. See [Outcome unknown](./security.md#outcome-unknown).

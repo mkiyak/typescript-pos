@@ -119,6 +119,12 @@ extra characters, because the signed callback values are concatenated.
 - Amounts are sent with up to two decimals, rounded like PHP `number_format`.
 - Bank times without a UTC offset are Türkiye time (UTC+03:00).
 
+## Unclear answers
+
+After a payment, post-authorization, 3D provision or refund, an answer without a result (an empty body, no result code)
+throws `PosHttpError` and is never mapped to `declined`: the outcome is unknown, so keep the order pending and check
+`pos.status(order)` before any retry. See [Outcome unknown](./security.md#outcome-unknown).
+
 ## Queries
 
 `PayForPosQuery` (see [queries](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)) offers:

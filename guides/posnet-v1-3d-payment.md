@@ -63,7 +63,8 @@ ignored. Public HTTPS URLs without `localhost` are usually required.
   the callback, and verifies the `Mac` in constant time. Only `MdStatus` 1 is a successful 3D; every other status
   is mapped as `declined` and no provision request is sent. A `Mac` that a declined callback carries must verify
   too; a wrong one throws `HashMismatchError`. A declined callback without a `Mac` is accepted as a decline unless
-  you set `require_3d_hash: true`, which rejects it.
+  you set `require_3d_hash: true`, which rejects it. A declined result may carry values echoed from an unsigned
+  callback (the order id, for one): never use its order id to look up an order, and rely on your own order.
 - **Signed fields must have the expected formats.** The bank joins them without separators, so the library pins
   their shapes (for example a two-digit `ECI`); a signed callback with malformed values throws `HashMismatchError`.
 - **The callback is bound to the order.** The order id and amount must be echoed, and the currency, merchant and
@@ -72,12 +73,15 @@ ignored. Public HTTPS URLs without `localhost` are usually required.
   naive replays. The provision always charges **your order's own** amount, currency and installments; the bank
   checks the 3D session values itself.
 - **Complete each order once.** Mark it paid in an idempotent update. A network error (`PosHttpError`, timeout)
-  during provisioning means the outcome is unknown: keep the order pending and re-check it with `pos.status(order)`.
+  during provisioning, or a provision answer that carries no result, throws `PosHttpError`: the outcome is unknown, so
+  keep the order pending and re-check it with `pos.status(order)`. The same holds for a payment, post-authorization
+  or refund answer without a result.
 - Look the order up by the unguessable token in your callback URL, never by a field of the callback.
 
 ## Order ids
 
-- 1 to 20 characters: letters, digits, `_` or `-`; the library pads them with zeros, so ids that differ only in
+- 1 to 20 characters: letters, digits, `_` or `-`, starting with a letter or digit (a number is taken only as a safe
+  non-negative integer); the library pads them with zeros, so ids that differ only in
   leading zeros are the same order for the bank. Use ids of one fixed length and one id per attempt.
 - Status, cancel and refund find 3D orders under the bank's `TDS_` prefix; the library adds it. They need
   `payment_model` in the order: it defaults to `3d`, so pass `payment_model: 'regular'` (`MODEL.NON_SECURE`) for

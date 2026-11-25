@@ -107,3 +107,8 @@ try {
 - `make3DPayPayment`, `make3DHostPayment` and `orderHistory` are not supported by PayFlex V4 and throw.
 - Bank timestamps without an offset are interpreted as Türkiye time (UTC+03:00).
 - Bank HTML/WAF pages and non-2xx answers raise `PosHttpError` with a masked snippet instead of a parser crash.
+- An order id is 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit (a number is taken only as a
+  safe non-negative integer); anything else throws `PosError` before a request is sent.
+- **Unclear answers.** After a non-3D payment, a 3D provision, a post-authorization or a refund, an answer without a
+  result throws `PosHttpError` and is never mapped to `declined`: keep the order pending and check `pos.status(order)`
+  before any retry. See [Outcome unknown](./security.md#outcome-unknown).
