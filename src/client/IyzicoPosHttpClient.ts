@@ -43,6 +43,19 @@ export class IyzicoPosHttpClient extends AbstractIyzicoPosHttpClient {
   }
 
   /**
+   * The form and checkout initialize requests, the checkout record and the payment record move no money: an HTTP 4xx
+   * with iyzico's own failure answer is then read like any failure. After a money request the outcome of a 4xx is
+   * unknown, so it stays an HTTP error.
+   */
+  protected override readsClientErrorBody(txType: ClientTxType, _paymentModel: PaymentModel): boolean {
+    return (
+      txType === TX_TYPE.INTERNAL_3D_FORM_BUILD ||
+      txType === TX_TYPE.INTERNAL_3D_PAYMENT_STATUS ||
+      txType === TX_TYPE.STATUS
+    )
+  }
+
+  /**
    * Public here (protected in the base class) so callers can see where a transaction is posted. `orderTxType` is the
    * kind of payment a 3D form is built for (authorization or pre-authorization).
    */

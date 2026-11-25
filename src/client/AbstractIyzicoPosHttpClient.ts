@@ -46,6 +46,11 @@ export abstract class AbstractIyzicoPosHttpClient extends AbstractHttpClient {
     return [this.#account.getSecretKey()]
   }
 
+  /** Only a request that cannot move money may read a client error body; see the iyzico clients. */
+  protected override isReadableFailure(decoded: Record<string, unknown>): boolean {
+    return Object.hasOwn(decoded, 'status') && decoded.status === 'failure'
+  }
+
   /**
    * The JSON decoder reads an empty body as `{}`; here a 200 answer without a body would pass for "no fields" and
    * hide that the bank said nothing, so it is an error (a 204 never gets this far).

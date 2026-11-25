@@ -2514,3 +2514,119 @@ describe('IyzicoPos (end to end) concurrency', () => {
     expect(randomKeys[0]).not.toBe(randomKeys[1])
   })
 })
+
+// addition: a client error with a readable failure body takes the normal failure handling only where no money can move
+describe('IyzicoPos (end to end) readable failures of client errors', () => {
+  const FAILURE = '{"status":"failure","errorCode":"1","errorMessage":"Rejected by the bank"}'
+  const reply =
+    (status: number, body: string): Handler =>
+    () =>
+      new Response(body, { status })
+  const gateway = (handlers: Record<string, Handler>) => {
+    const { sent, fetchImpl } = bankFetch(handlers)
+    return { sent, pos: realGateway(fetchImpl).pos }
+  }
+  const SECURE_INIT = '/payment/3dsecure/initialize'
+  const HOST_INIT = '/payment/iyzipos/checkoutform/initialize/auth/ecom'
+
+  it.each([
+    ['3D Secure initialize', SECURE_INIT, MODEL.THREE_D_SECURE],
+    ['3D Host initialize', HOST_INIT, MODEL.THREE_D_HOST],
+  ] as Array<[string, string, PaymentModel]>)(
+    '%s: HTTP 400 with a failure body is the form failure PosError',
+    async (_n, path, model) => {
+      const { pos } = gateway({ [path]: reply(400, FAILURE) })
+      const err = await pos
+        .get3DFormData(fullOrder(), model, TX_TYPE.PAY_AUTH, model === MODEL.THREE_D_SECURE ? vectorCard() : null)
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosError)
+      expect(err).not.toBeInstanceOf(PosHttpError)
+      expect((err as Error).message).toBe('iyzico 3D form could not be created: Rejected by the bank')
+    },
+  )
+
+  it('3D Host retrieve: HTTP 400 with a failure body is a decline of the order', async () => {
+    const { promise } = hostCallback({ token: 'tok-123' }, vectorOrder(), { [RETRIEVE]: reply(400, FAILURE) })
+    const res = (await promise) as Data
+    expect(res.status).toBe('declined')
+    expect(res.order_id).toBe('order-001')
+    expect(res.error_message).toBe('Rejected by the bank')
+  })
+
+  it('status: HTTP 400 with a failure body is declined', async () => {
+    const { pos } = gateway({ '/payment/detail': reply(400, FAILURE) })
+    const res = (await pos.status({ id: 'order-001' })) as Data
+    expect(res.status).toBe('declined')
+    expect(res.error_message).toBe('Rejected by the bank')
+  })
+
+  const readOnly: Array<[string, (pos: IyzicoPos) => Promise<unknown>, string]> = [
+    [
+      '3D Secure initialize',
+      (pos) => pos.get3DFormData(fullOrder(), MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, vectorCard()),
+      SECURE_INIT,
+    ],
+    ['3D Host initialize', (pos) => pos.get3DFormData(fullOrder(), MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH), HOST_INIT],
+    [
+      '3D Host retrieve',
+      (pos) => pos.payment(MODEL.THREE_D_HOST, vectorOrder(), TX_TYPE.PAY_AUTH, null, cb({ token: 'tok-123' })),
+      RETRIEVE,
+    ],
+    ['status', (pos) => pos.status({ id: 'order-001' }), '/payment/detail'],
+  ]
+
+  it.each(readOnly)('%s: HTTP 400 that is not a readable failure is a PosHttpError', async (_n, run, path) => {
+    for (const body of [
+      '<html>WAF</html>',
+      '',
+      '{"status":"success"}',
+      '{"status":"Failure"}',
+      '[1]',
+      '{"errorMessage":"x"}',
+    ]) {
+      const { pos } = gateway({ [path]: reply(400, body) })
+      const err = await run(pos).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect((err as PosHttpError).status).toBe(400)
+    }
+  })
+
+  it.each(readOnly)('%s: HTTP 500 with a failure body stays a PosHttpError', async (_n, run, path) => {
+    const { pos } = gateway({ [path]: reply(500, FAILURE) })
+    const err = await run(pos).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect((err as PosHttpError).status).toBe(500)
+  })
+
+  const money: Array<[string, (pos: IyzicoPos) => Promise<unknown>, string]> = [
+    [
+      'non-secure sale',
+      (pos) => pos.payment(MODEL.NON_SECURE, fullOrder(), TX_TYPE.PAY_AUTH, vectorCard()),
+      '/payment/auth',
+    ],
+    [
+      '3D Secure authorization',
+      (pos) => pos.payment(MODEL.THREE_D_SECURE, vectorOrder(), TX_TYPE.PAY_AUTH, null, cb(cb3())),
+      '/payment/v2/3dsecure/auth',
+    ],
+    [
+      'post-authorization',
+      (pos) =>
+        pos.payment(
+          MODEL.NON_SECURE,
+          { id: 'order-001', amount: 100, currency: 'TRY', transaction_id: '1001' },
+          TX_TYPE.PAY_POST_AUTH,
+        ),
+      '/payment/postauth',
+    ],
+    ['refund', (pos) => pos.refund({ id: 'order-001', amount: 40, transaction_id: '1001' }), '/v2/payment/refund'],
+    ['cancel', (pos) => pos.cancel({ id: 'order-001', transaction_id: '1001' }), '/payment/cancel'],
+  ]
+
+  it.each(money)('%s: HTTP 400 with a failure body stays a PosHttpError', async (_n, run, path) => {
+    const { pos } = gateway({ [path]: reply(400, FAILURE) })
+    const err = await run(pos).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect((err as PosHttpError).status).toBe(400)
+  })
+})

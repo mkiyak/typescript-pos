@@ -109,12 +109,14 @@ export abstract class AbstractHttpClient {
     this.logger.debug('sending request', { url: target, tx_type: txType, payment_model: paymentModel })
 
     let response: HttpTransportResponse
+    const readsFailure = this.readsClientErrorBody(txType, paymentModel)
+    const transportOptions = readsFailure ? { returnClientErrors: true } : undefined
     try {
       const headers = this.headers(txType, paymentModel, encoded, target)
       response =
         method === 'GET'
-          ? await this.transport.get(appendQuery(apiUrl, this.queryString(encoded)), headers)
-          : await this.transport.post(apiUrl, this.requestBody(encoded), headers)
+          ? await this.transport.get(appendQuery(apiUrl, this.queryString(encoded)), headers, transportOptions)
+          : await this.transport.post(apiUrl, this.requestBody(encoded), headers, transportOptions)
     } catch (e) {
       const secrets = this.logSecrets(requestData)
       this.logger.error('api request failed', {
@@ -141,6 +143,15 @@ export abstract class AbstractHttpClient {
 
     this.logger.debug('request completed', { status_code: response.status })
 
+    // Only a request that asked for client errors can get here with a non-2xx status (HTTP 4xx).
+    const clientError = response.status < 200 || response.status >= 300
+    const refuseClientError = (snippetFrom: string, cause?: unknown): PosHttpError =>
+      new PosHttpError(
+        `Bank returned HTTP ${response.status}`,
+        { url: target, status: response.status, body: snippetFrom },
+        cause === undefined ? undefined : { cause },
+      )
+
     if (response.status === 204) {
       this.logger.warn('Response from api is empty', { url: target, tx_type: txType, status_code: 204 })
       return {}
@@ -156,6 +167,7 @@ export abstract class AbstractHttpClient {
         response: maskSensitiveData(hideSecrets(response.body, secrets)).slice(0, 500),
         message: hideSecrets(e instanceof Error ? e.message : String(e), secrets),
       })
+      if (clientError) throw refuseClientError(response.body, e)
       if (e instanceof PosHttpError && e.url === '') {
         throw new PosHttpError(
           e.message,
@@ -165,6 +177,8 @@ export abstract class AbstractHttpClient {
       }
       throw e
     }
+
+    if (clientError && !this.isReadableFailure(decoded)) throw refuseClientError(response.body)
 
     this.checkFailResponseData(txType, decoded, order)
     return decoded
@@ -176,6 +190,19 @@ export abstract class AbstractHttpClient {
    */
   protected logSecrets(_requestData: Record<string, unknown>): readonly string[] {
     return []
+  }
+
+  /**
+   * Whether an HTTP 4xx answer of this transaction is read instead of refused, when its body is a readable failure
+   * (see `isReadableFailure`). Only for requests that cannot move money. Default: never.
+   */
+  protected readsClientErrorBody(_txType: ClientTxType, _paymentModel: PaymentModel): boolean {
+    return false
+  }
+
+  /** What an HTTP 4xx body must be to count as the bank's own failure answer. Default: nothing. */
+  protected isReadableFailure(_decoded: Record<string, unknown>): boolean {
+    return false
   }
 
   /** `GET` sends the encoded data as the query string and no body. Default: POST. */

@@ -6,6 +6,14 @@ export interface HttpTransportOptions {
   timeoutMs?: number
 }
 
+export interface HttpTransportRequestOptions {
+  /**
+   * An HTTP 4xx answer is returned instead of thrown, for a caller that reads the failure body itself. Other
+   * non-2xx answers (3xx, 5xx) are errors as always.
+   */
+  returnClientErrors?: boolean
+}
+
 export interface HttpTransportResponse {
   status: number
   /** The body decoded as UTF-8. */
@@ -26,15 +34,24 @@ export class HttpTransport {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   }
 
-  async post(url: string, body: string | Uint8Array, headers: Record<string, string>): Promise<HttpTransportResponse> {
-    return this.exchange('POST', url, body, headers)
+  async post(
+    url: string,
+    body: string | Uint8Array,
+    headers: Record<string, string>,
+    options?: HttpTransportRequestOptions,
+  ): Promise<HttpTransportResponse> {
+    return this.exchange('POST', url, body, headers, options)
   }
 
   /**
    * A GET sends no body. An error carries the URL without its query string, since a query may hold request values.
    */
-  async get(url: string, headers: Record<string, string>): Promise<HttpTransportResponse> {
-    return this.exchange('GET', url, undefined, headers)
+  async get(
+    url: string,
+    headers: Record<string, string>,
+    options?: HttpTransportRequestOptions,
+  ): Promise<HttpTransportResponse> {
+    return this.exchange('GET', url, undefined, headers, options)
   }
 
   private async exchange(
@@ -42,6 +59,7 @@ export class HttpTransport {
     url: string,
     body: string | Uint8Array | undefined,
     headers: Record<string, string>,
+    options?: HttpTransportRequestOptions,
   ): Promise<HttpTransportResponse> {
     const errorUrl = method === 'GET' ? (url.split('?')[0] ?? url) : url
     const controller = new AbortController()
@@ -76,7 +94,8 @@ export class HttpTransport {
           { cause: e },
         )
       }
-      if (res.status < 200 || res.status >= 300) {
+      const clientError = options?.returnClientErrors === true && res.status >= 400 && res.status < 500
+      if (!clientError && (res.status < 200 || res.status >= 300)) {
         throw new PosHttpError(`Bank returned HTTP ${res.status}`, { url: errorUrl, status: res.status, body: text })
       }
       return { status: res.status, body: text, bytes, headers: res.headers }
