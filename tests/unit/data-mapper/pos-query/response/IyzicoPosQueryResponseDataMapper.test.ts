@@ -249,14 +249,29 @@ describe('IyzicoPosQueryResponseDataMapper', () => {
       expect(rows[2]?.capture).toBe(false)
     })
 
-    // addition: report lines never confirm a payment: no authorization code, bank reference or transaction id
-    it('rows carry no authorization code, reference or transaction id', () => {
-      const [r] = create().mapper.mapHistoryResponse(
-        history([tx({ authCode: 'A1', hostReference: 'H1', transactionId: 99 })]),
+    // addition: rows keep their reference ids for display, as bounded plain text
+    it('rows carry the transaction id, authorization code and reference', () => {
+      const { mapper } = create()
+      const [r] = mapper.mapHistoryResponse(history([tx({ authCode: 'A1', hostReference: 'H1', transactionId: 99 })]))
+        .transactions as Record<string, unknown>[]
+      expect(r).toMatchObject({ auth_code: 'A1', ref_ret_num: 'H1', transaction_id: '99' })
+      const [bad] = mapper.mapHistoryResponse(
+        history([tx({ authCode: 'x'.repeat(65), hostReference: { a: 1 }, transactionId: 1.5 })]),
       ).transactions as Record<string, unknown>[]
-      expect(r?.auth_code).toBeNull()
-      expect(r?.ref_ret_num).toBeNull()
-      expect(r?.transaction_id).toBeNull()
+      expect(bad).toMatchObject({ auth_code: null, ref_ret_num: null, transaction_id: null })
+      const [ctl] = mapper.mapHistoryResponse(history([tx({ authCode: 'a\u0000b\n' })])).transactions as Record<
+        string,
+        unknown
+      >[]
+      expect(ctl?.auth_code).toBe('ab')
+    })
+
+    // addition: the status word is kept exactly as sent, so a padded word is no success
+    it('proc_return_code is the untrimmed status word', () => {
+      const r = create().mapper.mapHistoryResponse({ status: ' success', transactions: [tx({})] })
+      expect(r.proc_return_code).not.toBe('success')
+      expect(r.status).toBe('declined')
+      expect(create().mapper.mapHistoryResponse({ status: 5 }).proc_return_code).toBeNull()
     })
 
     // addition: transactions that is not an array lists nothing; non-record entries are skipped
@@ -493,6 +508,22 @@ describe('IyzicoPosQueryResponseDataMapper', () => {
       ])
       expect(log.warn).toHaveBeenCalled()
       expect(JSON.stringify(log.warn.mock.calls)).not.toContain('abc')
+    })
+
+    // addition: two plans with the same installment number are both kept, in the order sent
+    it('keeps duplicate installment numbers in a stable order', () => {
+      const r = create().mapper.mapInstallmentPricesResponse(
+        prices([
+          detail({
+            installmentPrices: [
+              { installmentPrice: 2, totalPrice: 4, installmentNumber: 2 },
+              { installmentPrice: 3, totalPrice: 6, installmentNumber: 2 },
+              { installmentPrice: 1, totalPrice: 1, installmentNumber: 1 },
+            ],
+          }),
+        ]),
+      )
+      expect(r.installment_prices[0]?.prices).toEqual([row(1, 1, 1), row(2, 2, 4), row(2, 3, 6)])
     })
 
     // addition: amounts stay exact (the text they were written with), not an eight-decimal binary expansion

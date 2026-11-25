@@ -53,8 +53,11 @@ function errorCode(data: unknown, key: string): string | null {
  * success only when its own `status` is exactly `success`. Values that are not the expected kind (lists, records,
  * malformed numbers, overlong texts) read as null or are dropped, with a log line that names the field and never its
  * value; they never become "[object Object]". Amounts are read from the text they were written with, so they stay
- * exact. History lists records only: whatever its result says, it is a report and never a confirmation of a payment,
- * so its rows carry no authorization code, bank reference or transaction id. Installment rates are not offered.
+ * exact. A history row is a report line and never confirms a payment (confirm with the gateway's signed answers); its
+ * reference fields (transaction id, authorization code, bank reference) are short plain texts for display. A row
+ * without a readable transaction type keeps the report's default (status approved, no order status), and an
+ * installment group without a readable price list is kept: the group names the bank and card, and no list means no
+ * installments. Installment rates are not offered.
  */
 export class IyzicoPosQueryResponseDataMapper extends AbstractQueryResponseDataMapper {
   static override readonly PROCEDURE_SUCCESS_CODE: string = SUCCESS
@@ -73,7 +76,7 @@ export class IyzicoPosQueryResponseDataMapper extends AbstractQueryResponseDataM
       : []
 
     return {
-      proc_return_code: itemText(answer, 'status'),
+      proc_return_code: this.word(answer),
       error_code: approved ? null : errorCode(answer, 'errorCode'),
       error_message: approved ? null : payTrPlainText(answer, 'errorMessage', MESSAGE_LIMIT),
       trans_count: transactions.length,
@@ -135,6 +138,21 @@ export class IyzicoPosQueryResponseDataMapper extends AbstractQueryResponseDataM
     }
 
     return result
+  }
+
+  /** The own status word exactly as sent (no trimming), or null when it is not a short plain text. */
+  private word(answer: Raw): string | null {
+    const value = ownValue(answer, 'status')
+
+    return typeof value === 'string' && value === itemText(answer, 'status') ? value : null
+  }
+
+  /** A reference of a row as short plain text; a whole number counts as its digits. */
+  private referenceText(row: Raw, key: string): string | null {
+    const value = ownValue(row, key)
+    if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0 ? String(value) : null
+
+    return itemText(row, key)
   }
 
   /** The own status is exactly the word `success`. */
@@ -207,6 +225,9 @@ export class IyzicoPosQueryResponseDataMapper extends AbstractQueryResponseDataM
 
     const transaction = this.getDefaultHistoryTxResponse()
     transaction.transaction_type = transactionType
+    transaction.transaction_id = this.referenceText(row, 'transactionId')
+    transaction.auth_code = this.referenceText(row, 'authCode')
+    transaction.ref_ret_num = this.referenceText(row, 'hostReference')
 
     let approved = true
     if (transactionType === TX_TYPE.PAY_AUTH) {
