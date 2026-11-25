@@ -14,6 +14,8 @@ const PATHS: ReadonlyMap<string, string> = new Map<string, string>([
 ])
 
 const QUERY_KEY = /^[A-Za-z0-9_.-]{1,64}$/
+/** A surrogate half without its partner: text the percent-encoder cannot handle. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
 
 /**
  * The reporting API: a GET request whose data travels in the query string. The signature covers the URL path and an
@@ -59,6 +61,10 @@ export class IyzicoPosQueryApiHttpClient extends AbstractIyzicoPosHttpClient {
         typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))
       if (!QUERY_KEY.test(name) || !(scalar || value === null || value === undefined)) {
         throw new PosError('A reporting query carries plain scalar values only.')
+      }
+      // a lone surrogate cannot be percent-encoded; it is refused here instead of failing deep inside the encoder
+      if (typeof value === 'string' && LONE_SURROGATE.test(value)) {
+        throw new PosError('A reporting query value is not well-formed text.')
       }
     }
 

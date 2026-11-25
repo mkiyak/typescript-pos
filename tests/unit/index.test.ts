@@ -97,6 +97,7 @@ describe('public index', () => {
         'AssecoPosQuery',
         'GarantiPosQuery',
         'InterPosQuery',
+        'IyzicoPosQuery',
         'ParamPosQuery',
         'PayFlexV4PosQuery',
         'PayFlexCPV4PosQuery',
@@ -268,6 +269,8 @@ describe('public index', () => {
     expect(mod.PosQueryFactory.createPosQuery(tosla, mod.posTestConfig)).toBeInstanceOf(mod.ToslaPosQuery)
     const paytr = mod.AccountFactory.createPayTrPosAccount('paytr', '123456', 'salt', 'key')
     expect(mod.PosQueryFactory.createPosQuery(paytr, mod.posTestConfig)).toBeInstanceOf(mod.PayTrPosQuery)
+    const iyzico = mod.AccountFactory.createIyzicoPosAccount('iyzico', 'sandbox-apiKey', 'sandbox-secretKey')
+    expect(mod.PosQueryFactory.createPosQuery(iyzico, mod.posTestConfig)).toBeInstanceOf(mod.IyzicoPosQuery)
     const vakifKatilim = mod.AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'u', 'c', 'k')
     expect(mod.PosQueryFactory.createPosQuery(vakifKatilim, mod.posTestConfig)).toBeInstanceOf(mod.VakifKatilimPosQuery)
   })

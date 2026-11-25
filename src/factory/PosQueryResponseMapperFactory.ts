@@ -1,5 +1,6 @@
 import { AkbankPosQueryResponseDataMapper } from '../data-mapper/pos-query/response/AkbankPosQueryResponseDataMapper.js'
 import { GarantiPosQueryResponseDataMapper } from '../data-mapper/pos-query/response/GarantiPosQueryResponseDataMapper.js'
+import { IyzicoPosQueryResponseDataMapper } from '../data-mapper/pos-query/response/IyzicoPosQueryResponseDataMapper.js'
 import { ParamPosQueryResponseDataMapper } from '../data-mapper/pos-query/response/ParamPosQueryResponseDataMapper.js'
 import { PayForPosQueryResponseDataMapper } from '../data-mapper/pos-query/response/PayForPosQueryResponseDataMapper.js'
 import { PayTrPosQueryResponseDataMapper } from '../data-mapper/pos-query/response/PayTrPosQueryResponseDataMapper.js'
@@ -21,14 +22,16 @@ type ResponseMapperClass = {
 
 /**
  * Gateways whose queries need a normalized answer (history, installments, BIN list) register their response mapper
- * here (Akbank, Garanti, Param, PayFor, PayTR and Vakıf Katılım answer history queries, Param, PayTR and Tosla the
- * installment queries, Garanti, Param and PayTR the BIN list). AssecoPos, InterPos, PayFlexV4Pos, PayFlexCPV4Pos
+ * here (Akbank, Garanti, iyzico, Param, PayFor, PayTR and Vakıf Katılım answer history queries, Param, PayTR and Tosla
+ * the installment rate queries, iyzico and Tosla the installment price queries, Garanti, iyzico, Param and PayTR the
+ * BIN list). AssecoPos, InterPos, PayFlexV4Pos, PayFlexCPV4Pos
  * and the PosNet gateways answer custom queries only (KuveytPos has no query class), which are returned as the
  * bank sent them, so they have none.
  */
 const RESPONSE_MAPPERS: readonly ResponseMapperClass[] = [
   AkbankPosQueryResponseDataMapper,
   GarantiPosQueryResponseDataMapper,
+  IyzicoPosQueryResponseDataMapper,
   ParamPosQueryResponseDataMapper,
   PayForPosQueryResponseDataMapper,
   PayTrPosQueryResponseDataMapper,

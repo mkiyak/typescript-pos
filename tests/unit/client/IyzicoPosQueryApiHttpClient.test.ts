@@ -190,6 +190,21 @@ describe('IyzicoPosQueryApiHttpClient', () => {
       expect(sent).toHaveLength(0)
     })
 
+    // addition: a value that is not well-formed text is a PosError, never a URIError from the encoder
+    it('refuses a lone surrogate in a query value before any request', async () => {
+      const sent: Sent[] = []
+      const c = createClient(fakeFetch(sent, '{}'))
+      for (const value of ['\ud800', 'a\udc00b', '\ud83d']) {
+        await expect(c.request(QUERY_TYPE.HISTORY, MODEL.NON_SECURE, { q: value }, {} as never)).rejects.toBeInstanceOf(
+          PosError,
+        )
+      }
+      expect(sent).toHaveLength(0)
+      // a well-formed pair is encoded
+      await c.request(QUERY_TYPE.HISTORY, MODEL.NON_SECURE, { q: '\u{1F600}' }, {} as never)
+      expect(sent[0]?.url).toBe(`${BASE_URL}/transactions?q=%F0%9F%98%80`)
+    })
+
     // addition: a type without a route fails before any request
     it('refuses an unknown transaction type before any request', async () => {
       const sent: Sent[] = []

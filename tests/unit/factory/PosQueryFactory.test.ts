@@ -19,6 +19,7 @@ import { AkbankPosQuery } from '../../../src/pos-query/AkbankPosQuery.js'
 import { AssecoPosQuery } from '../../../src/pos-query/AssecoPosQuery.js'
 import { GarantiPosQuery } from '../../../src/pos-query/GarantiPosQuery.js'
 import { InterPosQuery } from '../../../src/pos-query/InterPosQuery.js'
+import { IyzicoPosQuery } from '../../../src/pos-query/IyzicoPosQuery.js'
 import { ParamPosQuery } from '../../../src/pos-query/ParamPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../../../src/pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../../../src/pos-query/PayFlexV4PosQuery.js'
@@ -1392,6 +1393,7 @@ describe('PosQueryFactory with PayTrPos', () => {
       ['AssecoPos', AssecoPosQuery],
       ['GarantiPos', GarantiPosQuery],
       ['InterPos', InterPosQuery],
+      ['IyzicoPos', IyzicoPosQuery],
       ['ParamPos', ParamPosQuery],
       ['PayFlexCPV4Pos', PayFlexCPV4PosQuery],
       ['PayFlexV4Pos', PayFlexV4PosQuery],
@@ -1581,5 +1583,298 @@ describe('PosQueryFactory with PayTrPos', () => {
     expect(JSON.stringify(error)).not.toContain(KEY)
     expect(String((error as PosHttpError).bodySnippet ?? '')).not.toContain(KEY)
     expect(String((error as Error).message)).not.toContain(SALT)
+  })
+})
+
+describe('PosQueryFactory with IyzicoPos', () => {
+  const SECRET = 'sandbox-secretKey'
+  const API_KEY = 'sandbox-apiKey'
+  const HOST = 'https://sandbox-api.iyzipay.com'
+  const REPORTING = `${HOST}/v2/reporting/payment`
+  const account = () => AccountFactory.createIyzicoPosAccount('iyzico', API_KEY, SECRET)
+  const hx = (message: string) => createHmac('sha256', SECRET).update(message, 'utf8').digest('hex')
+
+  type Call = { url: string; method: string; body: string | undefined; headers: Record<string, string> }
+
+  const BIN_ANSWER = {
+    status: 'success',
+    binNumber: '415956',
+    cardType: 'CREDIT_CARD',
+    cardAssociation: 'VISA',
+    cardFamily: 'Garanti',
+    bankName: 'Garanti Bankası',
+    bankCode: 62,
+  }
+  const PRICES_ANSWER = {
+    status: 'success',
+    installmentDetails: [
+      {
+        binNumber: '54308100',
+        cardType: 'CREDIT_CARD',
+        cardAssociation: 'MASTER_CARD',
+        cardFamilyName: 'Paraf',
+        bankCode: 12,
+        bankName: 'Halkbank',
+        installmentPrices: [
+          { installmentPrice: 51.61, totalPrice: 103.22, installmentNumber: 2 },
+          { installmentPrice: 100, totalPrice: 100, installmentNumber: 1 },
+        ],
+      },
+    ],
+  }
+  const HISTORY_ANSWER = {
+    status: 'success',
+    currentPage: 1,
+    totalPageCount: 1,
+    transactions: [
+      {
+        transactionType: 'PAYMENT',
+        transactionId: 1001,
+        transactionStatus: 2,
+        threeDS: 1,
+        price: 10.01,
+        paidPrice: 10.01,
+        transactionCurrency: 'TRY',
+        installment: '1',
+        transactionDate: '2024-05-06 10:00:00',
+      },
+    ],
+  }
+
+  function e2e(answer: unknown, logger?: PosLogger, hooks?: PosHooks, status = 200) {
+    const calls: Call[] = []
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const raw = init?.body
+      calls.push({
+        url: String(url),
+        method: init?.method ?? 'GET',
+        body:
+          raw === undefined || raw === null
+            ? undefined
+            : typeof raw === 'string'
+              ? raw
+              : Buffer.from(raw as Uint8Array).toString('utf8'),
+        headers: Object.fromEntries(new Headers(init?.headers).entries()),
+      })
+      return new Response(typeof answer === 'string' ? answer : JSON.stringify(answer), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as unknown as typeof fetch
+    const q = PosQueryFactory.createPosQuery(account(), posTestConfig, { fetch: fetchFn, logger, hooks })
+    return { q, calls, fetchFn }
+  }
+
+  function recordingLogger() {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    return { lines, logger: { debug: record, info: record, warn: record, error: record } as unknown as PosLogger }
+  }
+
+  /** Recomputes the signature of a sent request from its URL path and body with node:crypto. */
+  function assertSigned(call: Call | undefined, body: string) {
+    expect(call).toBeDefined()
+    const header = call?.headers.authorization ?? ''
+    expect(header.startsWith('IYZWSv2 ')).toBe(true)
+    const decoded = Buffer.from(header.slice(8), 'base64').toString('utf8')
+    const m = /^apiKey:sandbox-apiKey&randomKey:([^&]+)&signature:([0-9a-f]{64})$/.exec(decoded)
+    expect(m).not.toBeNull()
+    expect(m?.[2]).toBe(hx(`${m?.[1]}${new URL(call?.url ?? '').pathname}${body}`))
+  }
+
+  it('creates the query class from the shipped test config', () => {
+    expect(PosQueryFactory.createPosQuery(account(), posTestConfig)).toBeInstanceOf(IyzicoPosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('IyzicoPos')).toBe(IyzicoPosQuery)
+  })
+
+  it('rejects a ToslaPosAccount for the iyzico bank', () => {
+    const wrong = AccountFactory.createToslaPosAccount('iyzico', 'm', 'u', 'p')
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+      'Bank [iyzico] is configured for IyzicoPos and needs an IyzicoPosAccount.',
+    )
+  })
+
+  it('getBinList posts the signed JSON to the BIN endpoint and maps the answer', async () => {
+    const { q, calls } = e2e(BIN_ANSWER)
+    const result = await q.getBinList({ bin: '415956' })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.method).toBe('POST')
+    expect(calls[0]?.url).toBe(`${HOST}/payment/bin/check`)
+    const body = JSON.parse(calls[0]?.body ?? '{}')
+    expect(body).toEqual({ locale: 'tr', conversationId: expect.stringMatching(/^[0-9A-F]{24}$/), binNumber: '415956' })
+    assertSigned(calls[0], calls[0]?.body ?? '')
+    expect(result.status).toBe('approved')
+    expect(result.bin_list).toEqual([
+      {
+        bin: '415956',
+        bank_code: '62',
+        bank_name: 'Garanti Bankası',
+        card_type: 'visa',
+        card_class: 'credit',
+        card_family: 'Garanti',
+      },
+    ])
+  })
+
+  it('getInstallmentPrices posts the amount as a JSON number and sorts the answer', async () => {
+    const { q, calls } = e2e(PRICES_ANSWER)
+    const result = await q.getInstallmentPrices({ amount: 100, bin: '54308100' })
+
+    expect(calls[0]?.url).toBe(`${HOST}/payment/iyzipos/installment`)
+    expect(calls[0]?.body).toMatch(/"price":100,"binNumber":"54308100"\}$/)
+    assertSigned(calls[0], calls[0]?.body ?? '')
+    expect(result.installment_prices[0]?.prices.map((p) => p.installment)).toEqual([1, 2])
+    expect(result.installment_prices[0]?.bank_code).toBe(12)
+  })
+
+  it('history is a GET with the encoded query, no body, signed over the path only', async () => {
+    const { q, calls } = e2e(HISTORY_ANSWER)
+    const result = await q.history({ transaction_date: new Date('2022-05-18T00:00:00+03:00') })
+
+    expect(calls[0]?.method).toBe('GET')
+    expect(calls[0]?.url).toBe(`${REPORTING}/transactions?locale=tr&transactionDate=2022-05-18&page=1`)
+    expect(calls[0]?.body).toBeUndefined()
+    assertSigned(calls[0], '')
+    expect(result.trans_count).toBe(1)
+    expect(result.status).toBe('approved')
+  })
+
+  it('a custom query posts the body unchanged to the named URL, signed over those bytes', async () => {
+    const { q, calls } = e2e({ status: 'success', x: 1 })
+    const answer = await q.customQuery(
+      { locale: 'tr', conversationId: 'abc123' },
+      `${HOST}/payment/iyzipos/installment`,
+    )
+
+    expect(calls[0]?.url).toBe(`${HOST}/payment/iyzipos/installment`)
+    expect(calls[0]?.body).toBe('{"locale":"tr","conversationId":"abc123"}')
+    assertSigned(calls[0], '{"locale":"tr","conversationId":"abc123"}')
+    expect(answer).toEqual({ status: 'success', x: 1 })
+  })
+
+  it('a custom query without an apiUrl rejects with its own message before any request', async () => {
+    const { q, fetchFn } = e2e({ status: 'success' })
+    await expect(q.customQuery({ a: 1 })).rejects.toBeInstanceOf(PosError)
+    await expect(q.customQuery({ a: 1 })).rejects.toThrow('iyzico custom queries need an apiUrl')
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('a custom query on a foreign origin or plain http rejects before anything is sent', async () => {
+    const { q, fetchFn } = e2e({ status: 'success' })
+    await expect(q.customQuery({ a: 1 }, 'https://evil.example/x')).rejects.toBeInstanceOf(PosError)
+    await expect(q.customQuery({ a: 1 }, 'http://sandbox-api.iyzipay.com/payment/bin/check')).rejects.toBeInstanceOf(
+      PosError,
+    )
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('getInstallmentRates rejects as unsupported and sends nothing', async () => {
+    const { q, fetchFn } = e2e({ status: 'success' })
+    await expect(q.getInstallmentRates({ bin: '415956' })).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('bad input rejects before any request', async () => {
+    const { q, fetchFn } = e2e(BIN_ANSWER)
+    await expect(q.getBinList({})).rejects.toBeInstanceOf(PosError)
+    await expect(q.getBinList({ bin: '41595' })).rejects.toBeInstanceOf(PosError)
+    await expect(q.getInstallmentPrices({})).rejects.toBeInstanceOf(PosError)
+    await expect(q.getInstallmentPrices({ amount: 0 })).rejects.toBeInstanceOf(PosError)
+    await expect(q.getInstallmentPrices({ amount: 100, bin: '1234567' })).rejects.toBeInstanceOf(PosError)
+    await expect(q.history({})).rejects.toBeInstanceOf(PosError)
+    await expect(q.history({ transaction_date: 'x' })).rejects.toBeInstanceOf(PosError)
+    await expect(q.history({ transaction_date: new Date(), page: 0 })).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('a hook that changes the BIN gets the changed body signed', async () => {
+    const hook = (e: { requestData: Record<string, unknown> }) => {
+      e.requestData.binNumber = '530596'
+    }
+    const { q, calls } = e2e(BIN_ANSWER, undefined, { onPosQueryRequestDataPrepared: [hook] })
+    await q.getBinList({ bin: '415956' })
+
+    expect(JSON.parse(calls[0]?.body ?? '{}').binNumber).toBe('530596')
+    assertSigned(calls[0], calls[0]?.body ?? '')
+  })
+
+  it('a hook cannot put a non-scalar or a non-well-formed value into the history query', async () => {
+    for (const value of [{ a: 1 }, ['x'], '\ud800', 'a\udc00b']) {
+      const hook = (e: { requestData: Record<string, unknown> }) => {
+        e.requestData.extra = value
+      }
+      const { q, fetchFn } = e2e(HISTORY_ANSWER, undefined, { onPosQueryRequestDataPrepared: [hook] })
+      await expect(q.history({ transaction_date: new Date() })).rejects.toBeInstanceOf(PosError)
+      expect(fetchFn).not.toHaveBeenCalled()
+    }
+  })
+
+  it('the history query is percent-encoded', async () => {
+    const hook = (e: { requestData: Record<string, unknown> }) => {
+      e.requestData.extra = 'a b&c=d#e/ü'
+    }
+    const { q, calls } = e2e(HISTORY_ANSWER, undefined, { onPosQueryRequestDataPrepared: [hook] })
+    await q.history({ transaction_date: new Date('2022-05-18T00:00:00+03:00') })
+    expect(calls[0]?.url).toBe(
+      `${REPORTING}/transactions?locale=tr&transactionDate=2022-05-18&page=1&extra=a+b%26c%3Dd%23e%2F%C3%BC`,
+    )
+  })
+
+  it('an HTML answer is a PosHttpError, not a parsing crash', async () => {
+    const { q } = e2e('<html>blocked</html>')
+    await expect(q.getBinList({ bin: '415956' })).rejects.toBeInstanceOf(PosHttpError)
+  })
+
+  it('a non-2xx answer is a PosHttpError', async () => {
+    const { q } = e2e({ status: 'failure' }, undefined, undefined, 500)
+    await expect(q.getBinList({ bin: '415956' })).rejects.toBeInstanceOf(PosHttpError)
+  })
+
+  it('a JSON or inspect dump of the query contains no secret', async () => {
+    const { inspect } = await import('node:util')
+    const { q } = e2e(BIN_ANSWER)
+    for (const dump of [JSON.stringify(q), inspect(q, { depth: 8, showHidden: true })]) {
+      expect(dump).not.toContain(SECRET)
+    }
+  })
+
+  // the hook changes the data, so the query logs the initial and the updated request data
+  it('masks the secret key and the Authorization value in every logged line', async () => {
+    const { lines, logger } = recordingLogger()
+    const hook = (e: { requestData: Record<string, unknown> }) => {
+      e.requestData.secretKey = SECRET
+      e.requestData.Authorization = `IYZWSv2 ${Buffer.from(`apiKey:${API_KEY}&randomKey:r&signature:${hx('r')}`).toString('base64')}`
+    }
+    const { q, calls } = e2e(BIN_ANSWER, logger, { onPosQueryRequestDataPrepared: [hook] })
+    await q.getBinList({ bin: '415956' })
+    await q.getInstallmentPrices({ amount: 100 })
+    await q.history({ transaction_date: new Date('2022-05-18T00:00:00+03:00') })
+    await q.customQuery({ a: 1 }, `${HOST}/payment/bin/check`)
+
+    const all = JSON.stringify(lines)
+    expect(all).toContain('Request data is changed via listeners')
+    expect(all).toContain('"secretKey":"***"')
+    expect(all).toContain('"Authorization":"***"')
+    expect(all).not.toContain(SECRET)
+    expect(all).not.toContain(hx('r'))
+    for (const call of calls) {
+      const sentHeader = call.headers.authorization ?? ''
+      expect(sentHeader).not.toBe('')
+      expect(all).not.toContain(sentHeader)
+      expect(all).not.toContain(sentHeader.slice(8))
+    }
+  })
+
+  it('a secret echoed in a bank text reaches neither the log nor the error', async () => {
+    const { lines, logger } = recordingLogger()
+    const { q } = e2e(`<html>bad ${SECRET}</html>`, logger)
+    const error = await q.getBinList({ bin: '415956' }).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(PosHttpError)
+    expect(JSON.stringify(lines)).not.toContain(SECRET)
+    expect(JSON.stringify(error)).not.toContain(SECRET)
+    expect(String((error as PosHttpError).bodySnippet ?? '')).not.toContain(SECRET)
+    expect(String((error as Error).message)).not.toContain(SECRET)
   })
 })

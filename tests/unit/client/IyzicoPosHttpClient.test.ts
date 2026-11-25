@@ -284,6 +284,9 @@ describe('IyzicoPosHttpClient', () => {
       await expect(c.request(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE, { a: 1 }, {} as never)).rejects.toBeInstanceOf(
         PosError,
       )
+      await expect(c.request(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE, { a: 1 }, {} as never)).rejects.toThrow(
+        'iyzico custom queries need an apiUrl',
+      )
       expect(sent).toHaveLength(0)
       expect(client.supportsTx(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE)).toBe(true)
     })

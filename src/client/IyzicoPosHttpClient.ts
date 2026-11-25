@@ -77,7 +77,7 @@ export class IyzicoPosHttpClient extends AbstractIyzicoPosHttpClient {
     }
 
     if (txType === QUERY_TYPE.CUSTOM_QUERY) {
-      throw new PosError('A custom query needs the URL to send it to.')
+      throw new PosError('iyzico custom queries need an apiUrl')
     }
 
     const path = PATHS.get(txType)
