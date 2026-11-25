@@ -41,6 +41,7 @@ replaces the other.
 | `ToslaPosQuery` | yes | no | yes | yes | no |
 | `ParamPosQuery` | yes | yes | yes | no | yes |
 | `PayTrPosQuery` | yes | yes | yes | no | yes |
+| `IyzicoPosQuery` | yes (needs `apiUrl`) | yes | no | yes | yes |
 
 A query the bank class does not offer rejects with `UnsupportedTransactionTypeError`; it never throws synchronously.
 Check first when the choice is dynamic:
@@ -71,6 +72,7 @@ the bank's field names back.
 | `ToslaPos` | `clientId`, `apiUser`, `rnd`, `timeSpan` (each only when missing) and the `hash` over them (when you set no `hash`) | JSON | none: `apiUrl` is required |
 | `ParamPos` | `G` (`CLIENT_CODE`, `CLIENT_USERNAME`, `CLIENT_PASSWORD`) and `GUID` (each only when missing) | SOAP: one action with its fields | `payment_api` unless `apiUrl` is given |
 | `PayTrPos` | `merchant_id` (when missing) and `paytr_token`, signed with the formula PayTR uses for the fields you send (when you set no `paytr_token`) | form-urlencoded; the answer is JSON | `payment_api` unless `apiUrl` is given |
+| `IyzicoPos` | none: the body goes out as you give it and the client signs it (`Authorization` header) | JSON | none: `apiUrl` is required |
 | `PosNetV1Pos` | `ApiType`, `ApiVersion`, `MerchantNo`, `TerminalNo` (each only when missing) and a `MAC` over the fields listed in `MACParams` (when you set no `MAC`) | JSON | none: `apiUrl` is required |
 
 For a sub-dealer account `MerchantId` is the sub-merchant id, otherwise `'1'`.
@@ -248,6 +250,33 @@ gives `status: 'declined'` with its message in `error_message`; the raw answer i
 History only lists records: a row's status **never confirms a payment**. Payments are confirmed by the signed
 notification alone (see the [PayTR guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/paytr-payment.md)).
 In the test config history is requested in PayTR's dummy mode.
+
+## iyzico: history, installment prices and BIN list
+
+```ts
+const query = PosQueryFactory.createPosQuery(iyzicoAccount, posProductionConfig)
+
+// The payments of one day (Date, Türkiye time), one page at a time
+const list = await query.history({ transaction_date: new Date('2026-11-14T00:00:00+03:00'), page: 1 })
+// list.status, list.transactions[], list.current_page, list.total_pages
+
+// Installment plans for an amount in TL, optionally for one card (`bin` of 6 or 8 digits)
+const prices = await query.getInstallmentPrices({ amount: 100, bin: '554960' })
+// prices.installment_prices[]: bank_name, card_family, prices[]: { installment, installment_price, total_price }
+
+// One card: `bin` is 6 or 8 digits
+const bins = await query.getBinList({ bin: '554960' })
+// bins.bin_list[0]: bin, bank_code, bank_name, card_type, card_class, card_family
+```
+
+A custom query goes to one iyzico endpoint, so `apiUrl` is required (on the API origin); the library signs the request
+for you and the answer is the decoded JSON, not normalized. iyzico offers no installment rates through this class
+(`getInstallmentRates` rejects with `UnsupportedTransactionTypeError`). A request iyzico refuses gives
+`status: 'declined'` with its message in `error_message`; the raw answer is always in `all`.
+
+History rows are **report-only**: a row's status never confirms a payment. Payments are confirmed by the signed answers
+of the gateway (see the [iyzico guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/iyzico-payment.md));
+to list the records of one order use `pos.orderHistory(order)`.
 
 ## Custom URLs are restricted
 
