@@ -32,26 +32,40 @@ const md = (islemGUID: string, mdValue: string, mdStatus: string, orderId: strin
   dcURL: 'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx',
 })
 
+/** The unsigned fields a 3D Pay / 3D Host callback carries next to the signed ones. */
+const turkposRest = {
+  TURKPOS_RETVAL_Islem_Tarih: '19.01.2025 17:29:32',
+  TURKPOS_RETVAL_Odeme_Tutari: '9,83',
+  TURKPOS_RETVAL_Ext_Data: '|||||||||',
+  TURKPOS_RETVAL_Banka_Sonuc_Kod: '0',
+  TURKPOS_RETVAL_PB: 'TL',
+  TURKPOS_RETVAL_KK_No: '581877******2285',
+  TURKPOS_RETVAL_Taksit: '0',
+  TURKPOS_RETVAL_Islem_GUID: '77f11031-cce8-4131-bf95-142303732608',
+  TURKPOS_RETVAL_SanalPOS_Islem_ID: '6021847062',
+}
+
 /** The five signed fields of a 3D Pay / 3D Host callback, with a hash. */
 const turkpos = (islemId: string, dekont: string, tutar: string, orderId: string, hash: string): Data => ({
   TURKPOS_RETVAL_Islem_ID: islemId,
   TURKPOS_RETVAL_Sonuc: '1',
+  TURKPOS_RETVAL_Sonuc_Str: 'Odeme Islemi Basarili',
   TURKPOS_RETVAL_GUID: G,
   TURKPOS_RETVAL_Dekont_ID: dekont,
   TURKPOS_RETVAL_Tahsilat_Tutari: tutar,
   TURKPOS_RETVAL_Siparis_ID: orderId,
   TURKPOS_RETVAL_Hash: hash,
+  ...turkposRest,
 })
 
 const MD1 = '581877:A65A349B0BAE27FC6567294215158DD8AE223843B5C96462F04A750CA7E8B165:3680:##500100000'
-const CS1 = md('35513153-9902-4a4c-a256-af6ed9cadc52', MD1, '1', '2025011749D1', 'b1D7+nI3j4k3WGJuhW5IuPOFpEE=')
-const CS2 = md(
-  'c1ee369b-ec27-4ab6-8c27-2e15e62793d3',
-  '444676:84E83D96A7CEC3A5815D49EB7F64D2709D1BC30425D578D118B9819A81749FB8:4429:##190100000',
-  '0',
-  '20241229C152',
-  'N1/W7/GcbuT3UVwVM9Q5C/rmoKg=',
-)
+const CS1: Data = {
+  ...md('35513153-9902-4a4c-a256-af6ed9cadc52', MD1, '1', '2025011749D1', 'b1D7+nI3j4k3WGJuhW5IuPOFpEE='),
+  bankResult:
+    'Y-status/Challenge authentication via ACS: https://3ds-acs.test.modirum.com/mdpayacs/p9w_3e2Ty_aWAjty/creq;token=340201161.17371  1',
+}
+const MD2 = '444676:84E83D96A7CEC3A5815D49EB7F64D2709D1BC30425D578D118B9819A81749FB8:4429:##190100000'
+const CS2 = md('c1ee369b-ec27-4ab6-8c27-2e15e62793d3', MD2, '0', '20241229C152', 'N1/W7/GcbuT3UVwVM9Q5C/rmoKg=')
 const CS3 = md(
   '5ee6c14d-94c2-48c9-bfe1-da31c415e647',
   '444676:B1748AA7FF30A96AADFECC19670A3038C1419A842DD221D2408708A84FE9D811:4011:##190100000',
@@ -72,7 +86,15 @@ const CS5 = md('8b6868fe-a553-4164-a7cc-528461f21759', MD5, '1', '202412292160',
 const RP1 = md('8b6868fe-a553-4164-a7cc-528461f21759', `${MD5}12024`, '1', '2292160', 'VW80ENgtqYCWlReB6tyAvqsomb4=')
 
 const CP1 = turkpos('1944A39AD0AEA92E173D665B', '3007300695', '10,01', '20250119BACB', 'LOpkL9J8vne8E2j0A0HKOhUWGhI=')
-const CP2 = turkpos('21C152499BA0369D94028E30', '3007301017', '10,01', '202501208059', 'sUAKlp9jJ9lyDVV4C0+lAnkDC9I=')
+const CP2 = {
+  ...turkpos('21C152499BA0369D94028E30', '3007301017', '10,01', '202501208059', 'sUAKlp9jJ9lyDVV4C0+lAnkDC9I='),
+  TURKPOS_RETVAL_Islem_Tarih: '20.01.2025 17:30:41',
+  TURKPOS_RETVAL_Ext_Data: '||||',
+  TURKPOS_RETVAL_PB: 'EUR',
+  TURKPOS_RETVAL_KK_No: '454671******7894',
+  TURKPOS_RETVAL_Islem_GUID: 'a699b219-9e77-4fc4-b2e8-4fae3e0b0cd1',
+  TURKPOS_RETVAL_SanalPOS_Islem_ID: '6021847384',
+}
 const CP3 = turkpos('FF0591BD887935E481743533', '0', '10,01', '202501193584', '+qCEIrH+7ARPmJC55MGQCykg8pk=')
 const CP4 = turkpos('25B4E0BAAD1F3FC05D46F5B4', '3007296668', '10,01', '202501053F4F', 'LrFgOcE6S8HzNF4tzvtORAh3C20=')
 const CP5 = turkpos('C38F20632F9FBBC3FD2A3B35', '0', '10,01', '20250120B068', 'Df3gttv1swwT8N1m3aCVYzp23Rg=')
@@ -83,13 +105,20 @@ const body = (extra: Data = {}): Data => ({
   '@xmlns': 'https://turkpos.com.tr/',
   Islem_Guvenlik_Tip: '3D',
   Islem_ID: '3344914AAB82284E39742F4C',
+  IPAdr: '127.0.0.1',
   Siparis_ID: 'order222',
   Islem_Tutar: '1000,25',
   Toplam_Tutar: '1000,25',
   Basarili_URL: 'https://domain.com/success',
   Hata_URL: 'https://domain.com/fail',
   Taksit: '1',
+  KK_Sahibi: 'ahmet',
   KK_No: '5555444433332222',
+  KK_SK_Ay: '01',
+  KK_SK_Yil: '2022',
+  KK_CVC: '123',
+  KK_Sahibi_GSM: '',
+  Islem_Hash: 'LFZ+Sl0mW+ybGvLr1u0ehZoxhxM=',
   ...extra,
 })
 
@@ -148,6 +177,15 @@ describe('ParamPosCrypt', () => {
       expect(check(CS5)).toBe(true)
       expect(check(RP1)).toBe(true)
       expect((RP1.md as string).endsWith('3473:##19010000012024')).toBe(true)
+    })
+
+    // addition: the same re-split turns a failed 3D check into an approval. Accepted by the crypt on purpose: the
+    // gateway rejects it, because the provision and the status record are bound to the genuine order.
+    it('accepts a failed 3D callback re-split as an approval of another order (permanent test)', () => {
+      const resplit = { ...CS2, md: `${MD2}02024`, mdStatus: '1', orderId: '229C152' }
+      expect(CS2.mdStatus).toBe('0')
+      expect(check(CS2)).toBe(true)
+      expect(check(resplit)).toBe(true)
     })
 
     // deviation: C5 the GUID is the account's, the one inside the callback is not read
@@ -228,13 +266,32 @@ describe('ParamPosCrypt', () => {
     })
 
     // addition: only own top-level fields are signed
-    it('ignores inherited and nested fields', () => {
-      const inherited = Object.create({ islemHash: CS1.islemHash, md: MD1 }) as Data
-      expect(check(inherited)).toBe(false)
-      const nested = { wrap: { ...CS1 } }
-      expect(check(nested)).toBe(false)
-      const hidden = { ...CS1, md: 'x', nested: { md: MD1 } }
-      expect(check(hidden)).toBe(false)
+    it('rejects callbacks whose fields are all inherited', () => {
+      expect(check(Object.create(CS1))).toBe(false)
+      expect(check(Object.create(CP1))).toBe(false)
+    })
+
+    it('rejects a callback with own hash fields but one inherited signed field', () => {
+      for (const name of ['islemGUID', 'md', 'mdStatus', 'orderId']) {
+        const { [name]: value, ...own } = CS1
+        const callback = Object.assign(Object.create({ [name]: value }) as Data, own)
+        expect(check(callback), name).toBe(false)
+      }
+      for (const name of [
+        'TURKPOS_RETVAL_Dekont_ID',
+        'TURKPOS_RETVAL_Tahsilat_Tutari',
+        'TURKPOS_RETVAL_Siparis_ID',
+        'TURKPOS_RETVAL_Islem_ID',
+      ]) {
+        const { [name]: value, ...own } = CP1
+        const callback = Object.assign(Object.create({ [name]: value }) as Data, own)
+        expect(check(callback), name).toBe(false)
+      }
+    })
+
+    it('rejects nested fields', () => {
+      expect(check({ wrap: { ...CS1 } })).toBe(false)
+      expect(check({ ...CS1, md: 'x', nested: { md: MD1 } })).toBe(false)
     })
 
     it('accepts a callback with extra unsigned fields and with the shapes of both present as TURKPOS', () => {
@@ -275,14 +332,25 @@ describe('ParamPosCrypt', () => {
       [
         '3d_secure_payment',
         {
-          TP_WMD_UCD: body({
+          TP_WMD_UCD: {
+            G: { CLIENT_CODE: '10738', CLIENT_USERNAME: 'Test', CLIENT_PASSWORD: 'Test' },
+            GUID: G,
+            Islem_Guvenlik_Tip: '3D',
+            Islem_ID: '4FF84F9EA8BE63C25EFB15A2',
+            IPAdr: '192.168.192.1',
             Siparis_ID: '202412293F4E',
             Islem_Tutar: '1.000,01',
             Toplam_Tutar: '1.000,01',
-            Taksit: '3',
             Basarili_URL: 'http://localhost/parampos/3d/response.php',
             Hata_URL: 'http://localhost/parampos/3d/response.php',
-          }),
+            Taksit: '3',
+            KK_Sahibi: 'John Doe',
+            KK_No: '4446763125813623',
+            KK_SK_Ay: '12',
+            KK_SK_Yil: '2026',
+            KK_CVC: '000',
+            KK_Sahibi_GSM: '',
+          },
         },
         'jsLYSB3lJ81leFgDLw4D8PbXURs=',
       ],
@@ -371,7 +439,24 @@ describe('ParamPosCrypt', () => {
 
   describe('create3DHostTransactionId', () => {
     it('HI1', () => {
-      expect(crypt.create3DHostTransactionId(HA, 'order222', 100025, '1000')).toBe('7318E87EBF9D8763695AC2B2')
+      expect(crypt.create3DHostTransactionId(HA, 'order222', 100025, '1000')).toBe('10EA8B9F7B2728D8F4BF034F')
+    })
+
+    // addition: the key is stretched from the password with the account's identifiers as salt
+    it('differs when the user name or the GUID changes, and is stable per account', () => {
+      const base = crypt.create3DHostTransactionId(HA, 'order222', 100025, '1000')
+      expect(crypt.create3DHostTransactionId(HA, 'order222', 100025, '1000')).toBe(base)
+      const user = AccountFactory.createParamPosAccount('param-3d-host-pos', '10738', 'Test9', 'Test2', G, '99001')
+      const guid = AccountFactory.createParamPosAccount(
+        'param-3d-host-pos',
+        '10738',
+        'Test1',
+        'Test2',
+        `${G}x`,
+        '99001',
+      )
+      expect(crypt.create3DHostTransactionId(user, 'order222', 100025, '1000')).not.toBe(base)
+      expect(crypt.create3DHostTransactionId(guid, 'order222', 100025, '1000')).not.toBe(base)
     })
 
     it('differs when the amount, order id, currency, client code or password changes', () => {

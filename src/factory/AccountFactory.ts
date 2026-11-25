@@ -10,7 +10,7 @@ import { PayForPosAccount } from '../model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
 import { ToslaPosAccount } from '../model/account/ToslaPosAccount.js'
 
-/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor, InterPos, BOA (Kuveyt, Vakif Katilim), Tosla and Param and Param gateways. */
+/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor, InterPos, BOA (Kuveyt, Vakif Katilim), Tosla and Param gateways. */
 export const AccountFactory = {
   createAssecoPosAccount(
     bank: string,

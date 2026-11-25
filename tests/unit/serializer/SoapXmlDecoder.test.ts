@@ -62,15 +62,18 @@ describe('SoapXmlDecoder', () => {
     expect(() => SoapXmlDecoder.decode(xml)).toThrow(PosHttpError)
   })
 
-  // addition: hardening: a document type or entity definition is refused, also when split by a null character
+  // addition: hardening: a document type or entity definition is refused even when the answer is otherwise well-formed
   it.each([
-    ['an internal entity', '<?xml version="1.0"?><!DOCTYPE x [<!ENTITY e "boom">]>'],
-    ['an external entity', '<!DOCTYPE x [<!ENTITY e SYSTEM "file:///etc/passwd">]>'],
-    ['a lower case declaration', '<!doctype x [<!entity e "boom">]>'],
-    ['an entity alone', '<!ENTITY e "boom">'],
-  ])('refuses %s', (_name, head) => {
-    const xml = `${head}<soap:Envelope xmlns:soap="${ENV}"><soap:Body><R>&e;</R></soap:Body></soap:Envelope>`
+    ['an internal entity used in a value', '<!DOCTYPE r [<!ENTITY e "boom">]>', true],
+    ['the same with an XML declaration', '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY e "boom">]>', true],
+    // The parser's own validation already rejects these two (not a single-case declaration / not resolvable).
+    ['a lower case declaration', '<!doctype r [<!entity e "boom">]>', false],
+    ['an external entity', '<!DOCTYPE r [<!ENTITY e SYSTEM "file:///etc/passwd">]>', false],
+  ])('refuses %s', (_name, head, parsesWithoutRefusal) => {
+    const xml = `${head}<soap:Envelope xmlns:soap="${ENV}"><soap:Body><R><A>&e;</A></R></soap:Body></soap:Envelope>`
     expect(() => SoapXmlDecoder.decode(xml)).toThrow(PosHttpError)
+    // The lenient body decoder reads the same text (so the row is well-formed and only the refusal stops it).
+    if (parsesWithoutRefusal) expect(() => KuveytPosSoapApiXmlDecoder.decode(xml)).not.toThrow()
   })
 
   // addition: the Kuveyt name reads the same body logic (it does not refuse document types)

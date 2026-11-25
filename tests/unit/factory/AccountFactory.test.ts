@@ -419,9 +419,10 @@ describe('AccountFactory Param', () => {
   it('testCreateParamPosAccountWithTerminalId', () => {
     const a = AccountFactory.createParamPosAccount('param-pos', '12345', 'APIUSER', 'kdsnsksl', 'guid123', '99001')
     expect(a.getTerminalId()).toBe('99001')
+    expect(a.getMerchantId()).toBe('12345')
   })
 
-  // addition: P1 a blank or non-string value is never signed or sent
+  // addition: C2 a blank or non-string value is never signed or sent
   it.each([
     ['clientCode', 0],
     ['username', 1],
@@ -436,13 +437,13 @@ describe('AccountFactory Param', () => {
     }
   })
 
-  // addition: P1
+  // addition: C2
   it.each(['', '  ', 5, {}])('rejects a blank or non-string terminal id %j', (bad) => {
     const make = AccountFactory.createParamPosAccount as unknown as (...a: unknown[]) => unknown
     expect(() => make('param-pos', '12345', 'APIUSER', 'kdsnsksl', 'guid123', bad)).toThrow(MissingAccountInfoError)
   })
 
-  // addition: P1 no terminal id means getTerminalId() throws
+  // addition: C2 no terminal id means getTerminalId() throws
   it('has no terminal id unless one is given', () => {
     const a = AccountFactory.createParamPosAccount('param-pos', '12345', 'APIUSER', 'kdsnsksl', 'guid123')
     expect(() => a.getTerminalId()).toThrow(MissingAccountInfoError)
@@ -480,7 +481,7 @@ describe('account credential leakage', () => {
     ['BOA', () => AccountFactory.createBoaPosAccount('vakif-katilim', 'mid', 'APIUSER', '11111', 'kdsnsksl', 'SUB1')],
     // addition: T1
     ['Tosla', () => AccountFactory.createToslaPosAccount('tosla', 'mid', 'api-user', 'api-pass')],
-    // addition: P1
+    // addition: C2
     [
       'Param',
       () => AccountFactory.createParamPosAccount('param-pos', 'mid', 'APIUSER', 'kdsnsksl', 'guid123', '99001'),

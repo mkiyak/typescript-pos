@@ -381,76 +381,76 @@ describe('maskSensitiveData JSON request echo', () => {
     const out = maskSensitiveData('{"clientId":"1","hash":"c2VjcmV0","apiPass":"pw","Hash":"x"}')
     expect(out).toBe('{"clientId":"1","hash":"***","apiPass":"***","Hash":"***"}')
   })
+})
 
-  // addition: Param request bodies carry the API password and the merchant GUID; the 3D Host answer's SOAP header echoes the password
-  describe('Param credentials', () => {
-    it('masks the keys', () => {
-      const out = maskSensitiveData({
-        GUID: 'g',
-        CLIENT_PASSWORD: 'p',
-        CLIENT_USERNAME: 'u',
-        TURKPOS_RETVAL_GUID: 'g',
-        KK_No: '5555444433332222',
-        KK_CVC: '123',
-        KK_SK_Ay: '01',
-        KK_SK_Yil: '2022',
-      })
-      expect(Object.values(out)).toEqual(Array(8).fill('***'))
+// addition: Param request bodies carry the API password and the merchant GUID; the 3D Host answer's SOAP header echoes the password
+describe('Param credentials', () => {
+  it('masks the keys', () => {
+    const out = maskSensitiveData({
+      GUID: 'g',
+      CLIENT_PASSWORD: 'p',
+      CLIENT_USERNAME: 'u',
+      TURKPOS_RETVAL_GUID: 'g',
+      KK_No: '5555444433332222',
+      KK_CVC: '123',
+      KK_SK_Ay: '01',
+      KK_SK_Yil: '2022',
     })
+    expect(Object.values(out)).toEqual(Array(8).fill('***'))
+  })
 
-    it('keeps Islem_GUID readable and other Param fields', () => {
-      const data = { Islem_GUID: 'abc', TURKPOS_RETVAL_Islem_GUID: 'abc', Siparis_ID: 'order222', CLIENT_CODE: '10738' }
-      expect(maskSensitiveData(data)).toEqual(data)
-    })
+  it('keeps Islem_GUID readable and other Param fields', () => {
+    const data = { Islem_GUID: 'abc', TURKPOS_RETVAL_Islem_GUID: 'abc', Siparis_ID: 'order222', CLIENT_CODE: '10738' }
+    expect(maskSensitiveData(data)).toEqual(data)
+  })
 
-    it('masks the XML tags and keeps Islem_GUID', () => {
-      const xml =
-        '<G><CLIENT_PASSWORD>Test2</CLIENT_PASSWORD></G><GUID>0c13d406-873b-403b-9c09-a5766840d98c</GUID><Islem_GUID>abc</Islem_GUID>'
-      const out = maskSensitiveData(xml)
-      expect(out).toContain('<CLIENT_PASSWORD>***</CLIENT_PASSWORD>')
-      expect(out).toContain('<GUID>***</GUID>')
-      expect(out).toContain('<Islem_GUID>abc</Islem_GUID>')
-      expect(out).not.toContain('Test2')
-    })
+  it('masks the XML tags and keeps Islem_GUID', () => {
+    const xml =
+      '<G><CLIENT_PASSWORD>Test2</CLIENT_PASSWORD></G><GUID>0c13d406-873b-403b-9c09-a5766840d98c</GUID><Islem_GUID>abc</Islem_GUID>'
+    const out = maskSensitiveData(xml)
+    expect(out).toContain('<CLIENT_PASSWORD>***</CLIENT_PASSWORD>')
+    expect(out).toContain('<GUID>***</GUID>')
+    expect(out).toContain('<Islem_GUID>abc</Islem_GUID>')
+    expect(out).not.toContain('Test2')
+  })
 
-    it('masks the username, the card tags and an attributed GUID tag', () => {
-      const out = maskSensitiveData(
-        '<CLIENT_USERNAME>user1</CLIENT_USERNAME><KK_No>x1</KK_No><KK_CVC>x2</KK_CVC><KK_SK_Ay>x3</KK_SK_Ay><KK_SK_Yil>x4</KK_SK_Yil><GUID a="b">gg</GUID>',
-      )
-      for (const secret of ['user1', 'x1', 'x2', 'x3', 'x4', 'gg']) expect(out).not.toContain(secret)
-    })
+  it('masks the username, the card tags and an attributed GUID tag', () => {
+    const out = maskSensitiveData(
+      '<CLIENT_USERNAME>user1</CLIENT_USERNAME><KK_No>x1</KK_No><KK_CVC>x2</KK_CVC><KK_SK_Ay>x3</KK_SK_Ay><KK_SK_Yil>x4</KK_SK_Yil><GUID a="b">gg</GUID>',
+    )
+    for (const secret of ['user1', 'x1', 'x2', 'x3', 'x4', 'gg']) expect(out).not.toContain(secret)
+  })
 
-    it('masks GUID in a query string and keeps Islem_GUID', () => {
-      expect(maskSensitiveData('GUID=x&Islem_GUID=y')).toBe('GUID=***&Islem_GUID=y')
-    })
+  it('masks GUID in a query string and keeps Islem_GUID', () => {
+    expect(maskSensitiveData('GUID=x&Islem_GUID=y')).toBe('GUID=***&Islem_GUID=y')
+  })
 
-    // addition: no over-masking of look-alike names
-    it('leaves look-alike names readable', () => {
-      expect(
-        maskSensitiveData({ guidance: 'x', GUIDE: 'y', Islem_GUID: 'z', client_code: '10738', kk_adi: 'ahmet' }),
-      ).toEqual({
-        guidance: 'x',
-        GUIDE: 'y',
-        Islem_GUID: 'z',
-        client_code: '10738',
-        kk_adi: 'ahmet',
-      })
-      expect(maskSensitiveData('<GUIDE>x</GUIDE><CLIENT_CODE>10738</CLIENT_CODE><Siparis_ID>o1</Siparis_ID>')).toBe(
-        '<GUIDE>x</GUIDE><CLIENT_CODE>10738</CLIENT_CODE><Siparis_ID>o1</Siparis_ID>',
-      )
-      expect(maskSensitiveData('MYGUID=x&TURKPOS_RETVAL_Islem_GUID=y&Siparis_ID=o1')).toBe(
-        'MYGUID=x&TURKPOS_RETVAL_Islem_GUID=y&Siparis_ID=o1',
-      )
-      expect(maskSensitiveData('{"Islem_GUID":"keep","CLIENT_CODE":"10738"}')).toBe(
-        '{"Islem_GUID":"keep","CLIENT_CODE":"10738"}',
-      )
+  // addition: no over-masking of look-alike names
+  it('leaves look-alike names readable', () => {
+    expect(
+      maskSensitiveData({ guidance: 'x', GUIDE: 'y', Islem_GUID: 'z', client_code: '10738', kk_adi: 'ahmet' }),
+    ).toEqual({
+      guidance: 'x',
+      GUIDE: 'y',
+      Islem_GUID: 'z',
+      client_code: '10738',
+      kk_adi: 'ahmet',
     })
+    expect(maskSensitiveData('<GUIDE>x</GUIDE><CLIENT_CODE>10738</CLIENT_CODE><Siparis_ID>o1</Siparis_ID>')).toBe(
+      '<GUIDE>x</GUIDE><CLIENT_CODE>10738</CLIENT_CODE><Siparis_ID>o1</Siparis_ID>',
+    )
+    expect(maskSensitiveData('MYGUID=x&TURKPOS_RETVAL_Islem_GUID=y&Siparis_ID=o1')).toBe(
+      'MYGUID=x&TURKPOS_RETVAL_Islem_GUID=y&Siparis_ID=o1',
+    )
+    expect(maskSensitiveData('{"Islem_GUID":"keep","CLIENT_CODE":"10738"}')).toBe(
+      '{"Islem_GUID":"keep","CLIENT_CODE":"10738"}',
+    )
+  })
 
-    it('masks the keys inside JSON text and keeps Islem_GUID', () => {
-      const out = maskSensitiveData('{"GUID":"abc","Islem_GUID":"keep","CLIENT_PASSWORD":"pw"}')
-      expect(out).not.toContain('abc')
-      expect(out).not.toContain('pw')
-      expect(out).toContain('keep')
-    })
+  it('masks the keys inside JSON text and keeps Islem_GUID', () => {
+    const out = maskSensitiveData('{"GUID":"abc","Islem_GUID":"keep","CLIENT_PASSWORD":"pw"}')
+    expect(out).not.toContain('abc')
+    expect(out).not.toContain('pw')
+    expect(out).toContain('keep')
   })
 })

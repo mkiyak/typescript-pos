@@ -12,7 +12,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
 /** Bare base64 values of credential length (a hashed password or a signature) that a fault text may echo. */
-const BASE64_TOKEN = /[A-Za-z0-9+/]{26,}={1,2}/g
+// The look-behind starts a match only at the start of a run, so a very long run is scanned once, not once per position.
+const BASE64_TOKEN = /(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{26,}={1,2}/g
+/** A fault is read from a hostile answer: only this much of it is looked at (more than any limit used below). */
+const FAULT_INPUT_MAX = 8192
 // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/g
 const NAMED_ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
@@ -33,7 +36,7 @@ function decodeEntities(text: string): string {
  * 256 characters. Masking comes before shortening so a cut can never leave a piece of a secret.
  */
 export function faultMessage(text: string, secrets: readonly string[] = [], limit = FAULT_MAX): string {
-  let masked = decodeEntities(text)
+  let masked = decodeEntities(text.slice(0, FAULT_INPUT_MAX))
   for (const secret of secrets) masked = masked.split(secret).join('***')
   const clean = maskSensitiveData(masked.replace(BASE64_TOKEN, '***').replace(CONTROL_CHARACTERS, ' ').trim())
 

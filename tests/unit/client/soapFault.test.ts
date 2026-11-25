@@ -61,4 +61,20 @@ describe('soapFault', () => {
     expect(faultTextOf({ 'soap:faultstring': { '@xml:lang': 'en', '#': 'with attr' } })).toBe('with attr')
     expect(faultTextOf({ faultcode: 'x' })).toBe(FALLBACK_FAULT)
   })
+
+  // addition: a hostile answer can carry a huge fault text; masking must stay linear
+  it.each([
+    ['one base64-looking run', 'A'.repeat(1_000_000)],
+    ['a run followed by a break', `${'Ab+/'.repeat(250_000)} x`],
+    ['a long plain text', 'word '.repeat(200_000)],
+  ])('handles a 1 MB fault (%s) quickly', (_name, text) => {
+    const started = Date.now()
+    const out = faultMessage(text)
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect(out.length).toBeLessThanOrEqual(256)
+  })
+
+  it('masks the same tokens as before in a normal fault', () => {
+    expect(faultMessage('x dGhpc2lzYXNlY3JldHNpZ25hdHVyZQ== y Zm9v+/Zm9vZm9vZm9vZm9vZm9vZm9v= z')).toBe('x *** y *** z')
+  })
 })

@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto'
+import { createHash, createHmac, pbkdf2Sync } from 'node:crypto'
 import { NotImplementedError, PosError } from '../errors.js'
 import type { ParamPosAccount } from '../model/account/ParamPosAccount.js'
 import { encodeIso88599, isIso88599Representable } from '../serializer/iso88599.js'
@@ -13,6 +13,16 @@ const LOG_VALUE_LIMIT = 64
 const HASH_PATTERN = /^[A-Za-z0-9+/]{27}=$/
 const ORDER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 const CURRENCY_CODE = /^\d{4}$/
+
+/**
+ * The transaction id of a hosted payment is shown to the payer, so it must not let anyone test password guesses
+ * offline: the HMAC key is stretched from the API password first (PBKDF2, a fixed label and the account's
+ * identifiers as salt), once per account object.
+ */
+const HOST_ID_SALT_LABEL = 'typescript-pos/param/3d-host-id'
+const HOST_ID_ITERATIONS = 200_000
+const HOST_ID_KEY_BYTES = 32
+const hostIdKeys = new WeakMap<object, Buffer>()
 
 /** The request bodies the bank signs, and the fields each signature covers (after the client code and the GUID). */
 const REQUEST_FIELDS: Readonly<Record<string, readonly string[]>> = {
@@ -126,9 +136,10 @@ export class ParamPosCrypt extends AbstractCrypt<ParamPosAccount> {
 
   /**
    * The transaction id of a hosted payment: the first 24 hex digits, upper-cased, of an HMAC-SHA-256 over the client
-   * code, the order id, the amount in kuruş and the currency code, keyed with the API password. The hosted request
-   * carries no order id, so this id is the only server-chosen link between the payment and the order that the bank
-   * keeps; it can be recomputed later without any stored state.
+   * code, the order id, the amount in kuruş and the currency code. The key is derived from the API password (PBKDF2,
+   * see `hostIdKey`), so the id the payer sees reveals nothing cheap to attack. The hosted request carries no order
+   * id, so this id is the only server-chosen link between the payment and the order that the bank keeps; it can be
+   * recomputed later without any stored state. A weak API password still weakens it: use a strong one.
    */
   create3DHostTransactionId(account: ParamPosAccount, orderId: string, kurus: number, currencyCode: string): string {
     if (typeof orderId !== 'string' || !ORDER_ID.test(orderId)) {
@@ -141,11 +152,24 @@ export class ParamPosCrypt extends AbstractCrypt<ParamPosAccount> {
       throw new PosError('Param transaction id: the currency code is not valid')
     }
 
-    return createHmac('sha256', account.getPassword())
+    return createHmac('sha256', this.hostIdKey(account))
       .update(`${account.getMerchantId()}|${orderId}|${kurus}|${currencyCode}`, 'utf8')
       .digest('hex')
       .slice(0, 24)
       .toUpperCase()
+  }
+
+  /** The stretched key of an account, computed once per account object. */
+  private hostIdKey(account: ParamPosAccount): Buffer {
+    let key = hostIdKeys.get(account)
+    if (key === undefined) {
+      const salt = [HOST_ID_SALT_LABEL, account.getMerchantId(), account.getUsername(), account.getSecretKey()].join(
+        '|',
+      )
+      key = pbkdf2Sync(account.getPassword(), salt, HOST_ID_ITERATIONS, HOST_ID_KEY_BYTES, 'sha256')
+      hostIdKeys.set(account, key)
+    }
+    return key
   }
 
   /** The text a callback signature covers and the field that carries it; null when a signed value is not a string. */
