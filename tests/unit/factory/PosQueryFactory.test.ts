@@ -19,6 +19,7 @@ import { AkbankPosQuery } from '../../../src/pos-query/AkbankPosQuery.js'
 import { AssecoPosQuery } from '../../../src/pos-query/AssecoPosQuery.js'
 import { GarantiPosQuery } from '../../../src/pos-query/GarantiPosQuery.js'
 import { InterPosQuery } from '../../../src/pos-query/InterPosQuery.js'
+import { ParamPosQuery } from '../../../src/pos-query/ParamPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../../../src/pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../../../src/pos-query/PayFlexV4PosQuery.js'
 import { PayForPosQuery } from '../../../src/pos-query/PayForPosQuery.js'
@@ -1032,5 +1033,279 @@ describe('PosQueryFactory with ToslaPos', () => {
     expect(all).not.toContain('POS_ENT_Test_001!*!*')
     expect(all).not.toContain('caller-hash-value-1')
     expect(all).not.toMatch(/"hash":"[A-Za-z0-9+/]{86}=="/)
+  })
+})
+
+describe('PosQueryFactory with ParamPos', () => {
+  const GUID = '0c13d406-873b-403b-9c09-a5766840d98c'
+  const account = () => AccountFactory.createParamPosAccount('param-pos', '10738', 'Test1', 'Test2', GUID)
+  const URL_TEST = 'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx'
+  const NS = 'https://turkpos.com.tr/'
+
+  const envelope = (body: string) =>
+    `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"><soap:Body>${body}</soap:Body></soap:Envelope>`
+
+  const BIN_ANSWER = envelope(
+    `<BIN_SanalPosResponse xmlns="${NS}"><BIN_SanalPosResult><Sonuc>1</Sonuc><Sonuc_Str>Basarili</Sonuc_Str><DT_Bilgi><diffgr:diffgram xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1"><NewDataSet><Temp><BIN>415956</BIN><Banka_Kodu>62</Banka_Kodu><Kart_Banka>Garanti Bankası</Kart_Banka><Kart_Org>VISA</Kart_Org><Kart_Tip>Kredi Kartı</Kart_Tip></Temp></NewDataSet></diffgr:diffgram></DT_Bilgi></BIN_SanalPosResult></BIN_SanalPosResponse>`,
+  )
+  const RATES_ANSWER = envelope(
+    `<TP_Ozel_Oran_SK_ListeResponse xmlns="${NS}"><TP_Ozel_Oran_SK_ListeResult><Sonuc>1</Sonuc><Sonuc_Str>Başarılı</Sonuc_Str><DT_Bilgi><diffgr:diffgram xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1"><NewDataSet><DT_Ozel_Oranlar_SK><Ozel_Oran_SK_ID>849808</Ozel_Oran_SK_ID><Kredi_Karti_Banka>Bonus</Kredi_Karti_Banka><MO_01>1.1900</MO_01><MO_02>-2.0000</MO_02><MO_03>6.6200</MO_03><MO_06>10.5000</MO_06></DT_Ozel_Oranlar_SK></NewDataSet></diffgr:diffgram></DT_Bilgi></TP_Ozel_Oran_SK_ListeResult></TP_Ozel_Oran_SK_ListeResponse>`,
+  )
+  const HISTORY_ANSWER = envelope(
+    `<TP_Islem_IzlemeResponse xmlns="${NS}"><TP_Islem_IzlemeResult><Sonuc>1</Sonuc><Sonuc_Str>Başarılı</Sonuc_Str><DT_Bilgi><diffgr:diffgram xmlns:diffgr="urn:schemas-microsoft-com:xml-diffgram-v1"><NewDataSet><Temp><Sonuc>1</Sonuc><Tip_Str>Satış</Tip_Str><Tarih>2025-01-20T09:10:48.8+03:00</Tarih><Tutar>12.5000</Tutar><Toplam_Iade_Tutar>0.0000</Toplam_Iade_Tutar><Islem_Guvenlik>NONSECURE</Islem_Guvenlik><ORJ_ORDER_ID>order-1</ORJ_ORDER_ID><PB>TRL</PB></Temp></NewDataSet></diffgr:diffgram></DT_Bilgi></TP_Islem_IzlemeResult></TP_Islem_IzlemeResponse>`,
+  )
+  const STATUS_ANSWER = envelope(
+    `<TP_Islem_Sorgulama4Response xmlns="${NS}"><TP_Islem_Sorgulama4Result><Sonuc>1</Sonuc><Sonuc_Str>ok</Sonuc_Str></TP_Islem_Sorgulama4Result></TP_Islem_Sorgulama4Response>`,
+  )
+
+  function e2e(answer: string, logger?: PosLogger, hooks?: PosHooks, status = 200) {
+    const calls: Array<{ url: string; body: string }> = []
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const raw = init?.body
+      const body = typeof raw === 'string' ? raw : Buffer.from(raw as Uint8Array).toString('utf8')
+      calls.push({ url: String(url), body })
+      return new Response(answer, { status, headers: { 'content-type': 'text/xml; charset=utf-8' } })
+    }) as unknown as typeof fetch
+    const q = PosQueryFactory.createPosQuery(account(), posTestConfig, { fetch: fetchFn, logger, hooks })
+    return { q, calls, fetchFn }
+  }
+
+  it('creates the query class from the shipped test config', () => {
+    expect(PosQueryFactory.createPosQuery(account(), posTestConfig)).toBeInstanceOf(ParamPosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('ParamPos')).toBe(ParamPosQuery)
+  })
+
+  it('rejects a ToslaPosAccount for the param-pos bank', () => {
+    const wrong = AccountFactory.createToslaPosAccount('param-pos', '1', 'u', 'p')
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+      'Bank [param-pos] is configured for ParamPos and needs a ParamPosAccount.',
+    )
+  })
+
+  // addition: the hosted-page gateway has no query class
+  it('has no query for param-3d-host-pos', () => {
+    const host = AccountFactory.createParamPosAccount('param-3d-host-pos', '10738', 'Test1', 'Test2', GUID, '99001')
+    expect(() => PosQueryFactory.createPosQuery(host, posTestConfig)).toThrow(GatewayClassNotConfiguredError)
+    expect(() => PosQueryFactory.createPosQuery(host, posTestConfig)).toThrow(
+      'PosQuery not found for gateway Param3DHostPos',
+    )
+    expect(PosQueryFactory.getPosQueryClassForGateway('Param3DHostPos')).toBeNull()
+  })
+
+  it('getBinList posts BIN_SanalPos and maps a single-record answer', async () => {
+    const { q, calls } = e2e(BIN_ANSWER)
+    const result = await q.getBinList({ bin: '415956' })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(URL_TEST)
+    const body = calls[0]?.body ?? ''
+    expect(body).toContain('<soap:Body><BIN_SanalPos xmlns="https://turkpos.com.tr/">')
+    expect(body).toContain('<CLIENT_CODE>10738</CLIENT_CODE>')
+    expect(body).toContain(`<GUID>${GUID}</GUID>`)
+    expect(body).toContain('<BIN>415956</BIN>')
+    expect(result).toMatchObject({
+      status: 'approved',
+      bin_list: [
+        { bin: '415956', bank_code: '62', bank_name: 'Garanti Bankası', card_type: 'visa', card_class: 'credit' },
+      ],
+    })
+  })
+
+  it('getBinList without a bin sends no BIN element', async () => {
+    const { q, calls } = e2e(BIN_ANSWER)
+    await q.getBinList({})
+    expect(calls[0]?.body).not.toContain('<BIN>')
+  })
+
+  it.each([
+    ['too short', '41595'],
+    ['7 digits', '4159561'],
+    ['not digits', '41595a'],
+  ])('getBinList with a bin that is %s rejects and sends nothing', async (_name, bin) => {
+    const { q, fetchFn } = e2e(BIN_ANSWER)
+    await expect(q.getBinList({ bin })).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('getBinList accepts an 8 digit number', async () => {
+    const { q, calls } = e2e(BIN_ANSWER)
+    await q.getBinList({ bin: 41595612 })
+    expect(calls[0]?.body).toContain('<BIN>41595612</BIN>')
+  })
+
+  it('getInstallmentRates posts TP_Ozel_Oran_SK_Liste and maps the answer', async () => {
+    const { q, calls } = e2e(RATES_ANSWER)
+    const result = await q.getInstallmentRates({})
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(URL_TEST)
+    expect(calls[0]?.body).toContain('<TP_Ozel_Oran_SK_Liste xmlns="https://turkpos.com.tr/">')
+    expect(result.status).toBe('approved')
+    expect(result.installment_rates).toEqual([
+      {
+        bank_code: null,
+        bank_name: null,
+        card_prefix: null,
+        card_type: null,
+        card_class: null,
+        card_family: 'bonus',
+        rates: [
+          { installment: 3, rate: 6.62, constant: 0 },
+          { installment: 6, rate: 10.5, constant: 0 },
+        ],
+      },
+    ])
+  })
+
+  it('history posts TP_Islem_Izleme with the Türkiye-time window and maps the answer', async () => {
+    const { q, calls } = e2e(HISTORY_ANSWER)
+    const result = await q.history({
+      start_date: new Date('2025-01-20T00:00:00+03:00'),
+      end_date: new Date('2025-01-21T00:00:00+03:00'),
+      transaction_type: 'pay',
+    })
+
+    const body = calls[0]?.body ?? ''
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(URL_TEST)
+    expect(body).toContain('<TP_Islem_Izleme xmlns="https://turkpos.com.tr/">')
+    expect(body).toContain('<Tarih_Bas>20.01.2025 00:00:00</Tarih_Bas>')
+    expect(body).toContain('<Tarih_Bit>21.01.2025 00:00:00</Tarih_Bit>')
+    expect(body).toContain('<Islem_Tip>Satış</Islem_Tip>')
+    expect(result).toMatchObject({ status: 'approved', trans_count: 1, proc_return_code: '1' })
+    expect((result.transactions as Array<Record<string, unknown>>)[0]).toMatchObject({
+      order_id: 'order-1',
+      transaction_type: 'pay',
+      first_amount: 12.5,
+      currency: 'TRY',
+      payment_model: 'regular',
+    })
+  })
+
+  it('history without a date window rejects and sends nothing', async () => {
+    const { q, fetchFn } = e2e(HISTORY_ANSWER)
+    await expect(q.history({})).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('a custom query posts the body with the account fields and returns the decoded body', async () => {
+    const { q, calls } = e2e(STATUS_ANSWER)
+    const result = await q.customQuery({ TP_Islem_Sorgulama4: { Siparis_ID: 'x' } })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(URL_TEST)
+    expect(calls[0]?.body).toContain('<Siparis_ID>x</Siparis_ID>')
+    expect(calls[0]?.body).toContain('<CLIENT_USERNAME>Test1</CLIENT_USERNAME>')
+    expect(result).toEqual({
+      TP_Islem_Sorgulama4Response: { TP_Islem_Sorgulama4Result: { Sonuc: '1', Sonuc_Str: 'ok' } },
+    })
+  })
+
+  it('a custom query to the same endpoint url is allowed', async () => {
+    const { q, calls } = e2e(STATUS_ANSWER)
+    await q.customQuery({ TP_Islem_Sorgulama4: { Siparis_ID: 'x' } }, URL_TEST)
+    expect(calls[0]?.url).toBe(URL_TEST)
+  })
+
+  it.each([
+    ['a foreign origin', 'https://evil.example/x'],
+    ['plain http', 'http://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx'],
+    ['embedded credentials', 'https://u:p@test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx'],
+    ['a look-alike host', 'https://test-dmz.param.com.tr.evil.example/x'],
+    ['text that is no url', 'not a url'],
+  ])('a custom query url on %s rejects and sends nothing', async (_name, url) => {
+    const { q, fetchFn } = e2e(STATUS_ANSWER)
+    await expect(q.customQuery({ TP_Islem_Sorgulama4: { Siparis_ID: 'x' } }, url)).rejects.toThrow(
+      /Custom query URL must be an https: URL on one of these origins/,
+    )
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['an empty request', {}],
+    ['two actions', { A: {}, B: {} }],
+    ['a text body', { A: 'x' }],
+  ])('a custom query with %s rejects and sends nothing', async (_name, request) => {
+    const { q, fetchFn } = e2e(STATUS_ANSWER)
+    await expect(q.customQuery(request)).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('getInstallmentPrices rejects as unsupported and sends nothing', async () => {
+    const { q, fetchFn } = e2e(RATES_ANSWER)
+    await expect(q.getInstallmentPrices({})).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('a SOAP fault is a PosHttpError with the credentials masked', async () => {
+    const fault = `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><soap:Fault><faultcode>soap:Server</faultcode><faultstring>Geçersiz kullanıcı Test2 ${GUID}</faultstring></soap:Fault></soap:Body></soap:Envelope>`
+    for (const status of [200, 500]) {
+      const { q } = e2e(fault, undefined, undefined, status)
+      const error = await q.getInstallmentRates({}).catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(PosHttpError)
+      const text = `${(error as Error).message}`
+      expect(text).not.toContain('Test2')
+      expect(text).not.toContain(GUID)
+    }
+  })
+
+  it('an HTML answer is a PosHttpError, not a parsing crash', async () => {
+    const { q } = e2e('<html><body>blocked</body></html>')
+    await expect(q.getBinList({})).rejects.toBeInstanceOf(PosHttpError)
+  })
+
+  it('a non-2xx answer is a PosHttpError', async () => {
+    const { q } = e2e('', undefined, undefined, 500)
+    await expect(q.history({ start_date: new Date(), end_date: new Date() })).rejects.toBeInstanceOf(PosHttpError)
+  })
+
+  it('a custom query answer that echoes the merchant key does not return it', async () => {
+    const echo = envelope(
+      `<TP_Islem_Sorgulama4Response xmlns="${NS}"><TP_Islem_Sorgulama4Result><Sonuc>1</Sonuc><TURKPOS_RETVAL_GUID>${GUID}</TURKPOS_RETVAL_GUID></TP_Islem_Sorgulama4Result></TP_Islem_Sorgulama4Response>`,
+    )
+    const { q } = e2e(echo)
+    const result = await q.customQuery({ TP_Islem_Sorgulama4: { Siparis_ID: 'x' } })
+    expect(JSON.stringify(result)).not.toContain(GUID)
+  })
+
+  // the hook changes the data, so the query logs the initial and the updated request data
+  it('masks the credentials in every logged line of every query', async () => {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    const logger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
+    const hook = (e: { requestData: Record<string, unknown> }) => {
+      e.requestData.Note = 'changed'
+    }
+    const hooks = { onPosQueryRequestDataPrepared: [hook] }
+
+    await e2e(RATES_ANSWER, logger, hooks).q.getInstallmentRates({})
+    await e2e(BIN_ANSWER, logger, hooks).q.getBinList({ bin: '415956' })
+    await e2e(HISTORY_ANSWER, logger, hooks).q.history({ start_date: new Date(), end_date: new Date() })
+    await e2e(STATUS_ANSWER, logger, hooks).q.customQuery({ TP_Islem_Sorgulama4: { Siparis_ID: 'x' } })
+
+    const all = JSON.stringify(lines)
+    expect(all).toContain('Request data is changed via listeners')
+    expect(all).toContain('"CLIENT_PASSWORD":"***"')
+    expect(all).toContain('"CLIENT_USERNAME":"***"')
+    expect(all).toContain('"GUID":"***"')
+    expect(all).not.toContain('"CLIENT_PASSWORD":"Test2"')
+    expect(all).not.toContain('"GUID":"0c13')
+    expect(all).not.toContain('Test2')
+    expect(all).not.toContain(GUID)
+  })
+
+  it('masks a credential echo in the fault text of a failed query', async () => {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    const logger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
+    const fault = `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><soap:Fault><faultstring>bad Test2 ${GUID}</faultstring></soap:Fault></soap:Body></soap:Envelope>`
+    await e2e(fault, logger)
+      .q.getBinList({})
+      .catch(() => undefined)
+
+    const all = JSON.stringify(lines)
+    expect(all).not.toContain('Test2')
+    expect(all).not.toContain(GUID)
   })
 })

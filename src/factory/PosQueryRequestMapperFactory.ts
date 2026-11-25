@@ -3,6 +3,7 @@ import { AkbankPosQueryRequestDataMapper } from '../data-mapper/pos-query/reques
 import { AssecoPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/AssecoPosQueryRequestDataMapper.js'
 import { GarantiPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/GarantiPosQueryRequestDataMapper.js'
 import { InterPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/InterPosQueryRequestDataMapper.js'
+import { ParamPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/ParamPosQueryRequestDataMapper.js'
 import { PayFlexCPV4PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayFlexCPV4PosQueryRequestDataMapper.js'
 import { PayFlexV4PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayFlexV4PosQueryRequestDataMapper.js'
 import { PayForPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayForPosQueryRequestDataMapper.js'
@@ -22,6 +23,7 @@ const REQUEST_MAPPERS = [
   AssecoPosQueryRequestDataMapper,
   GarantiPosQueryRequestDataMapper,
   InterPosQueryRequestDataMapper,
+  ParamPosQueryRequestDataMapper,
   PayFlexCPV4PosQueryRequestDataMapper,
   PayFlexV4PosQueryRequestDataMapper,
   PayForPosQueryRequestDataMapper,

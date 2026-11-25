@@ -1,0 +1,799 @@
+{
+  "proc_return_code": 1,
+  "error_code": null,
+  "error_message": null,
+  "status": "approved",
+  "trans_count": 29,
+  "transactions": [
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 07:45:24.320000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 07:45:24.320000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 50,
+      "capture_amount": 50,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "a30efda8-d946-44f9-809b-72b9eef27954",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:00:45.203000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:00:45.203000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 168,
+      "capture_amount": 168,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "c4fe70c9-bd68-4397-a74f-9ba5a1bddd25",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": -1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:05:45.810000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": null,
+      "error_message": "Başarısız",
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": null,
+      "capture_amount": null,
+      "status": "declined",
+      "error_code": -1,
+      "capture": null,
+      "currency": null,
+      "masked_number": null,
+      "order_id": "55EA33E8-447B-4B39-A02B-8DC4EA2070D8",
+      "payment_model": "3d"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 2,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:24:40.083000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:24:40.083000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 10.1,
+      "capture_amount": 10.1,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": null,
+      "masked_number": null,
+      "order_id": "1b98c5f8-1cc3-46ff-90c4-ecfbd7090cef",
+      "payment_model": "3d"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:29:08.587000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:29:08.587000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 50,
+      "capture_amount": 50,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "144a32af-e227-43cf-af3e-76ece6bf2a34",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 2,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:40:29.877000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:40:29.877000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 10.1,
+      "capture_amount": 10.1,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": null,
+      "masked_number": null,
+      "order_id": "1b98c5f8-1cc3-46ff-90c4-ecfbd7090cef",
+      "payment_model": "3d"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": -1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:47:09.917000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": null,
+      "error_message": "Başarısız",
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": null,
+      "capture_amount": null,
+      "status": "declined",
+      "error_code": -1,
+      "capture": null,
+      "currency": null,
+      "masked_number": null,
+      "order_id": "C440225FF1A28200",
+      "payment_model": "3d"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:51:43.167000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:51:43.167000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 10,
+      "capture_amount": 10,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "41a74cfc-849f-4c53-9310-5418ab78b279",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:52:00.123000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:52:00.123000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 15,
+      "capture_amount": 15,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "2c195e7a-2dc6-4daa-a4bd-3916f643643f",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:52:21.793000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:52:21.793000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 23,
+      "capture_amount": 23,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "a6376db5-d037-4538-a0a0-b10804b8a260",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:52:36.713000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:52:36.713000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 11,
+      "capture_amount": 11,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "88ed514f-1f94-4154-9b32-056a0f34cf28",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:52:53.007000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:52:53.007000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 11,
+      "capture_amount": 11,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "b056879f-0a2c-44a0-bc79-1e1e48309e75",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": -1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:56:40.750000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": null,
+      "error_message": "Başarısız",
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": null,
+      "capture_amount": null,
+      "status": "declined",
+      "error_code": -1,
+      "capture": null,
+      "currency": null,
+      "masked_number": null,
+      "order_id": "D19E6CA032EF8B39",
+      "payment_model": "3d"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:59:18.927000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:59:18.927000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 10,
+      "capture_amount": 10,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "4090a9bd-a58e-4464-bbeb-17699ee09a9a",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 2,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:59:27.073000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": null,
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "refund",
+      "first_amount": null,
+      "capture_amount": null,
+      "status": "approved",
+      "error_code": null,
+      "capture": null,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "4090a9bd-a58e-4464-bbeb-17699ee09a9a",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 08:59:34.487000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 08:59:34.487000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 5,
+      "capture_amount": 5,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "b2482ac0-c6bd-4752-b051-5d1e9bc2bb5a",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 2,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:02:21.850000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:02:21.850000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 10.1,
+      "capture_amount": 10.1,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": null,
+      "masked_number": null,
+      "order_id": "d32b5cea-3dd5-4b4c-8267-98234e34a9ba",
+      "payment_model": "3d"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:03:13.237000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:03:13.237000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 23,
+      "capture_amount": 23,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "c9f0c34b-5323-4882-ae1f-4402efe15bba",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:03:49.923000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:03:49.923000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 21,
+      "capture_amount": 21,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "91df97d8-e62a-41bb-b512-e538dcaf3b8e",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 12,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:04:13.200000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:04:13.200000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 27,
+      "capture_amount": 27,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "a8777aab-b36d-4b4e-9132-6177f8bee40c",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:04:55.153000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": null,
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "cancel",
+      "first_amount": null,
+      "capture_amount": null,
+      "status": "approved",
+      "error_code": null,
+      "capture": null,
+      "currency": "TRY",
+      "masked_number": null,
+      "refund_amount": null,
+      "order_id": "a8777aab-b36d-4b4e-9132-6177f8bee40c",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:06:39.950000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:06:39.950000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 11.5,
+      "capture_amount": 11.5,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "6aefa387-7220-45e5-942b-64c8c463636b",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 2,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:08:01.570000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:08:01.570000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 100,
+      "capture_amount": 100,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": null,
+      "masked_number": null,
+      "order_id": "155322706",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:09:09.467000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:09:09.467000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 11,
+      "capture_amount": 11,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "06733ab7-f59a-41f1-bb41-c3b6f5c300a8",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:09:27.523000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:09:27.523000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 11.5,
+      "capture_amount": 11.5,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "89508e82-16a4-4c6f-810f-1d7d6659738b",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 2,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:10:20.380000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:10:20.380000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 100,
+      "capture_amount": 100,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": null,
+      "masked_number": null,
+      "order_id": "490164900",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:10:48.800000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:10:48.800000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 12.5,
+      "capture_amount": 12.5,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "5f7f3de8-a703-4b30-9dc6-4e54c3251a44",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 12,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:12:23.553000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": {
+        "date": "2025-01-20 09:12:23.553000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "pay",
+      "first_amount": 5,
+      "capture_amount": 5,
+      "status": "approved",
+      "error_code": null,
+      "capture": true,
+      "currency": "TRY",
+      "masked_number": null,
+      "order_id": "d2549d6d-5473-4359-bc55-f96854012747",
+      "payment_model": "regular"
+    },
+    {
+      "auth_code": null,
+      "proc_return_code": 1,
+      "transaction_id": null,
+      "transaction_time": {
+        "date": "2025-01-20 09:12:38.940000",
+        "timezone_type": 1,
+        "timezone": "+03:00"
+      },
+      "capture_time": null,
+      "error_message": null,
+      "ref_ret_num": null,
+      "order_status": null,
+      "transaction_type": "cancel",
+      "first_amount": null,
+      "capture_amount": null,
+      "status": "approved",
+      "error_code": null,
+      "capture": null,
+      "currency": "TRY",
+      "masked_number": null,
+      "refund_amount": null,
+      "order_id": "d2549d6d-5473-4359-bc55-f96854012747",
+      "payment_model": "regular"
+    }
+  ]
+}

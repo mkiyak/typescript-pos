@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { AkbankPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/AkbankPosQueryResponseDataMapper.js'
 import { GarantiPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/GarantiPosQueryResponseDataMapper.js'
+import { ParamPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/ParamPosQueryResponseDataMapper.js'
 import { PayForPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/PayForPosQueryResponseDataMapper.js'
 import { ToslaPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/ToslaPosQueryResponseDataMapper.js'
 import { VakifKatilimPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/VakifKatilimPosQueryResponseDataMapper.js'
@@ -8,11 +9,13 @@ import { AssecoPosResponseValueFormatter } from '../../../src/data-mapper/respon
 import { BasicResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
 import { BoaPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/BoaPosResponseValueFormatter.js'
 import { GarantiPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/GarantiPosResponseValueFormatter.js'
+import { ParamPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/ParamPosResponseValueFormatter.js'
 import { ToslaPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/ToslaPosResponseValueFormatter.js'
 import { AkbankPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/AkbankPosResponseValueMapper.js'
 import { AssecoPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/AssecoPosResponseValueMapper.js'
 import { GarantiPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/GarantiPosResponseValueMapper.js'
 import { KuveytPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/KuveytPosResponseValueMapper.js'
+import { ParamPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/ParamPosResponseValueMapper.js'
 import { PayFlexCPV4PosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayFlexCPV4PosResponseValueMapper.js'
 import { PayFlexV4PosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayFlexV4PosResponseValueMapper.js'
 import { PayForPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayForPosResponseValueMapper.js'
@@ -53,6 +56,29 @@ describe('PosQueryResponseMapperFactory', () => {
         noopLogger,
       ),
     ).toBeInstanceOf(GarantiPosQueryResponseDataMapper)
+  })
+
+  it('testCreateForGatewayReturnsCorrectMapper ParamPos', () => {
+    expect(
+      PosQueryResponseMapperFactory.createForGateway(
+        'ParamPos',
+        new ParamPosResponseValueFormatter(),
+        new ParamPosResponseValueMapper(),
+        noopLogger,
+      ),
+    ).toBeInstanceOf(ParamPosQueryResponseDataMapper)
+  })
+
+  // addition: the hosted-page gateway has no query response mapper
+  it('returns null for Param3DHostPos', () => {
+    expect(
+      PosQueryResponseMapperFactory.createForGateway(
+        'Param3DHostPos',
+        new ParamPosResponseValueFormatter(),
+        new ParamPosResponseValueMapper(),
+        noopLogger,
+      ),
+    ).toBeNull()
   })
 
   it('testCreateForGatewayReturnsCorrectMapper PayForPos', () => {
