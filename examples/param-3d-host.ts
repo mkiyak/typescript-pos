@@ -55,43 +55,56 @@ export async function startPayment(orderId: string, amount: number) {
   return hosted.get3DFormData(order, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH) // { gateway, method: 'GET', inputs: { s } }
 }
 
-/** Step 2: the customer comes back (cross-site, so no session cookie may be present). Idempotent per order. */
+/**
+ * Step 2: the customer comes back (cross-site, so no session cookie may be present). Idempotent per order: store
+ * `body` with the order, so that an unknown outcome can be checked again by calling this function with it.
+ */
 export async function handleCallback(
   body: Record<string, string | undefined>,
   order: PosOrder, // the order stored for this customer, never looked up from a callback field
-): Promise<{ paid: boolean; review: boolean; bankOrderId?: string; response?: PosResponse }> {
-  // The bank's own order id: keep it, every later status, cancel or refund asks for it.
-  const bankOrderId = body.TURKPOS_RETVAL_Siparis_ID
+): Promise<{ paid: boolean; review: boolean; recheck?: boolean; bankOrderId?: string; response?: PosResponse }> {
   try {
-    // The approval is confirmed with one status request to the bank before it is returned.
+    // The approval is confirmed with one status request to the bank before it is returned; the bank's record must
+    // carry the transaction id derived from this order, so the callback is bound to it.
     const response = await hosted.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, null, body)
     return {
       paid: response.status === 'approved',
       review: response.requires_manual_review === true,
-      bankOrderId,
+      // The bank's own order id, confirmed by its record: keep it, every later status, cancel or refund asks for it.
+      bankOrderId: response.status === 'approved' ? body.TURKPOS_RETVAL_Siparis_ID : undefined,
       response,
     }
   } catch (error) {
     if (error instanceof HashMismatchError) {
-      // Forged or malformed callback: not a result for this order. Keep the order pending and re-check later.
-      return { paid: false, review: false, bankOrderId }
+      // Forged or malformed callback: not a result for this order, and none of its fields can be trusted. Keep the
+      // order pending.
+      return { paid: false, review: false }
     }
     if (error instanceof OrderMismatchError) {
-      // The bank's record does not belong to this order. When paymentMayHaveCompleted is set the card may have been
-      // charged: alert someone and cancel or refund it.
-      return { paid: false, review: error.paymentMayHaveCompleted, bankOrderId, response: error.response }
+      // The bank's record does not match this order. When paymentMayHaveCompleted is set, the record carries this
+      // order's derived transaction id and the card may have been charged: alert someone, check the bank panel, and
+      // cancel or refund with the bank's order id.
+      return {
+        paid: false,
+        review: error.paymentMayHaveCompleted,
+        bankOrderId: error.paymentMayHaveCompleted ? body.TURKPOS_RETVAL_Siparis_ID : undefined,
+        response: error.response,
+      }
     }
-    // PosHttpError or anything else: unknown outcome. Keep the order pending and look it up (below); never charge again.
     if (error instanceof PosHttpError) {
-      return { paid: false, review: true, bankOrderId }
+      // Unknown outcome: the status request failed or its answer could not be read. Keep the order pending, never
+      // charge again, and check later by calling handleCallback(storedBody, order) again: it repeats the status
+      // request bound to this order through the derived transaction id.
+      return { paid: false, review: true, recheck: true }
     }
     throw error
   }
 }
 
 /**
- * Status of a hosted payment. It goes through the `ParamPos` gateway and the bank's order id from the callback
- * (`TURKPOS_RETVAL_Siparis_ID`), never your own order id.
+ * Status of a confirmed hosted payment. It goes through the `ParamPos` gateway and the bank's order id that
+ * handleCallback returned (`TURKPOS_RETVAL_Siparis_ID`), never your own order id. It is not bound to your order: for an
+ * unknown outcome call handleCallback again instead.
  */
 export function hostedStatus(bankOrderId: string): Promise<PosResponse> {
   return lookup.status({ id: bankOrderId })

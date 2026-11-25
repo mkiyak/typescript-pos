@@ -37,7 +37,8 @@ await pos.refund({ id: orderId, amount: 25, order_amount: 100, currency: 'TRY' }
 ## What each gateway needs
 
 Fields marked "optional" are used when present. Every `id` follows the order-id rule of the
-[payment models guide](./payment-models.md#common-order-fields). Values that come from the payment's own result are
+[payment models guide](./payment-models.md#common-order-fields); orders created before 0.14 keep the id they were
+created with ([Order ids](./security.md#order-ids)). Values that come from the payment's own result are
 named after the result keys (`ref_ret_num`, `transaction_id`, `auth_code`, `remote_order_id`).
 
 | Gateway | `cancel` | `refund` | `status` | `orderHistory` |

@@ -218,8 +218,9 @@ try {
 `createWithoutCard: true` (the fifth argument of `get3DFormData`) tells the library that the payer's browser
 collects the card. The library then **never writes a card into the form**: a card you pass anyway is dropped (it is not
 used, not logged). That holds for every gateway that renders a card form: `AssecoPos`, `GarantiPos`, `AkbankPos`,
-`PosNetV1Pos`, `PayForPos` (array and `formFormat: 'html'`), `InterPos`, `PayTrPos` and `ToslaPos`. For the hosted
-models (`3d_host`, `3d_pay_hosting`) a passed card is dropped even without the flag, because the bank page asks for it.
+`PosNetV1Pos`, `PayForPos` (array and `formFormat: 'html'`), `InterPos`, `PayTrPos` and `ToslaPos`. The hosted models
+never take a card, with or without the flag, because the bank page asks for it: `3d_host` refuses a card (`PosError`);
+`3d_pay_hosting` drops it.
 
 Where the card never reaches a browser form, the flag has no effect: `KuveytPos`, `VakifKatilimPos` (3D Secure),
 `ParamPos`, `IyzicoPos` (3D Secure), `PosNetPos`, `PayFlexV4Pos` and `PayFlexCPV4Pos` send the card from your server
@@ -239,6 +240,12 @@ starting with a letter or digit.** A number is accepted only as a safe non-negat
 Exceptions: the POSNET gateways accept at most 20 characters (the library pads them with zeros), and VakıfBank Common
 Payment does not accept `_`. Asseco instalment suffixes (`202210121ABC-2`) stay valid.
 
+The rule applies where a payment starts: the 3D form, a non-secure sale or a pre-authorization. Orders created before
+0.14 keep working on the gateways whose rule became stricter then (Asseco, Garanti, Akbank, PayFor, InterPos, the
+POSNET and the PayFlex gateways): their callbacks, 3D provisions, captures, cancels, refunds, status and history requests
+accept the id the order was created with, text up to the bank's length limit without control characters, or a safe
+non-negative integer. The callback is still compared with it exactly.
+
 The reason is security as much as the bank format: banks sign callbacks by concatenating fields without separators,
 and ids are posted unescaped in form bodies. A leading separator, a blank, `&`, `%` or a non-ASCII letter never reaches
 a bank. Use ids of one fixed length: one id must never be another id plus extra characters.
@@ -250,8 +257,8 @@ for form objects: it escapes every name and value, refuses non-`https:` actions,
 
 Serve the page from a route of your own with `Cache-Control: no-store` and a CSP (`script-src 'nonce-…'`,
 `frame-ancestors 'self'`); point a redirect, iframe or popup at that route instead of `srcdoc` or `document.write`.
-Bank HTML strings (`KuveytPos`, `VakifKatilimPos` 3D Secure, `PayForPos` with `formFormat: 'html'`, `IyzicoPos`) are not
-yours: serve them as they are on such a route and never insert them into your page.
+Bank HTML strings (`KuveytPos`, `VakifKatilimPos` 3D Secure, `ParamPos` 3D Secure in TRY, `PayForPos` with
+`formFormat: 'html'`, `IyzicoPos`) are not yours: serve them as they are on such a route and never insert them into your page.
 
 In an iframe or popup, the page tells its opener only "done for order X" with `postMessage(message, <your own origin>)`
 (never `'*'`), and the opener asks your server for the order's state: a message is never proof of payment. Full details:

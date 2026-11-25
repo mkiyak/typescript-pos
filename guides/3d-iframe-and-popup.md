@@ -47,7 +47,8 @@ that the bank (or the payment provider) returned to your server.
 | `PosNetV1Pos` | 3D Secure | object, `POST` | `'html'` refused |
 | `ToslaPos` | 3D Pay | object, `POST` | `'html'` refused |
 | `ToslaPos` | 3D Host | object, `GET`, no inputs | `'html'` refused |
-| `ParamPos` | 3D Secure, 3D Pay | object, `GET` (inputs taken from the bank's address) | `'html'` refused |
+| `ParamPos` | 3D Secure in TRY | bank HTML string | `'html'` refused |
+| `ParamPos` | 3D Secure in a foreign currency, 3D Pay | object, `GET` (inputs taken from the bank's address) | `'html'` refused |
 | `Param3DHostPos` | 3D Host | object, `GET` | `'html'` refused |
 | `PayTrPos` | 3D Pay | object, `POST` | `'html'` refused |
 | `PayTrPos` | 3D Host | object, `GET`, no inputs (the iframe address) | `'html'` refused |

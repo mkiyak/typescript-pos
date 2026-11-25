@@ -198,7 +198,8 @@ olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos`, `PayFo
 3. Callback doğrulamasını kapatan bir seçenek yoktur; her gateway'in callback'lerini nasıl doğruladığı [güvenlik kılavuzunda](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#how-each-gateway-verifies-callbacks) listelenir.
 4. Hassas veri (PAN, CVV, son kullanma, şifreler, store key) logger'a ulaşmadan maskelenir.
 5. Sabit zamanlı hash karşılaştırması; Asseco hash'i bankanın beklediği doğal, büyük/küçük harf duyarsız anahtar sıralamasını birebir kullanır.
-6. Ek Asseco, Garanti ve Akbank korumaları: dönen sipariş numarası, tutar ve ödeme modeli (Garanti'de ayrıca terminal ve para birimi) siparişle karşılaştırılır
+6. Ek Asseco, Garanti ve Akbank korumaları: dönen sipariş numarası ve tutar siparişle karşılaştırılır, Asseco ve
+   Garanti'de ayrıca ödeme modeli de (Garanti'de bunlara ek olarak terminal ve para birimi)
    (`OrderMismatchError`; banka onay verdiyse `paymentMayHaveCompleted` ile); Akbank'ta callback'teki sipariş numarası ve
    üye işyeri/terminal doğrudan, tutar, para birimi, işlem türü, taksit sayısı ve sipariş durumu ise bankanın sipariş geçmişi
    üzerinden doğrulanır; provizyon verilmiş ama 3D başarısız
@@ -209,7 +210,7 @@ olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos`, `PayFo
 9. Giden veriyi incelemek veya değiştirmek için kancalar (`onRequestDataPrepared`, `onBefore3DFormHashCalculated`).
 10. `fetch` tabanlı ince HTTP katmanı (enjekte edilebilir, varsayılan zaman aşımı 60 sn); banka HTML/WAF sayfaları
     `PosHttpError` fırlatır.
-11. Her gateway'de aynı olan kütüphane genelindeki kurallar ([güvenlik kılavuzu](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)): `createWithoutCard: true` ile kurulan bir form asla kart içermez ([Building forms without the card](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#building-forms-without-the-card)); tek bir sipariş numarası kuralı vardır: 1 ile 64 arası harf, rakam, `_` veya `-`, ilk karakter harf veya rakam ([Order ids](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#order-ids)); para hareketi yapan bir istekten sonra sonuç taşımayan cevap bilinmeyen bir sonuçtur ve `declined` değil `PosHttpError` fırlatır ([Sonuç bilinmiyor](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#outcome-unknown)); her `status`, `cancel`, `refund`, `orderHistory` ve `payment` sonucunda `status`, `order_id`, `proc_return_code`, `error_code`, `error_message` ve `all` anahtarları bulunur ([Ödemeden sonra](https://github.com/mkiyak/typescript-pos/blob/main/guides/after-payment.md)).
+11. Her gateway'de aynı olan kütüphane genelindeki kurallar ([güvenlik kılavuzu](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)): `createWithoutCard: true` ile kurulan bir form asla kart içermez ([Kartsız form kurmak](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#building-forms-without-the-card)); yeni ödemeler için tek bir sipariş numarası kuralı vardır: 1 ile 64 arası harf, rakam, `_` veya `-`, ilk karakter harf veya rakam; daha önce oluşturulmuş siparişler ise çalışmaya devam eder ([Sipariş numaraları](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#order-ids)); para hareketi yapan bir istekten sonra sonuç taşımayan cevap bilinmeyen bir sonuçtur ve `declined` değil `PosHttpError` fırlatır ([Sonuç bilinmiyor](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#outcome-unknown)); her `status`, `cancel`, `refund`, `orderHistory` ve `payment` sonucunda `status`, `order_id`, `proc_return_code`, `error_code`, `error_message` ve `all` anahtarları bulunur ([Ödemeden sonra](https://github.com/mkiyak/typescript-pos/blob/main/guides/after-payment.md)).
 
 ## Güvenlik
 
@@ -226,11 +227,17 @@ Commit'ler [Conventional Commits](https://www.conventionalcommits.org) kurallar�
 
 ### 0.14'e yükseltme
 
-Dört kural davranış değiştirdi; ayrıntılar değişiklik günlüğündedir.
+Aşağıdaki değişiklikler davranışı değiştirir; ayrıntılar değişiklik günlüğündedir.
 
 - `createWithoutCard: true` asla bir tarayıcı formuna kart koymaz; yine de verdiğiniz kart atılır.
-- Sipariş numarası 1 ile 64 arası harf, rakam, `_` veya `-` olmalı ve harf ya da rakamla başlamalıdır (POSNET: en çok 20 karakter).
+- Yeni bir ödeme (3D formu, 3D'siz satış, ön provizyon) için sipariş numarası 1 ile 64 arası harf, rakam, `_` veya `-`
+  olmalı ve harf ya da rakamla başlamalıdır (POSNET: en çok 20 karakter; VakıfBank Ortak Ödeme artık `_` kabul etmez).
+  Daha önce oluşturulmuş siparişler çalışmaya devam eder: callback, provizyon kapama, iptal, iade ve durum sorgusu,
+  siparişin oluşturulduğu numarayı kabul eder (kontrol karakteri içermeyen metin ya da güvenli, negatif olmayan bir tam sayı).
+- Asseco 3D Secure callback'leri, provizyon gönderilmeden önce siparişin numarası, tutarı ve para birimiyle eşleşmelidir.
 - Para hareketi yapan bir istekten (iadeler dahil) sonra sonuç taşımayan cevap `declined` yerine `PosHttpError` fırlatır.
+- `ResponseDataMapperInterface` arayüzüne `readProcReturnCode(raw): string | null` eklendi; özel cevap mapper'ları bunu
+  uygulamalıdır.
 - `IyzicoPos.make3DPayPayment` artık `UnsupportedPaymentModelError` fırlatır (önceden `UnsupportedTransactionTypeError`).
 
 ## Lisans

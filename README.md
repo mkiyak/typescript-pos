@@ -194,7 +194,8 @@ with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.c
 3. No option disables callback verification; how each gateway verifies its callbacks is listed in the [security guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#how-each-gateway-verifies-callbacks).
 4. Sensitive data (PAN, CVV, expiry, passwords, store keys) is masked before it reaches the logger.
 5. Constant-time hash comparison; the Asseco hash uses the exact natural, case-insensitive key ordering the bank expects.
-6. Extra Asseco, Garanti and Akbank safeguards: the returned order id, amount and payment model (Garanti: also terminal and currency) are compared with the order
+6. Extra Asseco, Garanti and Akbank safeguards: the returned order id and amount are compared with the order, for Asseco
+   and Garanti also the payment model (Garanti: also terminal and currency)
    (`OrderMismatchError`, with `paymentMayHaveCompleted` when the bank approved); for Akbank the callback's order id and
    merchant/terminal are checked directly, and the amount, currency, transaction type, installment count and order status are
    confirmed through the bank's order history; an authorized-but-3D-failed
@@ -204,7 +205,7 @@ with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.c
 8. VakıfBank default endpoints use port 8443; `MerchantType` is configurable per account.
 9. Hooks (`onRequestDataPrepared`, `onBefore3DFormHashCalculated`) to inspect or change outgoing data.
 10. Thin `fetch`-based HTTP layer (injectable, 60 s default timeout); bank HTML/WAF pages raise `PosHttpError`.
-11. Library-wide rules, the same on every gateway ([security guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)): a form built with `createWithoutCard: true` never contains a card ([Building forms without the card](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#building-forms-without-the-card)); one order-id rule, 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit ([Order ids](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#order-ids)); an answer without a result after a request that moves money is an unknown outcome and throws `PosHttpError`, never `declined` ([Outcome unknown](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#outcome-unknown)); every `status`, `cancel`, `refund`, `orderHistory` and `payment` result has the keys `status`, `order_id`, `proc_return_code`, `error_code`, `error_message` and `all` ([After a payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/after-payment.md)).
+11. Library-wide rules, the same on every gateway ([security guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)): a form built with `createWithoutCard: true` never contains a card ([Building forms without the card](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#building-forms-without-the-card)); one order-id rule for new payments, 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit, while orders created earlier keep working ([Order ids](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#order-ids)); an answer without a result after a request that moves money is an unknown outcome and throws `PosHttpError`, never `declined` ([Outcome unknown](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#outcome-unknown)); every `status`, `cancel`, `refund`, `orderHistory` and `payment` result has the keys `status`, `order_id`, `proc_return_code`, `error_code`, `error_message` and `all` ([After a payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/after-payment.md)).
 
 ## Security
 
@@ -220,11 +221,16 @@ with [Changesets](https://github.com/changesets/changesets) (see [CONTRIBUTING.m
 
 ### Upgrading to 0.14
 
-Four rules changed behaviour; the changelog has the details.
+These changes alter behaviour; the changelog has the details.
 
 - `createWithoutCard: true` never puts a card into a browser form; a card you pass anyway is dropped.
-- Order ids must be 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit (POSNET: at most 20 characters).
+- A new payment (3D form, non-secure sale, pre-authorization) needs an order id of 1 to 64 letters, digits, `_` or `-`,
+  starting with a letter or digit (POSNET: at most 20 characters; VakıfBank Common Payment no longer accepts `_`).
+  Orders created earlier keep working: their callbacks, capture, cancel, refund and status accept the id they were
+  created with (text without control characters, or a safe non-negative integer).
+- Asseco 3D Secure callbacks must match the order id, amount and currency before the provision is sent.
 - An answer without a result after a money-moving request, refunds included, throws `PosHttpError` instead of mapping to `declined`.
+- `ResponseDataMapperInterface` gains `readProcReturnCode(raw): string | null`; custom response mappers must implement it.
 - `IyzicoPos.make3DPayPayment` throws `UnsupportedPaymentModelError` (it threw `UnsupportedTransactionTypeError`).
 
 ## License

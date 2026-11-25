@@ -148,8 +148,8 @@ could not verify, and mark it paid from the gateway's answer only, in an idempot
 ## The card and the form
 
 `createWithoutCard: true` (the fifth argument of `get3DFormData`) means "the browser collects the card". The library then
-never writes a card into the form: a card you pass anyway is dropped. For the hosted models (`3d_host`,
-`3d_pay_hosting`) a passed card is dropped even without the flag.
+never writes a card into the form: a card you pass anyway is dropped. The hosted models never take a card, with or
+without the flag: `3d_host` refuses a card (`PosError`); `3d_pay_hosting` drops it.
 
 What the payer does next depends on the gateway: the bank page asks for the card, or your own page adds card fields
 that post straight to the bank (PayTR and Tosla work like this). The gateway's guide names the field names.
