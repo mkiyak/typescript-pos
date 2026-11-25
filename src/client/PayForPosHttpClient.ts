@@ -4,7 +4,7 @@ import type { EncodedData } from '../serializer/EncodedData.js'
 import { PayForPosXmlDecoder } from '../serializer/PayForPosXmlDecoder.js'
 import { XmlEncoder } from '../serializer/XmlEncoder.js'
 import type { PosOrder } from '../types.js'
-import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
+import { AbstractHttpClient, type ClientTxType, requestCredentials } from './AbstractHttpClient.js'
 import type { HttpTransport } from './HttpTransport.js'
 
 /**
@@ -29,6 +29,14 @@ export class PayForPosHttpClient extends AbstractHttpClient {
   /** Public here (protected in the base class) so callers can see where a transaction is posted. */
   override getApiUrl(txType: ClientTxType, paymentModel: PaymentModel): string {
     return super.getApiUrl(txType, paymentModel)
+  }
+
+  /**
+   * The request body carries the API user's password (`UserPass`): a bank page that echoes it, in free text too, never
+   * shows it in a thrown error or a log line.
+   */
+  protected override logSecrets(requestData: Record<string, unknown>): readonly string[] {
+    return requestCredentials(requestData)
   }
 
   protected override encode(

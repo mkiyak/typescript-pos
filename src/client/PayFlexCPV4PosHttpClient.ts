@@ -5,7 +5,7 @@ import { FormEncoder } from '../serializer/FormEncoder.js'
 import { JsonDecoder } from '../serializer/JsonDecoder.js'
 import { XmlDecoder } from '../serializer/XmlDecoder.js'
 import type { PosOrder } from '../types.js'
-import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
+import { AbstractHttpClient, type ClientTxType, requestCredentials } from './AbstractHttpClient.js'
 import type { HttpTransport } from './HttpTransport.js'
 
 /**
@@ -44,6 +44,14 @@ export class PayFlexCPV4PosHttpClient extends AbstractHttpClient {
     }
 
     return `${base}/GetVposTransaction`
+  }
+
+  /**
+   * The request body carries the merchant password (`MerchantPassword` in the registration, `Password` in the
+   * transaction query): a bank page that echoes it, in free text too, never shows it in a thrown error or a log line.
+   */
+  protected override logSecrets(requestData: Record<string, unknown>): readonly string[] {
+    return requestCredentials(requestData)
   }
 
   protected override encode(

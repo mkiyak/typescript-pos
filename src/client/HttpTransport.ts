@@ -1,9 +1,14 @@
-import { PosHttpError } from '../errors.js'
+import { PosError, PosHttpError } from '../errors.js'
 
 export interface HttpTransportOptions {
   fetch?: typeof fetch
   /** Default 60000. */
   timeoutMs?: number
+  /**
+   * The largest answer body accepted, in bytes (default 10 MiB). A larger answer is refused with
+   * `PosHttpError('Bank answer is too large')` and its body is neither kept nor reported.
+   */
+  maxResponseBytes?: number
 }
 
 export interface HttpTransportRequestOptions {
@@ -25,14 +30,22 @@ export interface HttpTransportResponse {
 }
 
 const DEFAULT_TIMEOUT_MS = 60_000
+const DEFAULT_MAX_RESPONSE_BYTES = 10 * 1024 * 1024
+const TOO_LARGE = 'Bank answer is too large'
 
 export class HttpTransport {
   private readonly fetchImpl: typeof fetch
   private readonly timeoutMs: number
+  private readonly maxResponseBytes: number
 
   constructor(options: HttpTransportOptions = {}) {
     this.fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init))
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    const max = options.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES
+    if (!Number.isSafeInteger(max) || max <= 0) {
+      throw new PosError('maxResponseBytes must be a positive whole number of bytes.')
+    }
+    this.maxResponseBytes = max
   }
 
   async post(
@@ -85,7 +98,7 @@ export class HttpTransport {
           signal: controller.signal,
           redirect: 'error',
         })
-        bytes = new Uint8Array(await res.arrayBuffer())
+        bytes = await this.readBody(res, errorUrl, controller)
         text = new TextDecoder().decode(bytes)
       } catch (e) {
         if (e instanceof PosHttpError) throw e
@@ -109,5 +122,54 @@ export class HttpTransport {
     } finally {
       clearTimeout(timer)
     }
+  }
+
+  /**
+   * The body bytes, refused as soon as they pass `maxResponseBytes`: up front when the announced Content-Length is
+   * larger, otherwise while reading (a missing or wrong Content-Length does not matter). A refused body is cancelled
+   * and the request aborted, so an endless or huge answer is never held in memory. A fetch whose body is not a web
+   * stream is read whole and checked afterwards.
+   */
+  private async readBody(res: Response, errorUrl: string, controller: AbortController): Promise<Uint8Array> {
+    const tooLarge = (): PosHttpError => {
+      controller.abort()
+      return new PosHttpError(TOO_LARGE, { url: errorUrl, status: res.status })
+    }
+
+    const announced = res.headers.get('content-length')
+    if (announced !== null && /^\s*\d+\s*$/.test(announced) && Number(announced) > this.maxResponseBytes) {
+      await res.body?.cancel().catch(() => {})
+      throw tooLarge()
+    }
+    if (res.body === null) return new Uint8Array(0)
+    if (typeof res.body?.getReader !== 'function') {
+      const whole = new Uint8Array(await res.arrayBuffer())
+      if (whole.byteLength > this.maxResponseBytes) throw tooLarge()
+      return whole
+    }
+
+    const reader = res.body.getReader()
+    const chunks: Uint8Array[] = []
+    let total = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > this.maxResponseBytes) {
+        await reader.cancel().catch(() => {})
+        throw tooLarge()
+      }
+      chunks.push(value)
+    }
+    if (chunks.length === 1) return chunks[0] as Uint8Array
+
+    const bytes = new Uint8Array(total)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+
+    return bytes
   }
 }

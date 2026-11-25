@@ -985,6 +985,59 @@ describe('PayFlexCPV4Pos (end to end)', () => {
       expect((err as OrderMismatchError).paymentMayHaveCompleted).toBe(true)
     })
 
+    // addition: 2.10 — a payment token mismatch is logged by length only; the raw tokens never reach the logger
+    it('logs no raw payment token when the callback or the answer token contradicts the order', async () => {
+      const lines: unknown[][] = []
+      const record = (...args: unknown[]) => {
+        lines.push(args)
+      }
+      const logger: PosLogger = { debug: record, info: record, warn: record, error: record }
+      const tokenNew = 'PtknNew7c1f0a9e'
+      const tokenOld = 'PtknOld3b2d4c8f'
+      const callbackErr = await realGateway(vi.fn(unexpectedNetwork) as unknown as typeof fetch, logger)
+        .payment(MODEL.THREE_D_PAY, { ...unboundOrder, payment_token: tokenNew }, TX_TYPE.PAY_AUTH, null, {
+          Rc: '0000',
+          PaymentToken: tokenOld,
+        })
+        .catch((e: unknown) => e)
+      expect(callbackErr).toBeInstanceOf(OrderMismatchError)
+      const answerErr = await realGateway(
+        recordingFetch([], () => answer({ PaymentToken: tokenOld })),
+        logger,
+      )
+        .payment(MODEL.THREE_D_PAY, { ...unboundOrder, payment_token: tokenNew }, TX_TYPE.PAY_AUTH, null, {
+          Rc: '0000',
+        })
+        .catch((e: unknown) => e)
+      expect(answerErr).toBeInstanceOf(OrderMismatchError)
+
+      const logged = JSON.stringify(lines)
+      expect(logged).not.toContain(tokenNew)
+      expect(logged).not.toContain(tokenOld)
+      const mismatchLines = lines.filter(([m]) => typeof m === 'string' && /does not match/.test(m))
+      expect(mismatchLines).toHaveLength(2)
+      for (const [, ctx] of mismatchLines) {
+        expect(ctx).toMatchObject({ expected_length: tokenNew.length, actual_length: tokenOld.length })
+      }
+    })
+
+    // addition: 2.10 — transaction ids are not secrets and stay readable in the mismatch log line
+    it('still logs the transaction ids of a transaction id mismatch', async () => {
+      const lines: unknown[][] = []
+      const record = (...args: unknown[]) => {
+        lines.push(args)
+      }
+      const logger: PosLogger = { debug: record, info: record, warn: record, error: record }
+      await realGateway(vi.fn(unexpectedNetwork) as unknown as typeof fetch, logger)
+        .payment(MODEL.THREE_D_HOST, { ...boundOrder, transaction_id: 'T_new' }, TX_TYPE.PAY_AUTH, null, {
+          Rc: '0000',
+          TransactionId: 'T_old',
+        })
+        .catch((e: unknown) => e)
+      const line = lines.find(([m]) => m === '3D callback id does not match the order')
+      expect(line?.[1]).toEqual({ expected: 'T_new', actual: 'T_old' })
+    })
+
     it('keeps querying the callback ids for an order without stored ids', async () => {
       const sent: Sent[] = []
       const pos = realGateway(recordingFetch(sent, () => answer()))

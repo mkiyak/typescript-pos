@@ -75,6 +75,11 @@ function firstNonEmptyString(data: Raw, ...keys: string[]): string | null {
   return null
 }
 
+/** What a log line may say about two payment tokens that differ: their lengths, never the tokens. */
+function tokenLengths(expected: string, actual: string): { expected_length: number; actual_length: number } {
+  return { expected_length: expected.length, actual_length: actual.length }
+}
+
 /** A non-empty string, or null. */
 function nonEmptyString(v: unknown): string | null {
   return typeof v === 'string' && v !== '' ? v : null
@@ -329,7 +334,7 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
       this.rejectCallbackId(orderTransactionId, callbackTransactionId)
     }
     if (orderPaymentToken !== null && callbackPaymentToken !== null && callbackPaymentToken !== orderPaymentToken) {
-      this.rejectCallbackId(orderPaymentToken, callbackPaymentToken)
+      this.rejectCallbackId(orderPaymentToken, callbackPaymentToken, true)
     }
 
     const queryByOrder = orderTransactionId !== null || orderPaymentToken !== null
@@ -393,9 +398,15 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
     return response
   }
 
-  /** A callback id that contradicts the order's own id: rejected before any HTTP call. */
-  private rejectCallbackId(expected: string, actual: string): never {
-    this.logger.error('3D callback id does not match the order', { expected, actual })
+  /**
+   * A callback id that contradicts the order's own id: rejected before any HTTP call. A payment token opens the
+   * bank's card page for its payment, so a token mismatch is logged by length only.
+   */
+  private rejectCallbackId(expected: string, actual: string, isPaymentToken = false): never {
+    this.logger.error(
+      '3D callback id does not match the order',
+      isPaymentToken ? { field: 'payment_token', ...tokenLengths(expected, actual) } : { expected, actual },
+    )
     throw new OrderMismatchError('transaction_id', expected, actual)
   }
 
@@ -408,8 +419,11 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
     txType: TxType,
     response: PosResponse,
   ): void {
-    const fail = (field: OrderMismatchField, expected: string, actual: string): never => {
-      this.logger.error(`transaction query ${field} does not match the payment`, { expected, actual })
+    const fail = (field: OrderMismatchField, expected: string, actual: string, isPaymentToken = false): never => {
+      this.logger.error(
+        `transaction query ${field} does not match the payment`,
+        isPaymentToken ? { field: 'payment_token', ...tokenLengths(expected, actual) } : { expected, actual },
+      )
       throw new OrderMismatchError(field, expected, actual, response)
     }
 
@@ -464,7 +478,7 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
       answerPaymentToken !== undefined &&
       String(answerPaymentToken) !== expectedPaymentToken
     ) {
-      fail('transaction_id', expectedPaymentToken, asText(answerPaymentToken))
+      fail('transaction_id', expectedPaymentToken, asText(answerPaymentToken), true)
     }
   }
 }

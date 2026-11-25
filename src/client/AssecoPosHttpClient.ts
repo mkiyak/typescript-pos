@@ -6,7 +6,7 @@ import { decodeXmlResponseText, encodeIso88599, ISO_8859_9, toIso88599Xml } from
 import { XmlDecoder } from '../serializer/XmlDecoder.js'
 import { XmlEncoder } from '../serializer/XmlEncoder.js'
 import type { PosOrder } from '../types.js'
-import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
+import { AbstractHttpClient, type ClientTxType, requestCredentials } from './AbstractHttpClient.js'
 import type { HttpTransport, HttpTransportResponse } from './HttpTransport.js'
 
 /**
@@ -32,6 +32,14 @@ export class AssecoPosHttpClient extends AbstractHttpClient {
 
   override getApiUrl(txType: ClientTxType, paymentModel: PaymentModel): string {
     return super.getApiUrl(txType, paymentModel)
+  }
+
+  /**
+   * The request body carries the API user's password (`Password`): a bank page that echoes it, in free text too, never
+   * shows it in a thrown error or a log line.
+   */
+  protected override logSecrets(requestData: Record<string, unknown>): readonly string[] {
+    return requestCredentials(requestData)
   }
 
   protected override encode(

@@ -135,10 +135,19 @@ const SENSITIVE_TAGS = [
 const JSON_ONLY_TAGS = ['Hash', 'ApiPass']
 const XML_PATTERN = new RegExp(`(<(${SENSITIVE_TAGS.join('|')})(?:\\s[^>]*)?>)[^<]*(</\\2\\s*>)`, 'gi')
 const QUERY_PATTERN = new RegExp(`(?<![A-Za-z0-9_])(${SENSITIVE_TAGS.join('|')})=[^&\\s"']*`, 'gi')
+/** Every name whose JSON value is masked: the tag list, the JSON-only names and every sensitive object key. */
+const JSON_KEYS = [...new Set([...SENSITIVE_TAGS, ...JSON_ONLY_TAGS, ...SENSITIVE_KEYS])].map((key) =>
+  key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+)
+const JSON_NUMBER = '-?\\d[\\d.eE+-]*'
 // JSON-encoded pairs inside strings: "Password" : "value" (escaped quotes allowed in the value) or a bare number
 // such as "cvv2":123.
-const JSON_PATTERN = new RegExp(
-  `"(${[...SENSITIVE_TAGS, ...JSON_ONLY_TAGS].join('|')})"\\s*:\\s*(?:"(?:[^"\\\\]|\\\\.)*"|-?\\d[\\d.eE+-]*)`,
+const JSON_PATTERN = new RegExp(`"(${JSON_KEYS.join('|')})"\\s*:\\s*(?:"(?:[^"\\\\]|\\\\.)*"|${JSON_NUMBER})`, 'gi')
+// The same pairs in a JSON text that was itself put into a JSON string, where every quote reads \" and every
+// backslash \\: {\"cvv\":\"123\"} or {\"Cvv\":123}. Inside the value, an escaped character of the inner text reads
+// \\ followed by \", \\ or a plain character.
+const ESCAPED_JSON_PATTERN = new RegExp(
+  `\\\\"(${JSON_KEYS.join('|')})\\\\"\\s*:\\s*(?:\\\\"(?:[^"\\\\]|\\\\\\\\(?:\\\\"|\\\\\\\\|[^"\\\\]))*\\\\"|${JSON_NUMBER})`,
   'gi',
 )
 
@@ -146,6 +155,7 @@ function maskString(value: string): string {
   return value
     .replace(XML_PATTERN, `$1${MASK}$3`)
     .replace(QUERY_PATTERN, `$1=${MASK}`)
+    .replace(ESCAPED_JSON_PATTERN, `\\"$1\\":\\"${MASK}\\"`)
     .replace(JSON_PATTERN, `"$1":"${MASK}"`)
     .replace(PAN_PATTERN, (m) => `${m.slice(0, 6)}****${m.slice(-4)}`)
 }
@@ -163,8 +173,10 @@ function mask(value: unknown, seen: WeakMap<object, unknown>, depth: number): un
   if (depth >= MAX_DEPTH) return '[MaxDepth]'
 
   if (value instanceof Error) {
-    const out = { name: value.name, message: maskString(value.message) }
+    // The cause chain says why a request failed (a refused connection, an unparsable answer); it is masked as well.
+    const out: Record<string, unknown> = { name: value.name, message: maskString(value.message) }
     seen.set(value, out)
+    if (Object.hasOwn(value, 'cause') && value.cause !== undefined) out.cause = mask(value.cause, seen, depth + 1)
     return out
   }
   if (Array.isArray(value)) {
@@ -193,8 +205,11 @@ function mask(value: unknown, seen: WeakMap<object, unknown>, depth: number): un
 
 /**
  * Returns a deep copy with sensitive keys replaced by `***` and PAN-shaped digit runs
- * inside strings reduced to `first6****last4`. The input is never mutated.
+ * inside strings reduced to `first6****last4`. The input is never mutated. An `Error` becomes a plain record of its
+ * name, its masked message and its masked cause (when it has one).
  */
-export function maskSensitiveData<T>(data: T): T {
-  return mask(data, new WeakMap(), 0) as T
+export function maskSensitiveData(data: Error): Record<string, unknown>
+export function maskSensitiveData<T>(data: T): T
+export function maskSensitiveData(data: unknown): unknown {
+  return mask(data, new WeakMap(), 0)
 }

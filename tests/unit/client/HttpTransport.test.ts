@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
-import { PosHttpError } from '../../../src/errors.js'
+import { PosError, PosHttpError } from '../../../src/errors.js'
 import { XmlDecoder } from '../../../src/serializer/XmlDecoder.js'
 
 const fakeFetch = (status: number, body: string): typeof fetch =>
@@ -213,5 +213,186 @@ describe('HttpTransport', () => {
       expect(err.message).toContain('timed out')
       expect(err.url).toBe('https://bank.test/api')
     })
+  })
+})
+
+// addition: 5.2 — a bank answer above the size cap is refused without reading or keeping it
+describe('HttpTransport response size cap', () => {
+  const MiB = 1024 * 1024
+  const url = 'https://bank.test/api'
+
+  /** A streamed answer of `chunks` × `size` bytes without a Content-Length; counts the chunks actually pulled. */
+  const streamed = (chunks: number, size: number, status = 200) => {
+    const state = { pulled: 0, cancelled: false }
+    const fetchImpl = (async () => {
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (state.pulled >= chunks) {
+            controller.close()
+            return
+          }
+          state.pulled++
+          controller.enqueue(new Uint8Array(size).fill(0x61))
+        },
+        cancel() {
+          state.cancelled = true
+        },
+      })
+      return new Response(body, { status })
+    }) as unknown as typeof fetch
+    return { fetchImpl, state }
+  }
+
+  const expectTooLarge = (err: unknown, status: number) => {
+    expect(err).toBeInstanceOf(PosHttpError)
+    const e = err as PosHttpError
+    expect(e.message).toBe('Bank answer is too large')
+    expect(e.url).toBe(url)
+    expect(e.status).toBe(status)
+    expect(e.bodySnippet).toBeUndefined()
+    expect(e.cause).toBeUndefined()
+  }
+
+  it('refuses an answer whose Content-Length is above the cap before reading it', async () => {
+    const { fetchImpl: streamOf, state } = streamed(100, MiB)
+    const fetchImpl = (async () => {
+      const inner = await streamOf('')
+      return new Response(inner.body, { status: 200, headers: { 'content-length': String(10 * MiB + 1) } })
+    }) as unknown as typeof fetch
+    const err = await new HttpTransport({ fetch: fetchImpl }).post(url, '', {}).catch((e) => e)
+    expectTooLarge(err, 200)
+    // a stream fills its queue once on its own; the transport reads nothing and cancels it
+    expect(state.pulled).toBeLessThanOrEqual(1)
+    expect(state.cancelled).toBe(true)
+  })
+
+  it('stops reading a streamed answer as soon as it passes the cap', async () => {
+    const { fetchImpl, state } = streamed(100, MiB)
+    const err = await new HttpTransport({ fetch: fetchImpl }).post(url, '', {}).catch((e) => e)
+    expectTooLarge(err, 200)
+    expect(state.pulled).toBeLessThanOrEqual(12)
+    expect(state.cancelled).toBe(true)
+  })
+
+  it('refuses an oversized error page too, without its body', async () => {
+    const { fetchImpl } = streamed(3, 64)
+    const err = await new HttpTransport({ fetch: fetchImpl, maxResponseBytes: 100 }).post(url, '', {}).catch((e) => e)
+    expectTooLarge(err, 200)
+    const { fetchImpl: failing } = streamed(3, 64, 500)
+    expectTooLarge(
+      await new HttpTransport({ fetch: failing, maxResponseBytes: 100 }).post(url, '', {}).catch((e) => e),
+      500,
+    )
+  })
+
+  it('applies to GET and keeps the query string out of the error url', async () => {
+    const { fetchImpl } = streamed(3, 64)
+    const err = await new HttpTransport({ fetch: fetchImpl, maxResponseBytes: 100 })
+      .get(`${url}?token=secret`, {})
+      .catch((e) => e)
+    expectTooLarge(err, 200)
+  })
+
+  it('checks the bytes read, not a Content-Length that is too small', async () => {
+    const fetchImpl = (async () =>
+      new Response('x'.repeat(200), { status: 200, headers: { 'content-length': '10' } })) as unknown as typeof fetch
+    const err = await new HttpTransport({ fetch: fetchImpl, maxResponseBytes: 100 }).post(url, '', {}).catch((e) => e)
+    // the platform may refuse the mismatched length itself; either way nothing above the cap is returned
+    expect(err).toBeInstanceOf(PosHttpError)
+  })
+
+  it('accepts an answer of exactly the cap and a large legitimate answer below the default cap', async () => {
+    const exact = streamed(4, 25)
+    const res = await new HttpTransport({ fetch: exact.fetchImpl, maxResponseBytes: 100 }).post(url, '', {})
+    expect(res.bytes.length).toBe(100)
+    expect(res.body).toBe('a'.repeat(100))
+
+    const big = streamed(9, MiB)
+    const bigRes = await new HttpTransport({ fetch: big.fetchImpl }).post(url, '', {})
+    expect(bigRes.bytes.length).toBe(9 * MiB)
+    expect(bigRes.body.length).toBe(9 * MiB)
+
+    const history = `{"txnDetailList":[${Array.from({ length: 20000 }, (_, i) => `{"orderId":"O${i}","amount":"10.01"}`).join(',')}]}`
+    const historyRes = await new HttpTransport({ fetch: fakeFetch(200, history) }).post(url, '', {})
+    expect(historyRes.body).toBe(history)
+  })
+
+  it('reads a multi-byte character split across chunks correctly', async () => {
+    const bytes = new TextEncoder().encode('ağ€z')
+    const fetchImpl = (async () => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const b of bytes) controller.enqueue(new Uint8Array([b]))
+          controller.close()
+        },
+      })
+      return new Response(body, { status: 200 })
+    }) as unknown as typeof fetch
+    const res = await new HttpTransport({ fetch: fetchImpl }).post(url, '', {})
+    expect(res.body).toBe('ağ€z')
+    expect(res.bytes).toStrictEqual(bytes)
+  })
+
+  it('reads a real chunked answer from a server and refuses one above the cap', async () => {
+    const server = createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/plain' })
+      const count = req.url === '/big' ? 50 : 3
+      let sent = 0
+      const write = () => {
+        while (sent < count) {
+          sent++
+          if (!res.write('b'.repeat(1000))) {
+            res.once('drain', write)
+            return
+          }
+        }
+        res.end()
+      }
+      write()
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const { port } = server.address() as AddressInfo
+    // the server is plain http; the transport itself does not check the scheme
+    const transport = new HttpTransport({ maxResponseBytes: 10_000 })
+    try {
+      const small = await transport.get(`http://127.0.0.1:${port}/small`, {})
+      expect(small.body).toBe('b'.repeat(3000))
+      const err = await transport.get(`http://127.0.0.1:${port}/big`, {}).catch((e) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect(err.message).toBe('Bank answer is too large')
+      expect(err.bodySnippet).toBeUndefined()
+    } finally {
+      server.closeAllConnections()
+      server.close()
+    }
+  })
+
+  it('rejects a cap that is not a positive whole number', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => new HttpTransport({ maxResponseBytes: bad })).toThrow(PosError)
+    }
+  })
+})
+
+// addition: 5.2 — a custom fetch whose body is not a web stream is still capped
+describe('HttpTransport size cap with a non-stream body', () => {
+  const answer = (text: string) =>
+    (async () => ({
+      status: 200,
+      headers: new Headers(),
+      body: { pipe() {} },
+      arrayBuffer: async () => new TextEncoder().encode(text).buffer,
+    })) as unknown as typeof fetch
+
+  it('reads the whole body and refuses it above the cap', async () => {
+    const t = (text: string) => new HttpTransport({ fetch: answer(text), maxResponseBytes: 10 })
+    expect((await t('0123456789').post('https://bank.test/api', '', {})).body).toBe('0123456789')
+    const err = await t('0123456789a')
+      .post('https://bank.test/api', '', {})
+      .catch((e) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect(err.message).toBe('Bank answer is too large')
+    expect(err.bodySnippet).toBeUndefined()
   })
 })

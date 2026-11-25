@@ -177,7 +177,10 @@ describe('maskSensitiveData', () => {
     expect(json).toContain('"cvv2":"***"')
     expect(json).toContain('"expireDate":"***"')
     expect(json).toContain('"secretKey":"***"')
-    expect(json).toContain('435509****5232')
+    // deviation: 2.2 — the JSON text now masks every sensitive object key, so the card number is hidden whole as in
+    // the object form (it used to keep its first six and last four digits)
+    expect(json).toContain('"cardNumber":"***"')
+    expect(json).not.toContain('4355093000315232')
     expect(json).not.toContain('123')
     expect(json).not.toContain('s3')
 
@@ -546,9 +549,9 @@ describe('Param credentials', () => {
       '{"paymentCard":{"cardHolderName":"John Doe","cardNumber":"4603450000000000","cvc":"000","expireMonth":"12","expireYear":"2026"}}'
     const out = maskSensitiveData(text)
     for (const leaked of ['John Doe', '4603450000000000', '"000"', '"12"', '"2026"']) expect(out).not.toContain(leaked)
-    // deviation: a card number in a JSON text keeps its first six and last four digits, as in every other JSON text
-    // (the object form above hides it completely)
-    expect(out).toContain('460345****0000')
+    // deviation: 2.2 — the JSON text now masks every sensitive object key, so the card number is hidden whole, as in
+    // the object form above (it used to keep its first six and last four digits)
+    expect(out).toContain('"cardNumber":"***"')
     expect(out).toContain('"cardHolderName":"***"')
   })
 
@@ -564,5 +567,93 @@ describe('Param credentials', () => {
     expect(maskSensitiveData('{"conversationId":"order-1","status":"success"}')).toBe(
       '{"conversationId":"order-1","status":"success"}',
     )
+  })
+})
+
+// addition: 2.1 / 2.2 / 5.1 — JSON text masks numbers and every sensitive key, also inside an escaped JSON string
+describe('JSON text masking', () => {
+  it('masks numeric and string values of every sensitive key', () => {
+    const out = maskSensitiveData('{"Cvv":123,"ExpireMonth":12,"StoreKey":"k1","SecretKey":"s1"}')
+    expect(out).toBe('{"Cvv":"***","ExpireMonth":"***","StoreKey":"***","SecretKey":"***"}')
+  })
+
+  it.each([
+    ['store_key', '"k-1"'],
+    ['secret_key', '"s-1"'],
+    ['cardNumber', '"4111"'],
+    ['pan', '"4111"'],
+    ['cv2', '"123"'],
+    ['cvv2val', '123'],
+    ['expiry', '"1230"'],
+    ['exp_month', '12'],
+    ['exp_year', '2030'],
+    ['RefundPassword', '"r-1"'],
+    ['refund_password', '"r-1"'],
+    ['terminalId', '"T-1"'],
+    ['merchantpass', '"m-1"'],
+    ['client_password', '"c-1"'],
+    ['merchant_key', '"mk-1"'],
+    ['cardHolderName', '"John Doe"'],
+    ['ecom_payment_card_expdate_month', '12'],
+  ])('masks "%s" in JSON text', (key, value) => {
+    expect(maskSensitiveData(`{"${key}":${value},"OrderId":"123"}`)).toBe(`{"${key}":"***","OrderId":"123"}`)
+  })
+
+  it('keeps non-sensitive pairs and look-alike names readable', () => {
+    const text = '{"OrderId":"123","Amount":10,"cvvResult":"M","panel":"a","terminalIdx":"t","numberOfItems":3}'
+    expect(maskSensitiveData(text)).toBe(text)
+  })
+
+  it('masks doubly escaped JSON inside a string', () => {
+    expect(maskSensitiveData('{"body":"{\\"cvv\\":\\"123\\",\\"OrderId\\":\\"9\\"}"}')).toBe(
+      '{"body":"{\\"cvv\\":\\"***\\",\\"OrderId\\":\\"9\\"}"}',
+    )
+    expect(maskSensitiveData('{\\"Cvv\\":123}')).toBe('{\\"Cvv\\":\\"***\\"}')
+    expect(maskSensitiveData('{\\"Password\\" : \\"p\\\\\\"w\\\\\\\\\\"}')).toBe('{\\"Password\\":\\"***\\"}')
+    expect(maskSensitiveData('{\\"OrderId\\":\\"123\\",\\"Amount\\":10}')).toBe(
+      '{\\"OrderId\\":\\"123\\",\\"Amount\\":10}',
+    )
+  })
+
+  it('masks a doubly escaped secret together with a plain one', () => {
+    const out = maskSensitiveData('{"Password":"a1","raw":"{\\"Password\\":\\"b2\\"}"}') as string
+    expect(out).not.toContain('a1')
+    expect(out).not.toContain('b2')
+  })
+})
+
+// addition: 1.1 — an Error is reported with its cause chain, masked
+describe('Error masking', () => {
+  it('keeps the name, the masked message and the masked cause', () => {
+    const inner = new Error('card 4111111111111111 refused')
+    const error = new Error('outer <Password>pw</Password>', { cause: inner })
+    const out = maskSensitiveData(error)
+    expect(out).toEqual({
+      name: 'Error',
+      message: 'outer <Password>***</Password>',
+      cause: { name: 'Error', message: 'card 411111****1111 refused' },
+    })
+  })
+
+  it('masks a non-Error cause like any other value', () => {
+    const out = maskSensitiveData(new Error('x', { cause: { code: '05', cvv: '123' } }))
+    expect(out.cause).toEqual({ code: '05', cvv: '***' })
+  })
+
+  it('leaves out an absent cause and survives a cause cycle', () => {
+    expect(maskSensitiveData(new Error('x'))).toEqual({ name: 'Error', message: 'x' })
+    const a = new Error('a')
+    const b = new Error('b', { cause: a })
+    ;(a as { cause?: unknown }).cause = b
+    const out = maskSensitiveData(a)
+    expect(out.name).toBe('Error')
+    expect((out.cause as Record<string, unknown>).message).toBe('b')
+  })
+
+  it('has an honest return type for an Error', () => {
+    const out: Record<string, unknown> = maskSensitiveData(new TypeError('t'))
+    expect(out).toEqual({ name: 'TypeError', message: 't' })
+    const typed: { a: string } = maskSensitiveData({ a: 'x' })
+    expect(typed.a).toBe('x')
   })
 })
