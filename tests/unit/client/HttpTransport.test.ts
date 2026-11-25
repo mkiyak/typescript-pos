@@ -184,5 +184,18 @@ describe('HttpTransport', () => {
         .catch((e) => e)
       expect(err.url).toBe('https://bank.test/api')
     })
+
+    // addition: a timed-out GET keeps its query string out of the error too
+    it('keeps the query string out of a timeout error url', async () => {
+      const f = ((_url: unknown, init?: RequestInit) =>
+        new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        })) as unknown as typeof fetch
+      const err = await new HttpTransport({ fetch: f, timeoutMs: 20 })
+        .get('https://bank.test/api?token=abc', {})
+        .catch((e) => e)
+      expect(err.message).toContain('timed out')
+      expect(err.url).toBe('https://bank.test/api')
+    })
   })
 })

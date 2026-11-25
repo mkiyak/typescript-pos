@@ -49,7 +49,7 @@ export class HttpTransport {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         controller.abort()
-        reject(new PosHttpError(`Request timed out after ${this.timeoutMs}ms`, { url }))
+        reject(new PosHttpError(`Request timed out after ${this.timeoutMs}ms`, { url: errorUrl }))
       }, this.timeoutMs)
     })
 
