@@ -6,6 +6,7 @@ import type { HttpTransport } from '../client/HttpTransport.js'
 import { InterPosHttpClient } from '../client/InterPosHttpClient.js'
 import { KuveytPosHttpClient } from '../client/KuveytPosHttpClient.js'
 import { KuveytPosSoapApiHttpClient } from '../client/KuveytPosSoapApiHttpClient.js'
+import { ParamPosHttpClient } from '../client/ParamPosHttpClient.js'
 import { PayFlexCPV4PosHttpClient } from '../client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../client/PayFlexV4PosHttpClient.js'
@@ -141,6 +142,16 @@ export const PosHttpClientStrategyFactory = {
           new AkbankPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger, crypt, account),
         ])
       }
+      case 'ParamPos':
+        return new HttpClientStrategy([
+          new ParamPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+        ])
+      case 'Param3DHostPos':
+        // Status goes to the TurkPos query endpoint; the hosted page's registration to the payment endpoint.
+        return new HttpClientStrategy([
+          new ParamPosHttpClient(requiredEndpoint(config, 'query_api'), transport, logger, ['status']),
+          new ParamPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+        ])
       default:
         throw new GatewayClassNotConfiguredError(`No HTTP clients for gateway class [${gatewayClass}].`)
     }

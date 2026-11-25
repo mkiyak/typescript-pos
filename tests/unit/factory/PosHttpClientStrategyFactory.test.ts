@@ -6,6 +6,7 @@ import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { InterPosHttpClient } from '../../../src/client/InterPosHttpClient.js'
 import { KuveytPosHttpClient } from '../../../src/client/KuveytPosHttpClient.js'
 import { KuveytPosSoapApiHttpClient } from '../../../src/client/KuveytPosSoapApiHttpClient.js'
+import { ParamPosHttpClient } from '../../../src/client/ParamPosHttpClient.js'
 import { PayFlexCPV4PosHttpClient } from '../../../src/client/PayFlexCPV4PosHttpClient.js'
 import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3DFormHttpClient.js'
 import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClient.js'
@@ -75,6 +76,23 @@ const posNetConfig: GatewayConfig = {
   gateway_endpoints: {
     payment_api: 'https://setmpos.ykb.com/PosnetWebService/XML',
     gateway_3d: 'https://setmpos.ykb.com/3DSWebService/YKBPaymentService',
+  },
+}
+
+const paramConfig: GatewayConfig = {
+  name: 'Param',
+  class: 'ParamPos',
+  gateway_endpoints: {
+    payment_api: 'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx',
+  },
+}
+
+const paramHostConfig: GatewayConfig = {
+  name: 'Param-3DHost',
+  class: 'Param3DHostPos',
+  gateway_endpoints: {
+    payment_api: 'https://testposws.param.com.tr/to.ws/Service_Odeme.asmx',
+    query_api: 'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx',
   },
 }
 
@@ -365,5 +383,49 @@ describe('PosHttpClientStrategyFactory', () => {
     }
     expect(() => assertHttpsEndpoints(config)).toThrow(PosError)
     expect(() => assertHttpsEndpoints(config)).toThrow(/Endpoint \[gateway_3d\] of .* must be an https: URL\./)
+  })
+
+  // addition: ParamPos talks to one SOAP endpoint
+  it('wires ParamPos with its payment client', () => {
+    expect(classesOf('ParamPos', paramConfig)).toEqual([ParamPosHttpClient])
+    const strategy = PosHttpClientStrategyFactory.createForGateway('ParamPos', paramConfig, transport, noopLogger)
+    expect(strategy.getClient('pay', '3d')).toBeInstanceOf(ParamPosHttpClient)
+    expect(strategy.getClient('cancel', 'regular')).toBeInstanceOf(ParamPosHttpClient)
+  })
+
+  // addition: Param3DHostPos reads status from the query endpoint and registers payments at the payment endpoint
+  it('routes Param3DHostPos status to the query endpoint and everything else to the payment endpoint', () => {
+    expect(classesOf('Param3DHostPos', paramHostConfig)).toEqual([ParamPosHttpClient, ParamPosHttpClient])
+    const strategy = PosHttpClientStrategyFactory.createForGateway(
+      'Param3DHostPos',
+      paramHostConfig,
+      transport,
+      noopLogger,
+    )
+    const status = strategy.getClient('status', '3d_host') as ParamPosHttpClient
+    const form = strategy.getClient('3d_form_build', '3d_host') as ParamPosHttpClient
+    expect(status.getApiUrl('status', '3d_host')).toBe(paramHostConfig.gateway_endpoints.query_api)
+    expect(form.getApiUrl('3d_form_build', '3d_host')).toBe(paramHostConfig.gateway_endpoints.payment_api)
+    expect(status).not.toBe(form)
+  })
+
+  it.each([
+    ['ParamPos', paramConfig, 'payment_api'],
+    ['Param3DHostPos', paramHostConfig, 'payment_api'],
+    ['Param3DHostPos', paramHostConfig, 'query_api'],
+  ] as Array<[string, GatewayConfig, string]>)('requires the %s endpoint %s', (gatewayClass, config, key) => {
+    const endpoints: Record<string, string> = { ...config.gateway_endpoints }
+    delete endpoints[key]
+    const broken = { ...config, gateway_endpoints: endpoints as never }
+    expect(() => classesOf(gatewayClass, broken)).toThrow(PosError)
+    expect(() => classesOf(gatewayClass, broken)).toThrow(new RegExp(`Endpoint \\[${key}\\] is required for`))
+  })
+
+  it('rejects an http: endpoint of the Param gateways', () => {
+    const insecure = {
+      ...paramHostConfig,
+      gateway_endpoints: { ...paramHostConfig.gateway_endpoints, query_api: 'http://test-dmz.param.com.tr/x.asmx' },
+    }
+    expect(() => assertHttpsEndpoints(insecure)).toThrow(PosError)
   })
 })
