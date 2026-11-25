@@ -38,6 +38,7 @@ replaces the other.
 | `PayForPosQuery` | yes | yes | no | no | no |
 | `InterPosQuery` | yes | no | no | no | no |
 | `VakifKatilimPosQuery` | yes | yes | no | no | no |
+| `ToslaPosQuery` | yes | no | yes | yes | no |
 
 A query the bank class does not offer rejects with `UnsupportedTransactionTypeError`; it never throws synchronously.
 Check first when the choice is dynamic:
@@ -65,6 +66,7 @@ the bank's field names back.
 | `PayForPos` | `MerchantId`, `UserCode`, `UserPass`, `MbrId` (each only when missing) | `PayforRequest` XML | `payment_api` unless `apiUrl` is given |
 | `InterPos` | `UserCode`, `UserPass`, `ShopCode` (each only when missing) | form-urlencoded; the answer is decoded from the bank's `key=value;;` text | `payment_api` unless `apiUrl` is given |
 | `VakifKatilimPos` | none: the data goes out unchanged, so send a complete signed request | the gateway's XML | none: `apiUrl` is required |
+| `ToslaPos` | `clientId`, `apiUser`, `rnd`, `timeSpan` (each only when missing) and the `hash` over them (when you set no `hash`) | JSON | none: `apiUrl` is required |
 | `PosNetV1Pos` | `ApiType`, `ApiVersion`, `MerchantNo`, `TerminalNo` (each only when missing) and a `MAC` over the fields listed in `MACParams` (when you set no `MAC`) | JSON | none: `apiUrl` is required |
 
 For a sub-dealer account `MerchantId` is the sub-merchant id, otherwise `'1'`.
@@ -146,6 +148,39 @@ const list = await query.history({
 
 A custom query for this gateway is sent exactly as given and needs an `apiUrl` on the bank's origin, because the gateway
 has one path per query. Kuveyt Türk (`KuveytPos`) has no query service. The raw decoded answer is always in `all`.
+
+## Tosla: installment rates and prices
+
+```ts
+const query = PosQueryFactory.createPosQuery(toslaAccount, posProductionConfig)
+
+// Commission table of a card: `bin` is the first six digits of the card number
+const rates = await query.getInstallmentRates({ bin: '454671' })
+// rates.status, rates.error_message, rates.installment_rates[]: bank_code, bank_name, card_prefix, card_type, card_class,
+// card_family, rates[]: { installment, rate, constant }
+
+// Installment options of an amount in TL
+const prices = await query.getInstallmentPrices({ amount: 100.5 })
+// prices.installment_prices[0].prices[]: { installment, installment_price, total_price }
+```
+
+| Field | Meaning |
+|---|---|
+| `installment` | The installment count. For rates it is 2 or more (the single payment is not listed). |
+| `rate` | The bank's commission percentage for that count. |
+| `constant` | The bank's fixed fee for that count. |
+| `installment_price` | One installment's price in the major unit of the order currency (TL), rounded half up to a whole kuruş. |
+| `total_price` | The total of all installments in TL. |
+
+`bin` must be six digits and `amount` a valid order amount (both are checked before anything is signed or sent). The
+bank answers prices in kuruş; the library converts them to TL. Entries of the bank's answer that are malformed (an
+unusable count, rate or amount) are dropped and logged, never returned as guesses. A declined answer has
+`status: 'declined'`, an empty list and the bank's message in `error_message`; the raw decoded answer is always in `all`.
+`card_family` values are in the `CARD_FAMILY` constants where a bank reports one.
+
+Tosla has no `history` or `getBinList`: the gateway's `orderHistory` lists the records of one order. Its custom query
+is sent with the account fields and the signature added; because the signature covers `clientId`, `apiUser`, `rnd` and
+`timeSpan`, a hook that edits one of them invalidates it. The query needs an `apiUrl` on the API origin.
 
 ## Custom URLs are restricted
 

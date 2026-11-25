@@ -25,6 +25,7 @@ toplayan TypeScript kütüphanesi. Node.js 22 veya üzeri gerekir; ESM ve Common
 | `InterPos` | Denizbank (InterVPOS) | Birim testli; form ve callback hash'leri ile tutar biçimi PHP'ye karşı diferansiyel test edildi (her biri için 2.000 rastgele kümede 0 uyuşmazlık). |
 | `KuveytPos` | Kuveyt Türk | Birim testli; istek ve callback hash'leri ile kuruş tutarı dönüşümü PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
 | `VakifKatilimPos` | Vakıf Katılım | Birim testli; istek ve callback hash'leri ile kuruş tutarı dönüşümü PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
+| `ToslaPos` | Tosla | Birim testli; istek ve callback hash'leri PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
 
 ## Kurulum
 
@@ -86,11 +87,12 @@ Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://g
 - [Denizbank (InterVPOS) ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/interpos-payment.md)
 - [Kuveyt Türk ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/kuveytpos-payment.md)
 - [Vakıf Katılım ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/vakif-katilim-payment.md)
+- [Tosla ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/tosla-payment.md)
 - [Sorgular (özel banka istekleri)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
 - [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Diğer işlemler: `pos.cancel(order)`, `pos.refund(order)` (`order.order_amount` verilmiş ve `order.amount` ondan
-küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti, Akbank, PayFor ve Vakıf Katılım), 3D Secure'suz ödeme için
+küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti, Akbank, PayFor, Vakıf Katılım ve Tosla), 3D Secure'suz ödeme için
 `pos.payment(MODEL.NON_SECURE, ...)` ve ön/son provizyon için `TX_TYPE.PAY_PRE_AUTH` / `TX_TYPE.PAY_POST_AUTH`.
 
 ### Test ve canlı yapılandırma
@@ -167,14 +169,14 @@ const answer = await query.customQuery({ TransactionId: transactionId }) // çö
 ```
 
 Özel URL'ler `https:` olmalı ve yapılandırılmış bir banka origin'inde (ya da `allowedApiOrigins` ile verdiğiniz bir origin'de)
-olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos`, `PayForPos` ve `VakifKatilimPos` ise `history` sunar (Vakıf Katılım'ın özel sorguları `apiUrl` ister; Kuveyt Türk sorgu sunmaz). Asseco, PayFlex V4, VakıfBank Ortak Ödeme, InterPos ve POSNET gateway'lerinde yalnız
+olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos`, `PayForPos` ve `VakifKatilimPos` ise `history` sunar (Vakıf Katılım'ın özel sorguları `apiUrl` ister; Kuveyt Türk sorgu sunmaz). `ToslaPos` özel sorgu (`apiUrl` ile), `getInstallmentRates` (6 haneli BIN ile) ve `getInstallmentPrices` (TL cinsinden tutarla) sunar; taksit sorgusu sunan ilk gateway'dir, kart programı adları `CARD_FAMILY` sabitlerindedir. Asseco, PayFlex V4, VakıfBank Ortak Ödeme, InterPos ve POSNET gateway'lerinde yalnız
 `customQuery` vardır; diğer sorgular `UnsupportedTransactionTypeError` ile reddedilir. Ayrıntı için [sorgular kılavuzuna](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md) bakın.
 
 ## Tasarım
 
 1. Durumsuz, async API: her ağ metodu kendi cevabını döner; `isSuccess()` / `getResponse()` durumu yoktur.
 2. Sipariş ve normalize cevap anahtarları snake_case'tir ve her gateway'de aynıdır.
-3. 3D hash doğrulamasını kapatan bir seçenek yoktur. `AssecoPos` her zaman geçerli hash ister; `GarantiPos` imzalı callback'i her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder (`require_3d_hash: true` onu da reddeder); `AkbankPos` 3D Pay, 3D Host ve başarılı 3D Secure callback'lerinde her zaman geçerli hash ister, onaylanan 3D Pay/Host sonuçlarını bankayla doğrular; `PayFlexV4Pos` callback `Hash` taşıyorsa her zaman doğrular, `Hash` eksikse yalnızca `require_3d_hash: true` ile reddeder; `PosNetPos` çözülen 3D sonucundaki bankanın MAC'ini her zaman doğrular; `PosNetV1Pos` başarılı callback'lerde her zaman geçerli MAC ister (imzasız reddedilmiş callback yalnız `require_3d_hash: true` ile reddedilir); `PayForPos` imzalı callback'i her zaman doğrular, onaylanan her 3D sonucunu döndürmeden önce bankayla doğrular (imzasız bir Ziraat Katılım callback'i tek başına ödemeyi asla onaylamaz); `InterPos` imzalı callback'i sabit bir alan listesi üzerinden her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder ve onaylanan her 3D Pay / 3D Host sonucunu döndürmeden önce bankayla doğrular; `KuveytPos` bankanın `HashData`'sını her zaman doğrular, provizyonu sizin siparişinizden kurar ve bankanın cevabını siparişe bağlar; `VakifKatilimPos` 3D Secure için aynısını yapar ve onaylanan her 3D Host ödemesini bankayla doğrular (3D Host formu hash'lenmiş API şifresini taşır).
+3. 3D hash doğrulamasını kapatan bir seçenek yoktur. `AssecoPos` her zaman geçerli hash ister; `GarantiPos` imzalı callback'i her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder (`require_3d_hash: true` onu da reddeder); `AkbankPos` 3D Pay, 3D Host ve başarılı 3D Secure callback'lerinde her zaman geçerli hash ister, onaylanan 3D Pay/Host sonuçlarını bankayla doğrular; `PayFlexV4Pos` callback `Hash` taşıyorsa her zaman doğrular, `Hash` eksikse yalnızca `require_3d_hash: true` ile reddeder; `PosNetPos` çözülen 3D sonucundaki bankanın MAC'ini her zaman doğrular; `PosNetV1Pos` başarılı callback'lerde her zaman geçerli MAC ister (imzasız reddedilmiş callback yalnız `require_3d_hash: true` ile reddedilir); `PayForPos` imzalı callback'i her zaman doğrular, onaylanan her 3D sonucunu döndürmeden önce bankayla doğrular (imzasız bir Ziraat Katılım callback'i tek başına ödemeyi asla onaylamaz); `InterPos` imzalı callback'i sabit bir alan listesi üzerinden her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder ve onaylanan her 3D Pay / 3D Host sonucunu döndürmeden önce bankayla doğrular; `KuveytPos` bankanın `HashData`'sını her zaman doğrular, provizyonu sizin siparişinizden kurar ve bankanın cevabını siparişe bağlar; `VakifKatilimPos` 3D Secure için aynısını yapar ve onaylanan her 3D Host ödemesini bankayla doğrular (3D Host formu hash'lenmiş API şifresini taşır); `ToslaPos` imzalı callback'i sabit bir alan listesi üzerinden her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder ve onaylanan her 3D Pay / 3D Host sonucunu bankanın kendi kaydıyla doğrular (callback tutarı ve para birimini imzalamaz).
 4. Hassas veri (PAN, CVV, son kullanma, şifreler, store key) logger'a ulaşmadan maskelenir.
 5. Sabit zamanlı hash karşılaştırması; Asseco hash'i bankanın beklediği doğal, büyük/küçük harf duyarsız anahtar sıralamasını birebir kullanır.
 6. Ek Asseco, Garanti ve Akbank korumaları: dönen sipariş numarası, tutar ve ödeme modeli (Garanti'de ayrıca terminal ve para birimi) siparişle karşılaştırılır
