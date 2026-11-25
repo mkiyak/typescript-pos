@@ -397,6 +397,23 @@ describe('AssecoPosResponseDataMapper', () => {
     expect(actual).toStrictEqual(expected)
   })
 
+  // addition: L5 the recurring-order results carry the answer's result code instead of a null placeholder
+  it.each(['00', '99'])('recurring cancel and status results carry ProcReturnCode %s', (code) => {
+    const cancel = integrationMapper().mapCancelResponse({
+      ProcReturnCode: code,
+      RECURRINGOPERATION: 'CANCEL',
+      RECORDID: 'R1',
+      RESULT: 'Successfull',
+    })
+    const status = integrationMapper().mapStatusResponse({
+      ProcReturnCode: code,
+      Extra: { RECURRINGID: 'R1', RECURRINGCOUNT: '2' },
+    })
+
+    expect(cancel.proc_return_code).toBe(code)
+    expect(status.proc_return_code).toBe(code)
+  })
+
   it('maps fields missing from the bank response to null (PHP undefined index), never undefined', () => {
     const refund = integrationMapper().mapRefundResponse({ ProcReturnCode: '99' })
     expect(refund.order_id).toBeNull()

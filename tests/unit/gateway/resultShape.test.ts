@@ -409,8 +409,11 @@ describe('result shape of every gateway (L5)', () => {
           const result = run(entry.make(), method, fixture)
 
           expect(BASE_KEYS.filter((key) => !Object.hasOwn(result, key))).toStrictEqual([])
-          // An order-history result may leave `status` null: the verdict belongs to each listed transaction.
-          const allowed = method === 'history' ? ['approved', 'declined', null] : ['approved', 'declined']
+          // The PayFor order-history vectors keep `status` null: the verdict belongs to each listed transaction.
+          const allowed =
+            method === 'history' && entry.name === 'PayForPos'
+              ? ['approved', 'declined', null]
+              : ['approved', 'declined']
           expect(allowed).toContain(result.status)
           for (const key of ['order_id', 'proc_return_code', 'error_code', 'error_message']) {
             const value = result[key]

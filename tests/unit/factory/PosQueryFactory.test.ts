@@ -50,6 +50,31 @@ const wrongAccount = (gateway: string, account: string) =>
   new RegExp(`^Bank \\[[\\w-]+\\] is configured for ${gateway} and needs an? ${account}\\.$`)
 /** A custom query URL outside the https: origins of the bank (or of `allowedApiOrigins`) is refused. */
 const FOREIGN_ORIGIN = /^Custom query URL must be an https: URL on one of these origins: https:\/\/.+\.$/
+/** A plain Error with the right text must not pass: the refusal is a PosError and says what is wrong. */
+function expectPosErrorThrown(act: () => unknown, message: string | RegExp): void {
+  let caught: unknown
+  try {
+    act()
+  } catch (e) {
+    caught = e
+  }
+  expect(caught).toBeInstanceOf(PosError)
+  expect((caught as Error).message).toMatch(exact(message))
+}
+
+async function expectPosErrorRejected(promise: Promise<unknown>, message: string | RegExp): Promise<void> {
+  let caught: unknown
+  try {
+    await promise
+  } catch (e) {
+    caught = e
+  }
+  expect(caught).toBeInstanceOf(PosError)
+  expect((caught as Error).message).toMatch(exact(message))
+}
+
+const exact = (message: string | RegExp): RegExp =>
+  typeof message === 'string' ? new RegExp(`^${message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) : message
 const cpAccount = () => AccountFactory.createPayFlexPosAccount('vakifbank-cp', '000000000111111', 'pw', 'VP1')
 
 describe('PosQueryFactory', () => {
@@ -97,10 +122,12 @@ describe('PosQueryFactory', () => {
   })
 
   it('rejects an account of the wrong type', () => {
-    expect(() => PosQueryFactory.createPosQuery(assecoAccount('vakifbank'), posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(assecoAccount('vakifbank'), posTestConfig),
       wrongAccount('PayFlexV4Pos', 'PayFlexPosAccount'),
     )
-    expect(() => PosQueryFactory.createPosQuery(cpAccount(), assecoConfigFor('AssecoPos'))).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(cpAccount(), assecoConfigFor('AssecoPos')),
       wrongAccount('AssecoPos', 'AssecoPosAccount'),
     )
   })
@@ -114,7 +141,8 @@ describe('PosQueryFactory', () => {
         },
       },
     }
-    expect(() => PosQueryFactory.createPosQuery(assecoAccount(), config)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(assecoAccount(), config),
       'Endpoint [payment_api] of Akbank (AssecoPos) must be an https: URL.',
     )
   })
@@ -138,7 +166,7 @@ describe('PosQueryFactory', () => {
     expect(String(fake.mock.calls[0]?.[0])).toBe('https://apipos.vakifbank.com.tr:8443/x')
     expect(hook).toHaveBeenCalledTimes(1)
 
-    await expect(q.customQuery({}, 'https://evil.example/')).rejects.toThrow(FOREIGN_ORIGIN)
+    await expectPosErrorRejected(q.customQuery({}, 'https://evil.example/'), FOREIGN_ORIGIN)
     expect(fake).toHaveBeenCalledTimes(1)
   })
 })
@@ -155,7 +183,8 @@ describe('PosQueryFactory with GarantiPos', () => {
   })
 
   it('rejects an AssecoPosAccount for the garanti bank', () => {
-    expect(() => PosQueryFactory.createPosQuery(assecoAccount('garanti'), posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(assecoAccount('garanti'), posTestConfig),
       wrongAccount('GarantiPos', 'GarantiPosAccount'),
     )
   })
@@ -276,7 +305,8 @@ describe('PosQueryFactory with AkbankPos', () => {
   })
 
   it('rejects an AssecoPosAccount for the akbank-pos bank', () => {
-    expect(() => PosQueryFactory.createPosQuery(assecoAccount('akbank-pos'), posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(assecoAccount('akbank-pos'), posTestConfig),
       wrongAccount('AkbankPos', 'AkbankPosAccount'),
     )
   })
@@ -340,7 +370,7 @@ describe('PosQueryFactory with AkbankPos', () => {
 
   it('customQuery refuses a foreign origin without calling the bank', async () => {
     const { q, fake } = e2e('{}')
-    await expect(q.customQuery({ txnCode: '1020' }, 'https://evil.example/x')).rejects.toThrow(FOREIGN_ORIGIN)
+    await expectPosErrorRejected(q.customQuery({ txnCode: '1020' }, 'https://evil.example/x'), FOREIGN_ORIGIN)
     expect(fake).not.toHaveBeenCalled()
   })
 
@@ -373,7 +403,8 @@ describe('PosQueryFactory with PosNetPos and PosNetV1Pos', () => {
   })
 
   it.each(['yapikredi', 'albaraka'])('rejects an AssecoPosAccount for the %s bank', (bank) => {
-    expect(() => PosQueryFactory.createPosQuery(assecoAccount(bank), posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(assecoAccount(bank), posTestConfig),
       wrongAccount(bank === 'yapikredi' ? 'PosNetPos' : 'PosNetV1Pos', 'PosNetPosAccount'),
     )
   })
@@ -458,7 +489,7 @@ describe('PosQueryFactory with PosNetPos and PosNetV1Pos', () => {
     ['albaraka', 'https://evil.example/x'],
   ])('%s: a URL on a foreign origin rejects before anything is sent', async (bank, url) => {
     const { q, fetchFn } = e2e(bank === 'yapikredi' ? yAccount() : aAccount(), '{}')
-    await expect(q.customQuery({ MACParams: 'MerchantNo' }, url)).rejects.toThrow(FOREIGN_ORIGIN)
+    await expectPosErrorRejected(q.customQuery({ MACParams: 'MerchantNo' }, url), FOREIGN_ORIGIN)
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
@@ -510,7 +541,8 @@ describe('PosQueryFactory with PayForPos', () => {
   })
 
   it('rejects an AssecoPosAccount for the PayFor bank', () => {
-    expect(() => PosQueryFactory.createPosQuery(assecoAccount('qnbfinansbank-payfor'), posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(assecoAccount('qnbfinansbank-payfor'), posTestConfig),
       wrongAccount('PayForPos', 'PayForPosAccount'),
     )
   })
@@ -574,7 +606,7 @@ describe('PosQueryFactory with PayForPos', () => {
 
   it('a URL on a foreign origin rejects before anything is sent', async () => {
     const { q, fetchFn } = e2e('<PayforResponse/>')
-    await expect(q.customQuery(inquiry, 'https://evil.example/x')).rejects.toThrow(FOREIGN_ORIGIN)
+    await expectPosErrorRejected(q.customQuery(inquiry, 'https://evil.example/x'), FOREIGN_ORIGIN)
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
@@ -644,7 +676,8 @@ describe('PosQueryFactory with InterPos', () => {
 
   it('rejects a PayForPosAccount for the denizbank bank', () => {
     const wrong = AccountFactory.createPayForPosAccount('denizbank', 'm', 'u', 'p', 'k')
-    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(wrong, posTestConfig),
       wrongAccount('InterPos', 'InterPosAccount'),
     )
   })
@@ -670,7 +703,7 @@ describe('PosQueryFactory with InterPos', () => {
 
   it('a URL on a foreign origin rejects before anything is sent', async () => {
     const { q, fetchFn } = e2e()
-    await expect(q.customQuery(inquiry, 'https://evil.example/x')).rejects.toThrow(FOREIGN_ORIGIN)
+    await expectPosErrorRejected(q.customQuery(inquiry, 'https://evil.example/x'), FOREIGN_ORIGIN)
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
@@ -731,7 +764,8 @@ describe('PosQueryFactory with VakifKatilimPos', () => {
 
   it('rejects an InterPosAccount for the vakif-katilim bank', () => {
     const wrong = AccountFactory.createInterPosAccount('vakif-katilim', 'm', 'u', 'p', 'k')
-    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(wrong, posTestConfig),
       wrongAccount('VakifKatilimPos', 'BoaPosAccount'),
     )
   })
@@ -916,7 +950,8 @@ describe('PosQueryFactory with ToslaPos', () => {
 
   it('rejects an AkbankPosAccount for the tosla bank', () => {
     const wrong = AccountFactory.createAkbankPosAccount('tosla', 'm', 't', 'k')
-    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(wrong, posTestConfig),
       wrongAccount('ToslaPos', 'ToslaPosAccount'),
     )
     expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
@@ -1104,7 +1139,8 @@ describe('PosQueryFactory with ParamPos', () => {
 
   it('rejects a ToslaPosAccount for the param-pos bank', () => {
     const wrong = AccountFactory.createToslaPosAccount('param-pos', '1', 'u', 'p')
-    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(wrong, posTestConfig),
       wrongAccount('ParamPos', 'ParamPosAccount'),
     )
     expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
@@ -1407,7 +1443,8 @@ describe('PosQueryFactory with PayTrPos', () => {
 
   it('rejects a ToslaPosAccount for the paytr bank', () => {
     const wrong = AccountFactory.createToslaPosAccount('paytr', 'm', 'u', 'p')
-    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(wrong, posTestConfig),
       wrongAccount('PayTrPos', 'PayTrPosAccount'),
     )
     expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
@@ -1531,8 +1568,8 @@ describe('PosQueryFactory with PayTrPos', () => {
 
   it('a custom query on a foreign origin rejects before anything is sent', async () => {
     const { q, fetchFn } = e2e({ status: 'success' })
-    await expect(q.customQuery({ merchant_oid: 'X' }, 'https://evil.example/odeme')).rejects.toThrow(FOREIGN_ORIGIN)
-    await expect(q.customQuery({ merchant_oid: 'X' }, 'http://www.paytr.com/odeme')).rejects.toThrow(FOREIGN_ORIGIN)
+    await expectPosErrorRejected(q.customQuery({ merchant_oid: 'X' }, 'https://evil.example/odeme'), FOREIGN_ORIGIN)
+    await expectPosErrorRejected(q.customQuery({ merchant_oid: 'X' }, 'http://www.paytr.com/odeme'), FOREIGN_ORIGIN)
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
@@ -1718,7 +1755,8 @@ describe('PosQueryFactory with IyzicoPos', () => {
 
   it('rejects a ToslaPosAccount for the iyzico bank', () => {
     const wrong = AccountFactory.createToslaPosAccount('iyzico', 'm', 'u', 'p')
-    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+    expectPosErrorThrown(
+      () => PosQueryFactory.createPosQuery(wrong, posTestConfig),
       wrongAccount('IyzicoPos', 'IyzicoPosAccount'),
     )
     expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
@@ -1794,7 +1832,7 @@ describe('PosQueryFactory with IyzicoPos', () => {
 
   it('a custom query on a foreign origin or plain http rejects before anything is sent', async () => {
     const { q, fetchFn } = e2e({ status: 'success' })
-    await expect(q.customQuery({ a: 1 }, 'https://evil.example/x')).rejects.toThrow(FOREIGN_ORIGIN)
+    await expectPosErrorRejected(q.customQuery({ a: 1 }, 'https://evil.example/x'), FOREIGN_ORIGIN)
     await expect(q.customQuery({ a: 1 }, 'http://sandbox-api.iyzipay.com/payment/bin/check')).rejects.toBeInstanceOf(
       PosError,
     )

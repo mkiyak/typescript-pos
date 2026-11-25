@@ -283,7 +283,12 @@ export class AssecoPosResponseDataMapper extends AbstractResponseDataMapper {
         status = TX_APPROVED
       }
 
-      return this.withBaseKeys({ order_id: field(raw, 'RECORDID'), status, all: raw }) as PosResponse
+      return this.withBaseKeys({
+        order_id: field(raw, 'RECORDID'),
+        status,
+        all: raw,
+        proc_return_code: procReturnCode,
+      }) as PosResponse
     }
 
     const extra = field(raw, 'Extra')
@@ -365,6 +370,7 @@ export class AssecoPosResponseDataMapper extends AbstractResponseDataMapper {
       num_code: field(extra, 'NUMCODE'),
       error_message: status !== TX_APPROVED ? field(rawResponseData, 'ErrMsg') : null,
       all: rawResponseData,
+      proc_return_code: this.getProcReturnCode(rawResponseData),
     }
 
     const recurringOrders: Raw[] = []
