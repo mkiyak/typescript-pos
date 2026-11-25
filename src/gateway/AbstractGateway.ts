@@ -112,6 +112,12 @@ export type GatewayConfig = {
    * `fail_message`) is rejected too (`HashMismatchError`); without it such a body maps only as a decline whose result
    * carries the order's id and the failure text. An unsigned body that reads as an approval (a status `success` or a
    * positive total amount) is always rejected.
+   *
+   * IyzicoPos: 3D Secure: with `true` a callback without `signature` is rejected (`HashMismatchError`), declines
+   * included; without it an unsigned callback maps only as a decline carrying the order's id. An unsigned callback
+   * whose status or mdStatus reads as success is always rejected, and a present `signature` is always verified. 3D
+   * Host: no effect: the callback carries only a token, and the result is always read from iyzico's signed checkout
+   * record.
    */
   require_3d_hash?: boolean
 }

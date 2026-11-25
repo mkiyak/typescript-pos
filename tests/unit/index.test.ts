@@ -1,3 +1,4 @@
+import { inspect } from 'node:util'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
   AbstractGatewayLike,
@@ -69,6 +70,7 @@ describe('public index', () => {
         'ParamPos',
         'Param3DHostPos',
         'PayTrPos',
+        'IyzicoPos',
         'BoaPosAccount',
         'ToslaPosAccount',
         'PayTrPosAccount',
@@ -197,6 +199,16 @@ describe('public index', () => {
   it('PosFactory creates the PayTrPos gateway from the shipped test config', () => {
     const account = mod.AccountFactory.createPayTrPosAccount('paytr', '123456', 'salt', 'key')
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.PayTrPos)
+  })
+
+  // addition: the IyzicoPos gateway is reachable from the public entry point and holds its secret key privately
+  it('PosFactory creates the IyzicoPos gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createIyzicoPosAccount('iyzico', 'sandbox-apiKey', 'sandbox-secretKey')
+    const gateway = mod.PosFactory.createPosGateway(account, mod.posTestConfig)
+    expect(gateway).toBeInstanceOf(mod.IyzicoPos)
+    for (const dump of [JSON.stringify(gateway), inspect(gateway, { depth: 20, showHidden: true })]) {
+      expect(dump).not.toContain('sandbox-secretKey')
+    }
   })
 
   // addition: the VakifKatilimPos gateway is reachable from the public entry point

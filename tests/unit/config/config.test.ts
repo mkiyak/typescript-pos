@@ -8,6 +8,7 @@ import { AkbankPos } from '../../../src/gateway/AkbankPos.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { InterPos } from '../../../src/gateway/InterPos.js'
+import { IyzicoPos } from '../../../src/gateway/IyzicoPos.js'
 import { KuveytPos } from '../../../src/gateway/KuveytPos.js'
 import { Param3DHostPos } from '../../../src/gateway/Param3DHostPos.js'
 import { ParamPos } from '../../../src/gateway/ParamPos.js'
@@ -31,6 +32,7 @@ const accountFor = (gatewayClass: string, key: string) => {
   if (gatewayClass === 'ParamPos') return AccountFactory.createParamPosAccount(key, '1', 'u', 'p', 'g')
   if (gatewayClass === 'Param3DHostPos') return AccountFactory.createParamPosAccount(key, '1', 'u', 'p', 'g', 't')
   if (gatewayClass === 'PayTrPos') return AccountFactory.createPayTrPosAccount(key, '1', 's', 'k')
+  if (gatewayClass === 'IyzicoPos') return AccountFactory.createIyzicoPosAccount(key, 'k', 's')
   if (gatewayClass === 'PayForPos') return AccountFactory.createPayForPosAccount(key, 'm', 'u', 'p', 'k')
   if (gatewayClass === 'PosNetPos' || gatewayClass === 'PosNetV1Pos')
     return AccountFactory.createPosNetPosAccount(key, 'm', 't', 'p', 'k')
@@ -42,7 +44,7 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos, Param3DHostPos and PayTrPos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos, Param3DHostPos, PayTrPos and IyzicoPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
       expect([
@@ -61,6 +63,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         'ParamPos',
         'Param3DHostPos',
         'PayTrPos',
+        'IyzicoPos',
       ]).toContain(bank.class)
     }
   })
@@ -84,6 +87,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
       ParamPos,
       Param3DHostPos,
       PayTrPos,
+      IyzicoPos,
     }[
       bank.class as
         | 'AssecoPos'
@@ -101,6 +105,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         | 'ParamPos'
         | 'Param3DHostPos'
         | 'PayTrPos'
+        | 'IyzicoPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -599,5 +604,38 @@ describe('PayTrPos endpoints', () => {
     }
     expect(posProductionConfig.banks.paytr).not.toHaveProperty('test_mode')
     expect(posProductionConfig.banks.paytr).not.toHaveProperty('lang')
+  })
+})
+
+// addition: shipped IyzicoPos entries (a separate sandbox host; no test flag, no language)
+describe('IyzicoPos endpoints', () => {
+  it('production and test entries carry the iyzico endpoints', () => {
+    expect(posProductionConfig.banks.iyzico).toStrictEqual({
+      name: 'iyzico',
+      class: 'IyzicoPos',
+      gateway_endpoints: {
+        payment_api: 'https://api.iyzipay.com',
+        query_api: 'https://api.iyzipay.com/v2/reporting/payment',
+      },
+    })
+    expect(posTestConfig.banks.iyzico).toStrictEqual({
+      name: 'iyzico',
+      class: 'IyzicoPos',
+      gateway_endpoints: {
+        payment_api: 'https://sandbox-api.iyzipay.com',
+        query_api: 'https://sandbox-api.iyzipay.com/v2/reporting/payment',
+      },
+    })
+  })
+
+  it('both entries are deeply frozen and carry no hash-check switch', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      const iyzico = cfg.banks.iyzico
+      expect(Object.isFrozen(iyzico)).toBe(true)
+      expect(Object.isFrozen(iyzico.gateway_endpoints)).toBe(true)
+      expect(iyzico).not.toHaveProperty('require_3d_hash')
+      expect(iyzico).not.toHaveProperty('test_mode')
+      expect(iyzico).not.toHaveProperty('lang')
+    }
   })
 })

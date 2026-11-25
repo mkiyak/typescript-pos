@@ -14,6 +14,7 @@ export type PosProductionBank =
   | 'param-pos'
   | 'param-3d-host-pos'
   | 'paytr'
+  | 'iyzico'
   | 'halkbank'
   | 'teb'
   | 'isbank'
@@ -27,7 +28,7 @@ export type PosProductionBank =
   | 'ziraat-katilim-payfor'
 
 /**
- * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos, Param3DHostPos and PayTrPos banks (the VakifBank
+ * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos, Param3DHostPos, PayTrPos and IyzicoPos banks (the VakifBank
  * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default. The `akbank-pos` entry sets no `lang` or
  * `test_mode`: AkbankPos takes the language from `order.lang` and the environment from the endpoint URLs.
  *
@@ -129,6 +130,14 @@ export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeCo
         payment_api: 'https://www.paytr.com',
         gateway_3d: 'https://www.paytr.com/odeme',
         gateway_3d_host: 'https://www.paytr.com/odeme/guvenli',
+      },
+    },
+    iyzico: {
+      name: 'iyzico',
+      class: 'IyzicoPos',
+      gateway_endpoints: {
+        payment_api: 'https://api.iyzipay.com',
+        query_api: 'https://api.iyzipay.com/v2/reporting/payment',
       },
     },
     'vakif-katilim': {

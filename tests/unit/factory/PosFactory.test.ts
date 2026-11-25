@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
+import { posProductionConfig } from '../../../src/config/posProductionConfig.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { GatewayClassNotConfiguredError, MissingAccountInfoError, PosError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
@@ -10,6 +11,7 @@ import { AkbankPos } from '../../../src/gateway/AkbankPos.js'
 import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { InterPos } from '../../../src/gateway/InterPos.js'
+import { IyzicoPos } from '../../../src/gateway/IyzicoPos.js'
 import { KuveytPos } from '../../../src/gateway/KuveytPos.js'
 import { Param3DHostPos } from '../../../src/gateway/Param3DHostPos.js'
 import { ParamPos } from '../../../src/gateway/ParamPos.js'
@@ -355,6 +357,47 @@ describe('PosFactory.createPosGateway', () => {
     expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
       'Bank [paytr] is configured for PayTrPos and needs a PayTrPosAccount.',
     )
+  })
+
+  // addition: G1 the iyzico entries build the gateway; test and production differ only by host
+  it.each([
+    ['test', posTestConfig],
+    ['production', posProductionConfig],
+  ] as Array<[string, PosConfig]>)('creates the iyzico IyzicoPos gateway from the shipped %s config', (_n, cfg) => {
+    const account = AccountFactory.createIyzicoPosAccount('iyzico', 'sandbox-apiKey', 'sandbox-secretKey')
+    const gateway = PosFactory.createPosGateway(account, cfg)
+    expect(gateway).toBeInstanceOf(IyzicoPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(gateway.getCardTypeMapping()).toStrictEqual({})
+    expect(gateway.getCurrencies()).toStrictEqual(['TRY', 'USD', 'EUR', 'GBP', 'JPY', 'RUB'])
+    expect(gateway.isTestMode()).toBe(false)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-iyzico account for an IyzicoPos bank', () => {
+    const wrong = AccountFactory.createAkbankPosAccount('iyzico', 'm', 't', 'k')
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
+      'Bank [iyzico] is configured for IyzicoPos and needs an IyzicoPosAccount.',
+    )
+  })
+
+  // addition: C2 the factory-built gateway signs its requests with the account (a 3D Host status read)
+  it('the IyzicoPos gateway from the shipped test config signs its requests', async () => {
+    const calls: { url: string; headers: Headers }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), headers: new Headers(init?.headers) })
+      return new Response(JSON.stringify({ status: 'failure', errorCode: '5115' }), { status: 200 })
+    }) as unknown as typeof fetch
+    const account = AccountFactory.createIyzicoPosAccount('iyzico', 'sandbox-apiKey', 'sandbox-secretKey')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    const res = await gateway.payment(MODEL.THREE_D_HOST, { id: 'o1', amount: 1 }, TX_TYPE.PAY_AUTH, null, {
+      token: 'tok-1',
+    })
+    expect(res.status).toBe('declined')
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe('https://sandbox-api.iyzipay.com/payment/iyzipos/checkoutform/auth/ecom/detail')
+    expect(calls[0]?.headers.get('authorization')).toMatch(/^IYZWSv2 [A-Za-z0-9+/]+=*$/)
   })
 
   // addition: G7 the shipped test entry selects test transactions: the iFrame token request carries test_mode 1
@@ -758,6 +801,7 @@ describe('PosFactory.createPosGateway', () => {
       ParamPos: (bank: string) => AccountFactory.createParamPosAccount(bank, '1', 'u', 'p', 'g'),
       Param3DHostPos: (bank: string) => AccountFactory.createParamPosAccount(bank, '1', 'u', 'p', 'g', 't'),
       PayTrPos: (bank: string) => AccountFactory.createPayTrPosAccount(bank, '1', 's', 'k'),
+      IyzicoPos: (bank: string) => AccountFactory.createIyzicoPosAccount(bank, 'k', 's'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)
