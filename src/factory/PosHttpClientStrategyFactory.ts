@@ -13,6 +13,7 @@ import { PayFlexV4PosHttpClient } from '../client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../client/PayFlexV4PosSearchApiHttpClient.js'
 import { PayForPos3DFormHttpClient } from '../client/PayForPos3DFormHttpClient.js'
 import { PayForPosHttpClient } from '../client/PayForPosHttpClient.js'
+import { PayTrPosHttpClient } from '../client/PayTrPosHttpClient.js'
 import { PosNetPosHttpClient } from '../client/PosNetPosHttpClient.js'
 import { PosNetV1PosHttpClient } from '../client/PosNetV1PosHttpClient.js'
 import { ToslaPosHttpClient } from '../client/ToslaPosHttpClient.js'
@@ -26,6 +27,7 @@ import type { GatewayConfig } from '../gateway/AbstractGateway.js'
 import type { PosLogger } from '../logger.js'
 import type { AbstractPosAccount } from '../model/account/AbstractPosAccount.js'
 import { AkbankPosAccount } from '../model/account/AkbankPosAccount.js'
+import { PayTrPosAccount } from '../model/account/PayTrPosAccount.js'
 
 /** What a client needs to sign its requests itself; gateways whose clients do not sign ignore it. */
 export interface HttpClientSigning {
@@ -152,6 +154,14 @@ export const PosHttpClientStrategyFactory = {
           new ParamPosHttpClient(requiredEndpoint(config, 'query_api'), transport, logger, ['status']),
           new ParamPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
         ])
+      case 'PayTrPos': {
+        // The merchant key and salt are not sent in a body, but a bank text may echo them: the client masks them.
+        const account = signing?.account
+        const secrets = account instanceof PayTrPosAccount ? [account.getPassword(), account.getSecretKey()] : []
+        return new HttpClientStrategy([
+          new PayTrPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger, secrets),
+        ])
+      }
       default:
         throw new GatewayClassNotConfiguredError(`No HTTP clients for gateway class [${gatewayClass}].`)
     }
