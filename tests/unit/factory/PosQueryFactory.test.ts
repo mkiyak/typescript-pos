@@ -2,7 +2,12 @@ import { createHash, createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
-import { GatewayClassNotConfiguredError, PosError, UnsupportedTransactionTypeError } from '../../../src/errors.js'
+import {
+  GatewayClassNotConfiguredError,
+  PosError,
+  PosHttpError,
+  UnsupportedTransactionTypeError,
+} from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import type { PosConfig } from '../../../src/factory/PosFactory.js'
 import { PosQueryFactory } from '../../../src/factory/PosQueryFactory.js'
@@ -19,6 +24,7 @@ import { PayFlexV4PosQuery } from '../../../src/pos-query/PayFlexV4PosQuery.js'
 import { PayForPosQuery } from '../../../src/pos-query/PayForPosQuery.js'
 import { PosNetPosQuery } from '../../../src/pos-query/PosNetPosQuery.js'
 import { PosNetV1PosQuery } from '../../../src/pos-query/PosNetV1PosQuery.js'
+import { ToslaPosQuery } from '../../../src/pos-query/ToslaPosQuery.js'
 import { VakifKatilimPosQuery } from '../../../src/pos-query/VakifKatilimPosQuery.js'
 import { XmlEncoder } from '../../../src/serializer/XmlEncoder.js'
 import type { PosHooks } from '../../../src/types.js'
@@ -815,5 +821,216 @@ describe('PosQueryFactory with VakifKatilimPos', () => {
     expect(all).not.toContain('sig-value-1')
     expect(all).not.toContain('4155650100416111')
     expect(all).not.toMatch(/"HashData":"[A-Za-z0-9+/]{27}="/)
+  })
+})
+
+describe('PosQueryFactory with ToslaPos', () => {
+  const API_PASS = 'POS_ENT_Test_001!*!*'
+  const account = () => AccountFactory.createToslaPosAccount('tosla', '1000000494', 'POS_ENT_Test_001', API_PASS)
+  const BASE = 'https://prepentegrasyon.tosla.com/api/Payment'
+  const RATES_ANSWER = {
+    CardPrefix: 415956,
+    BankId: 13,
+    BankCode: '0111',
+    BankName: 'QNB FinansBank',
+    CardName: 'Card Finans',
+    CardClass: 'Kredi Kartı',
+    CardType: 'Visa',
+    Country: 'TR',
+    CommissionPackages: [
+      {
+        packageName: null,
+        InstallmentRate: {
+          T1: { Rate: 0, Constant: 0 },
+          T2: { Rate: 1, Constant: 0 },
+          T3: { Rate: 1, Constant: 0 },
+        },
+        BankCommission: 1.1,
+      },
+    ],
+    Code: 0,
+    Message: '',
+  }
+  const PRICES_ANSWER = {
+    IsExist: false,
+    PlatformId: 0,
+    BrandId: 0,
+    CardTypeId: 0,
+    InstallmentOptions: [
+      { Installment: 1, Title: 'Tek Çekim', Amount: 10000, Currency: 949 },
+      { Installment: 2, Title: '2 Taksit', Amount: 10101, Currency: 949 },
+      { Installment: 3, Title: '3 Taksit', Amount: 10101, Currency: 949 },
+    ],
+    Code: 0,
+    Message: 'Başarılı',
+  }
+
+  function e2e(answer: unknown, logger?: PosLogger, hooks?: PosHooks, status = 200) {
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = []
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const raw = init?.body
+      const text = typeof raw === 'string' ? raw : Buffer.from(raw as Uint8Array).toString('utf8')
+      calls.push({ url: String(url), body: JSON.parse(text) as Record<string, unknown> })
+      return new Response(typeof answer === 'string' ? answer : JSON.stringify(answer), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as unknown as typeof fetch
+    const q = PosQueryFactory.createPosQuery(account(), posTestConfig, { fetch: fetchFn, logger, hooks })
+    return { q, calls, fetchFn }
+  }
+
+  const requestHash = (rnd: unknown, timeSpan: unknown) =>
+    createHash('sha512').update(`${API_PASS}1000000494POS_ENT_Test_001${rnd}${timeSpan}`, 'utf8').digest('base64')
+
+  it('creates the query class from the shipped test config', () => {
+    expect(PosQueryFactory.createPosQuery(account(), posTestConfig)).toBeInstanceOf(ToslaPosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('ToslaPos')).toBe(ToslaPosQuery)
+  })
+
+  it('rejects an AkbankPosAccount for the tosla bank', () => {
+    const wrong = AccountFactory.createAkbankPosAccount('tosla', 'm', 't', 'k')
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+      'Bank [tosla] is configured for ToslaPos and needs a ToslaPosAccount.',
+    )
+  })
+
+  it('getInstallmentRates posts the signed JSON and maps the answer', async () => {
+    const { q, calls } = e2e(RATES_ANSWER)
+    const result = await q.getInstallmentRates({ bin: '415956' })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(`${BASE}/GetCommissionAndInstallmentInfo`)
+    const body = calls[0]?.body ?? {}
+    expect(Object.keys(body).sort()).toEqual(['apiUser', 'bin', 'clientId', 'hash', 'rnd', 'timeSpan'])
+    expect(body.bin).toBe('415956')
+    expect(body.clientId).toBe('1000000494')
+    expect(body.hash).toBe(requestHash(body.rnd, body.timeSpan))
+    expect(result.status).toBe('approved')
+    expect(result.installment_rates).toEqual([
+      {
+        bank_code: 111,
+        bank_name: 'QNB FinansBank',
+        card_prefix: '415956',
+        card_type: 'visa',
+        card_class: 'credit',
+        card_family: null,
+        rates: [
+          { installment: 2, rate: 1, constant: 0 },
+          { installment: 3, rate: 1, constant: 0 },
+        ],
+      },
+    ])
+    expect(result.all).toEqual(RATES_ANSWER)
+  })
+
+  it('getInstallmentPrices posts kuruş and maps the answer to TL', async () => {
+    const { q, calls } = e2e(PRICES_ANSWER)
+    const result = await q.getInstallmentPrices({ amount: 100 })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(`${BASE}/GetInstallmentOptions`)
+    const body = calls[0]?.body ?? {}
+    expect(body.amount).toBe(10000)
+    expect(body.isCommission).toBe(1)
+    expect(body.hash).toBe(requestHash(body.rnd, body.timeSpan))
+    expect(result.status).toBe('approved')
+    expect(result.installment_prices[0]?.prices).toEqual([
+      { installment: 1, installment_price: 100, total_price: 100 },
+      { installment: 2, installment_price: 50.51, total_price: 101.01 },
+      { installment: 3, installment_price: 33.67, total_price: 101.01 },
+    ])
+  })
+
+  it('the installment queries reject bad input before any request', async () => {
+    const { q, fetchFn } = e2e(RATES_ANSWER)
+    for (const bin of ['41595', '4159560', undefined]) {
+      await expect(q.getInstallmentRates(bin === undefined ? {} : { bin })).rejects.toBeInstanceOf(PosError)
+    }
+    for (const amount of [undefined, 0, -1, 'abc']) {
+      await expect(q.getInstallmentPrices(amount === undefined ? {} : { amount })).rejects.toBeInstanceOf(PosError)
+    }
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('a custom query posts the signed body and returns the decoded answer unchanged', async () => {
+    const { q, calls } = e2e(RATES_ANSWER)
+    const result = await q.customQuery({ bin: 415956 }, `${BASE}/GetCommissionAndInstallmentInfo`)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(`${BASE}/GetCommissionAndInstallmentInfo`)
+    const body = calls[0]?.body ?? {}
+    expect(body.bin).toBe(415956)
+    expect(body.clientId).toBe('1000000494')
+    expect(body.apiUser).toBe('POS_ENT_Test_001')
+    expect(body.hash).toBe(requestHash(body.rnd, body.timeSpan))
+    expect(result).toEqual(RATES_ANSWER)
+  })
+
+  it('a custom query without a url rejects and sends nothing', async () => {
+    const { q, fetchFn } = e2e(RATES_ANSWER)
+    await expect(q.customQuery({ bin: 415956 })).rejects.toBeInstanceOf(PosError)
+    await expect(q.customQuery({ bin: 415956 }, null)).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a foreign origin', 'https://evil.example/x'],
+    ['plain http', 'http://prepentegrasyon.tosla.com/api/Payment/GetInstallmentOptions'],
+    ['embedded credentials', 'https://u:p@prepentegrasyon.tosla.com/api/Payment/GetInstallmentOptions'],
+    ['a look-alike host', 'https://prepentegrasyon.tosla.com.evil.example/x'],
+    ['text that is no url', 'not a url'],
+  ])('a custom query url on %s rejects and sends nothing', async (_name, url) => {
+    const { q, fetchFn } = e2e(RATES_ANSWER)
+    await expect(q.customQuery({ bin: 415956 }, url)).rejects.toThrow(
+      /Custom query URL must be an https: URL on one of these origins/,
+    )
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('history and the bin list reject as unsupported and send nothing', async () => {
+    const { q, fetchFn } = e2e(RATES_ANSWER)
+    await expect(q.history({})).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
+    await expect(q.getBinList({})).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('an HTML answer is a PosHttpError, not a parsing crash', async () => {
+    const { q } = e2e('<html><body>blocked</body></html>')
+    await expect(q.getInstallmentRates({ bin: '415956' })).rejects.toBeInstanceOf(PosHttpError)
+  })
+
+  it('a non-2xx answer is a PosHttpError', async () => {
+    const { q } = e2e({ Code: 1 }, undefined, undefined, 500)
+    await expect(q.getInstallmentPrices({ amount: 100 })).rejects.toBeInstanceOf(PosHttpError)
+  })
+
+  // the hook changes the data, so the query logs the initial and the updated request data
+  it('masks the password and the request hash in every logged line', async () => {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    const logger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
+    const hook = (e: { requestData: Record<string, unknown> }) => {
+      e.requestData.Note = 'changed'
+    }
+    const { q } = e2e(RATES_ANSWER, logger, { onPosQueryRequestDataPrepared: [hook] })
+    await q.getInstallmentRates({ bin: '415956' })
+    await q.getInstallmentPrices({ amount: 100 })
+    await q.customQuery(
+      { bin: 415956, apiPass: API_PASS, hash: 'caller-hash-value-1' },
+      `${BASE}/GetCommissionAndInstallmentInfo`,
+    )
+
+    const all = JSON.stringify(lines)
+    expect(all).toContain('Request data is changed via listeners')
+    expect(all).toContain('"apiPass":"***"')
+    expect(all).toContain('"hash":"***"')
+    expect(all).not.toContain(`"apiPass":"${API_PASS}"`)
+    expect(all).not.toContain('"hash":"caller-hash-value-1"')
+    expect(all).not.toContain(API_PASS)
+    expect(all).not.toContain('POS_ENT_Test_001!*!*')
+    expect(all).not.toContain('caller-hash-value-1')
+    expect(all).not.toMatch(/"hash":"[A-Za-z0-9+/]{86}=="/)
   })
 })

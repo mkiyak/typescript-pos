@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { AkbankPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/AkbankPosQueryResponseDataMapper.js'
 import { GarantiPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/GarantiPosQueryResponseDataMapper.js'
 import { PayForPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/PayForPosQueryResponseDataMapper.js'
+import { ToslaPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/ToslaPosQueryResponseDataMapper.js'
 import { VakifKatilimPosQueryResponseDataMapper } from '../../../src/data-mapper/pos-query/response/VakifKatilimPosQueryResponseDataMapper.js'
 import { AssecoPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/AssecoPosResponseValueFormatter.js'
 import { BasicResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
 import { BoaPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/BoaPosResponseValueFormatter.js'
 import { GarantiPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/GarantiPosResponseValueFormatter.js'
+import { ToslaPosResponseValueFormatter } from '../../../src/data-mapper/response/value-formatter/ToslaPosResponseValueFormatter.js'
 import { AkbankPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/AkbankPosResponseValueMapper.js'
 import { AssecoPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/AssecoPosResponseValueMapper.js'
 import { GarantiPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/GarantiPosResponseValueMapper.js'
@@ -14,6 +16,7 @@ import { KuveytPosResponseValueMapper } from '../../../src/data-mapper/response/
 import { PayFlexCPV4PosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayFlexCPV4PosResponseValueMapper.js'
 import { PayFlexV4PosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayFlexV4PosResponseValueMapper.js'
 import { PayForPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/PayForPosResponseValueMapper.js'
+import { ToslaPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/ToslaPosResponseValueMapper.js'
 import { VakifKatilimPosResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/VakifKatilimPosResponseValueMapper.js'
 import { PosQueryResponseMapperFactory } from '../../../src/factory/PosQueryResponseMapperFactory.js'
 import { noopLogger } from '../../../src/logger.js'
@@ -61,6 +64,17 @@ describe('PosQueryResponseMapperFactory', () => {
         noopLogger,
       ),
     ).toBeInstanceOf(PayForPosQueryResponseDataMapper)
+  })
+
+  it('testCreateForGatewayReturnsCorrectMapper ToslaPos', () => {
+    expect(
+      PosQueryResponseMapperFactory.createForGateway(
+        'ToslaPos',
+        new ToslaPosResponseValueFormatter(),
+        new ToslaPosResponseValueMapper(),
+        noopLogger,
+      ),
+    ).toBeInstanceOf(ToslaPosQueryResponseDataMapper)
   })
 
   it('testCreateForGatewayReturnsCorrectMapper VakifKatilimPos', () => {

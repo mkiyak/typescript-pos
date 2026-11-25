@@ -10,6 +10,7 @@ import { PayFlexV4PosCrypt } from '../crypt/PayFlexV4PosCrypt.js'
 import { PayForPosCrypt } from '../crypt/PayForPosCrypt.js'
 import { PosNetPosCrypt } from '../crypt/PosNetPosCrypt.js'
 import { PosNetV1PosCrypt } from '../crypt/PosNetV1PosCrypt.js'
+import { ToslaPosCrypt } from '../crypt/ToslaPosCrypt.js'
 import { AkbankPosRequestValueFormatter } from '../data-mapper/request/value-formatter/AkbankPosRequestValueFormatter.js'
 import { AssecoPosRequestValueFormatter } from '../data-mapper/request/value-formatter/AssecoPosRequestValueFormatter.js'
 import { GarantiPosRequestValueFormatter } from '../data-mapper/request/value-formatter/GarantiPosRequestValueFormatter.js'
@@ -20,6 +21,7 @@ import { PayForPosRequestValueFormatter } from '../data-mapper/request/value-for
 import { PosNetPosRequestValueFormatter } from '../data-mapper/request/value-formatter/PosNetPosRequestValueFormatter.js'
 import { PosNetV1PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PosNetV1PosRequestValueFormatter.js'
 import type { RequestValueFormatterInterface } from '../data-mapper/request/value-formatter/RequestValueFormatterInterface.js'
+import { ToslaPosRequestValueFormatter } from '../data-mapper/request/value-formatter/ToslaPosRequestValueFormatter.js'
 import { VakifKatilimPosRequestValueFormatter } from '../data-mapper/request/value-formatter/VakifKatilimPosRequestValueFormatter.js'
 import { AkbankPosRequestValueMapper } from '../data-mapper/request/value-mapper/AkbankPosRequestValueMapper.js'
 import { AssecoPosRequestValueMapper } from '../data-mapper/request/value-mapper/AssecoPosRequestValueMapper.js'
@@ -31,6 +33,7 @@ import { PayForPosRequestValueMapper } from '../data-mapper/request/value-mapper
 import { PosNetPosRequestValueMapper } from '../data-mapper/request/value-mapper/PosNetPosRequestValueMapper.js'
 import { PosNetV1PosRequestValueMapper } from '../data-mapper/request/value-mapper/PosNetV1PosRequestValueMapper.js'
 import type { RequestValueMapperInterface } from '../data-mapper/request/value-mapper/RequestValueMapperInterface.js'
+import { ToslaPosRequestValueMapper } from '../data-mapper/request/value-mapper/ToslaPosRequestValueMapper.js'
 import { VakifKatilimPosRequestValueMapper } from '../data-mapper/request/value-mapper/VakifKatilimPosRequestValueMapper.js'
 import { AssecoPosResponseValueFormatter } from '../data-mapper/response/value-formatter/AssecoPosResponseValueFormatter.js'
 import { BasicResponseValueFormatter } from '../data-mapper/response/value-formatter/BasicResponseValueFormatter.js'
@@ -39,6 +42,7 @@ import { GarantiPosResponseValueFormatter } from '../data-mapper/response/value-
 import { InterPosResponseValueFormatter } from '../data-mapper/response/value-formatter/InterPosResponseValueFormatter.js'
 import { PosNetPosResponseValueFormatter } from '../data-mapper/response/value-formatter/PosNetPosResponseValueFormatter.js'
 import type { ResponseValueFormatterInterface } from '../data-mapper/response/value-formatter/ResponseValueFormatterInterface.js'
+import { ToslaPosResponseValueFormatter } from '../data-mapper/response/value-formatter/ToslaPosResponseValueFormatter.js'
 import { AkbankPosResponseValueMapper } from '../data-mapper/response/value-mapper/AkbankPosResponseValueMapper.js'
 import { AssecoPosResponseValueMapper } from '../data-mapper/response/value-mapper/AssecoPosResponseValueMapper.js'
 import { GarantiPosResponseValueMapper } from '../data-mapper/response/value-mapper/GarantiPosResponseValueMapper.js'
@@ -49,6 +53,7 @@ import { PayForPosResponseValueMapper } from '../data-mapper/response/value-mapp
 import { PosNetPosResponseValueMapper } from '../data-mapper/response/value-mapper/PosNetPosResponseValueMapper.js'
 import { PosNetV1PosResponseValueMapper } from '../data-mapper/response/value-mapper/PosNetV1PosResponseValueMapper.js'
 import type { ResponseValueMapperInterface } from '../data-mapper/response/value-mapper/ResponseValueMapperInterface.js'
+import { ToslaPosResponseValueMapper } from '../data-mapper/response/value-mapper/ToslaPosResponseValueMapper.js'
 import { VakifKatilimPosResponseValueMapper } from '../data-mapper/response/value-mapper/VakifKatilimPosResponseValueMapper.js'
 import { GatewayClassNotConfiguredError, PosError } from '../errors.js'
 import type { GatewayConfig } from '../gateway/AbstractGateway.js'
@@ -62,6 +67,7 @@ import { InterPosAccount } from '../model/account/InterPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
+import { ToslaPosAccount } from '../model/account/ToslaPosAccount.js'
 import { LANG } from '../PosInterface.js'
 import type { AbstractPosQuery, PosQueryDeps } from '../pos-query/AbstractPosQuery.js'
 import { AkbankPosQuery } from '../pos-query/AkbankPosQuery.js'
@@ -73,6 +79,7 @@ import { PayFlexV4PosQuery } from '../pos-query/PayFlexV4PosQuery.js'
 import { PayForPosQuery } from '../pos-query/PayForPosQuery.js'
 import { PosNetPosQuery } from '../pos-query/PosNetPosQuery.js'
 import { PosNetV1PosQuery } from '../pos-query/PosNetV1PosQuery.js'
+import { ToslaPosQuery } from '../pos-query/ToslaPosQuery.js'
 import { VakifKatilimPosQuery } from '../pos-query/VakifKatilimPosQuery.js'
 import type { PosConfig, PosFactoryOptions } from './PosFactory.js'
 import { assertHttpsEndpoints, PosHttpClientStrategyFactory } from './PosHttpClientStrategyFactory.js'
@@ -94,6 +101,7 @@ const QUERY_CLASSES = [
   PayForPosQuery,
   PosNetPosQuery,
   PosNetV1PosQuery,
+  ToslaPosQuery,
   VakifKatilimPosQuery,
 ]
 
@@ -243,6 +251,17 @@ export const PosQueryFactory = {
         crypt = new PosNetV1PosCrypt(logger)
         responseValueFormatter = new PosNetPosResponseValueFormatter()
         responseValueMapper = new PosNetV1PosResponseValueMapper()
+        break
+      }
+      case 'ToslaPos': {
+        if (!(account instanceof ToslaPosAccount)) {
+          throw new PosError(`Bank [${bankName}] is configured for ToslaPos and needs a ToslaPosAccount.`)
+        }
+        requestValueMapper = new ToslaPosRequestValueMapper()
+        requestValueFormatter = new ToslaPosRequestValueFormatter()
+        crypt = new ToslaPosCrypt(logger)
+        responseValueFormatter = new ToslaPosResponseValueFormatter()
+        responseValueMapper = new ToslaPosResponseValueMapper()
         break
       }
       case 'VakifKatilimPos': {

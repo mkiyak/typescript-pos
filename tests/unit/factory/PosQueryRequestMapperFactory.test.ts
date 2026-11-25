@@ -9,6 +9,7 @@ import { PayFlexV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos
 import { PayForPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayForPosQueryRequestDataMapper.js'
 import { PosNetPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PosNetPosQueryRequestDataMapper.js'
 import { PosNetV1PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PosNetV1PosQueryRequestDataMapper.js'
+import { ToslaPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/ToslaPosQueryRequestDataMapper.js'
 import { VakifKatilimPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/VakifKatilimPosQueryRequestDataMapper.js'
 import { AkbankPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/AkbankPosRequestValueFormatter.js'
 import { AssecoPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/AssecoPosRequestValueFormatter.js'
@@ -19,6 +20,7 @@ import { PayFlexV4PosRequestValueFormatter } from '../../../src/data-mapper/requ
 import { PayForPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayForPosRequestValueFormatter.js'
 import { PosNetPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PosNetPosRequestValueFormatter.js'
 import { PosNetV1PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PosNetV1PosRequestValueFormatter.js'
+import { ToslaPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/ToslaPosRequestValueFormatter.js'
 import { VakifKatilimPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/VakifKatilimPosRequestValueFormatter.js'
 import { AkbankPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/AkbankPosRequestValueMapper.js'
 import { AssecoPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/AssecoPosRequestValueMapper.js'
@@ -29,6 +31,7 @@ import { PayFlexV4PosRequestValueMapper } from '../../../src/data-mapper/request
 import { PayForPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayForPosRequestValueMapper.js'
 import { PosNetPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PosNetPosRequestValueMapper.js'
 import { PosNetV1PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PosNetV1PosRequestValueMapper.js'
+import { ToslaPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/ToslaPosRequestValueMapper.js'
 import { VakifKatilimPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/VakifKatilimPosRequestValueMapper.js'
 import { GatewayClassNotConfiguredError } from '../../../src/errors.js'
 import { PosQueryRequestMapperFactory } from '../../../src/factory/PosQueryRequestMapperFactory.js'
@@ -56,6 +59,7 @@ const rows = [
   ['PayForPos', PayForPosQueryRequestDataMapper, PayForPosRequestValueMapper, PayForPosRequestValueFormatter],
   ['PosNetPos', PosNetPosQueryRequestDataMapper, PosNetPosRequestValueMapper, PosNetPosRequestValueFormatter],
   ['PosNetV1Pos', PosNetV1PosQueryRequestDataMapper, PosNetV1PosRequestValueMapper, PosNetV1PosRequestValueFormatter],
+  ['ToslaPos', ToslaPosQueryRequestDataMapper, ToslaPosRequestValueMapper, ToslaPosRequestValueFormatter],
   [
     'VakifKatilimPos',
     VakifKatilimPosQueryRequestDataMapper,
