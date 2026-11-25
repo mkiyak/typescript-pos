@@ -169,7 +169,7 @@ const answer = await query.customQuery({ TransactionId: transactionId }) // çö
 ```
 
 Özel URL'ler `https:` olmalı ve yapılandırılmış bir banka origin'inde (ya da `allowedApiOrigins` ile verdiğiniz bir origin'de)
-olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos`, `PayForPos` ve `VakifKatilimPos` ise `history` sunar (Vakıf Katılım'ın özel sorguları `apiUrl` ister; Kuveyt Türk sorgu sunmaz). `ToslaPos` özel sorgu (`apiUrl` ile), `getInstallmentRates` (6 haneli BIN ile) ve `getInstallmentPrices` (TL cinsinden tutarla) sunar; taksit sorgusu sunan ilk gateway'dir, kart programı adları `CARD_FAMILY` sabitlerindedir. Asseco, PayFlex V4, VakıfBank Ortak Ödeme, InterPos ve POSNET gateway'lerinde yalnız
+olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos`, `PayForPos` ve `VakifKatilimPos` ise `history` sunar (Vakıf Katılım'ın özel sorguları `apiUrl` ister; Kuveyt Türk sorgu sunmaz). `ToslaPos` özel sorgu (`apiUrl` ile), `getInstallmentRates` (6 haneli BIN ile) ve `getInstallmentPrices` (TL cinsinden tutarla) sunar; taksit sorgusu sunan ilk gateway'dir. Asseco, PayFlex V4, VakıfBank Ortak Ödeme, InterPos ve POSNET gateway'lerinde yalnız
 `customQuery` vardır; diğer sorgular `UnsupportedTransactionTypeError` ile reddedilir. Ayrıntı için [sorgular kılavuzuna](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md) bakın.
 
 ## Tasarım

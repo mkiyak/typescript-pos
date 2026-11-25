@@ -165,7 +165,7 @@ const query = PosQueryFactory.createPosQuery(account, posProductionConfig)
 const answer = await query.customQuery({ TransactionId: transactionId }) // decoded, not normalized
 ```
 
-Custom URLs must be `https:` on a configured bank origin (or one you list in `allowedApiOrigins`). `GarantiPos` also supports `history` and `getBinList`, `AkbankPos`, `PayForPos` and `VakifKatilimPos` support `history` (Vakıf Katılım's custom queries need an `apiUrl`; Kuveyt Türk offers no queries). `ToslaPos` offers custom queries (with an `apiUrl`), `getInstallmentRates` (by 6-digit bin) and `getInstallmentPrices` (by amount in TL), the first installment queries; its card programme names are in the `CARD_FAMILY` constants. For Asseco, PayFlex V4, VakıfBank Common Payment, InterPos and the POSNET gateways only `customQuery` is offered; the other queries reject
+Custom URLs must be `https:` on a configured bank origin (or one you list in `allowedApiOrigins`). `GarantiPos` also supports `history` and `getBinList`, `AkbankPos`, `PayForPos` and `VakifKatilimPos` support `history` (Vakıf Katılım's custom queries need an `apiUrl`; Kuveyt Türk offers no queries). `ToslaPos` offers custom queries (with an `apiUrl`), `getInstallmentRates` (by 6-digit bin) and `getInstallmentPrices` (by amount in TL), the first installment queries. For Asseco, PayFlex V4, VakıfBank Common Payment, InterPos and the POSNET gateways only `customQuery` is offered; the other queries reject
 with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md).
 
 ## Design

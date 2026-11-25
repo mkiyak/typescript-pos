@@ -1,4 +1,4 @@
-// Tosla 3D Pay: the payer types the card into the bank's form, so no card data reaches your server.
+// Tosla 3D Pay: your page posts the card fields straight to the bank, so no card data reaches your server.
 // Nothing here runs on import; call the exported functions from your own route handlers.
 import {
   AccountFactory,
@@ -33,7 +33,10 @@ const account = AccountFactory.createToslaPosAccount(
 const pos = PosFactory.createPosGateway(account, posTestConfig)
 const query = PosQueryFactory.createPosQuery(account, posTestConfig)
 
-/** Step 1: open the bank's 3D session and build the form your page auto-submits (POST) to the bank. */
+/**
+ * Step 1: open the bank's 3D session. Render a form that POSTs to `gateway` with the hidden `inputs`
+ * (`ThreeDSessionId`) plus the fields the payer fills in: `CardHolderName`, `CardNo`, `ExpireDate` (MM/YY), `Cvv`.
+ */
 export async function startPayment(orderId: string, amount: number) {
   const order: PosOrder = {
     id: orderId, // unique per attempt, one fixed length (for example zero-padded)

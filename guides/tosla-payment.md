@@ -43,8 +43,10 @@ besides `id`; `page` and `page_size` are optional.
 2. `pos.get3DFormData(order, model, TX_TYPE.PAY_AUTH, null, true)` first registers a 3D session with the bank from
    your server (one request), then returns what the browser needs:
    - 3D Pay: `{ gateway, method: 'POST', inputs }` for the bank's `ProcessCardForm`. Pass `createWithoutCard: true`
-     (the fifth argument) and let the payer type the card into the bank's form; nothing later needs the card, so never
-     store it. A card you pass together with that flag is dropped.
+     (the fifth argument): `inputs` then holds only `ThreeDSessionId`. Render a form on your page that posts to
+     `gateway` with that hidden input plus four fields the payer fills in: `CardHolderName`, `CardNo`, `ExpireDate`
+     (`MM/YY`) and `Cvv`. The browser sends the card straight to the bank, so it never reaches your server; nothing
+     later needs it, so never store it. A card you pass together with that flag is dropped.
    - 3D Host: `{ gateway, method: 'GET', inputs }`, where `gateway` is the bank page's URL for the session.
 3. The customer pays; the bank POSTs the browser to your `success_url`.
 4. Load the order from the customer's session and call
