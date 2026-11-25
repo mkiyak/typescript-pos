@@ -1118,8 +1118,8 @@ describe('PosNetPos (end to end) 3D payment', () => {
     expect(res.requires_manual_review).toBeUndefined()
   })
 
-  // addition: the order id is read with the shared rule, so an array or object never turns into the id text
-  it.each([[['2020110828BC']], [{}], [true], [1.5], [-1], [2 ** 53], ['_2020110828BC'], ['a'.repeat(21)]])(
+  // addition: the order id is read as an existing id, so an array or object never turns into the id text
+  it.each([[['2020110828BC']], [{}], [true], [1.5], [-1], [2 ** 53], ['2020110828BC\n'], ['a'.repeat(21)]])(
     'rejects the order id %j before any request',
     async (id) => {
       const { posted, fetchImpl } = threeDBank(resolveAnswer())
@@ -1131,6 +1131,21 @@ describe('PosNetPos (end to end) 3D payment', () => {
       expect(posted).toHaveLength(0)
     },
   )
+
+  // addition: an order created before the shared order-id rule is resolved and bound exactly
+  it('resolves the packets for an existing order id with a leading "_" and binds them exactly', async () => {
+    const { posted, fetchImpl } = threeDBank(resolveAnswer())
+    const err = (await expectRejection(
+      pay3D(realGateway(fetchImpl), { ...orderO, id: '_2020110828BC' }, callbackC),
+      OrderMismatchError,
+    )) as OrderMismatchError
+    expect([err.field, err.expected, err.actual]).toStrictEqual([
+      'order_id',
+      '0000000_2020110828BC',
+      '000000002020110828BC',
+    ])
+    expect(posted).toHaveLength(1)
+  })
 
   // addition: P8 packets of another order: the bank resolves that order, nothing is provisioned
   it('rejects a resolve for another order id (OrderMismatchError, no provision)', async () => {
@@ -1374,7 +1389,7 @@ describe('PosNetPos (end to end) callback checks before any request', () => {
   it.each([
     ['order without amount', { id: '2020110828BC', currency: CURRENCY.TRY }],
     ['order without id', { amount: 100.01, currency: CURRENCY.TRY }],
-    ['order id with "&"', { id: 'A&B', amount: 100.01 }],
+    ['order id with a line feed', { id: 'A\nB', amount: 100.01 }],
     ['order id longer than 20 characters', { id: 'A'.repeat(21), amount: 100.01 }],
     ['amount that is not a number', { id: '2020110828BC', amount: 'abc' }],
     ['negative installment', { id: '2020110828BC', amount: 100.01, installment: -1 }],
@@ -1386,6 +1401,17 @@ describe('PosNetPos (end to end) callback checks before any request', () => {
     await expectRejection(pay3D(realGateway(fetchImpl), order as PosOrder, callbackC), PosError)
     expect(posted).toHaveLength(0)
   })
+})
+
+// addition: an id no order of this bank can carry ("&") is only resolved, never provisioned
+it('PosNetPos resolves the packets of an order id with "&" but never provisions it', async () => {
+  const { posted, fetchImpl } = threeDBank(resolveAnswer())
+  const err = (await expectRejection(
+    pay3D(realGateway(fetchImpl), { id: 'A&B', amount: 100.01 }, callbackC),
+    OrderMismatchError,
+  )) as OrderMismatchError
+  expect(err.field).toBe('order_id')
+  expect(posted).toHaveLength(1)
 })
 
 describe('PosNetPos (end to end) 3D form', () => {

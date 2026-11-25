@@ -699,8 +699,14 @@ describe('PayForPosRequestDataMapper', () => {
       crypt.generateRandomString.mockReturnValue('R')
     })
 
-    it.each(calls)('rejects a bad order id in %s', async (_name, call) => {
-      for (const id of ['sipariş1', 'a&b', 'a b', '', 'x'.repeat(65), '<a>', 'a\n', { a: 1 }]) {
+    /** A new payment starts here; every other call works on an order that may predate the shared order-id rule. */
+    const STARTS = ['3D form', '3D form data', 'non-secure']
+
+    it.each(calls)('rejects a bad order id in %s', async (name, call) => {
+      const bad: unknown[] = STARTS.includes(name)
+        ? ['sipariş1', 'a&b', 'a b', 'INV.1', '', 'x'.repeat(65), '<a>', 'a\n', { a: 1 }]
+        : ['', 'x'.repeat(65), 'a\n', 'a\u0085', { a: 1 }]
+      for (const id of bad) {
         await expect(
           Promise.resolve().then(() => call({ ...full, id } as never)),
           String(id),
@@ -708,6 +714,19 @@ describe('PayForPosRequestDataMapper', () => {
       }
       await expect(Promise.resolve().then(() => call({ ...full, id: 'x'.repeat(64) }))).resolves.toBeDefined()
     })
+
+    // addition: orders created before the shared order-id rule can still be completed, captured and looked up
+    it.each(calls.filter(([name]) => !STARTS.includes(name)))(
+      'accepts an existing order id in %s',
+      async (_n, call) => {
+        for (const id of ['sipariş1', 'a&b', 'a b', 'INV.2024.1', '_legacy1']) {
+          await expect(
+            Promise.resolve().then(() => call({ ...full, id })),
+            id,
+          ).resolves.toBeDefined()
+        }
+      },
+    )
 
     it.each(calls)('requires the order id in %s', async (_name, call) => {
       const { id: _id, ...noId } = full

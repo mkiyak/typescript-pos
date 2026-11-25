@@ -5,6 +5,7 @@ import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
 import { optionalBankReference, requiredBankReference } from '../../../util/bankReference.js'
+import { orderIdOf } from '../../../util/orderId.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
@@ -14,6 +15,9 @@ import type { PosNetV1PosRequestValueMapper } from '../value-mapper/PosNetV1PosR
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
 const GATEWAY_CLASS = 'PosNetV1Pos'
+
+/** The bank's order number field holds 20 characters. */
+const ORDER_ID_LENGTH = 20
 
 const CARD_MAC_PARAMS = 'MerchantNo:TerminalNo:CardNo:Cvc2:ExpireDate:Amount'
 const REFERENCE_MAC_PARAMS = 'MerchantNo:TerminalNo:ReferenceCode:OrderId'
@@ -88,7 +92,7 @@ export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosN
     _txType: TxType,
     creditCard: CreditCard,
   ): Record<string, unknown> {
-    const id = this.valueFormatter.formatOrderId(required(order, 'id'))
+    const id = this.valueFormatter.formatOrderId(this.newOrderId(order))
     const amount = this.kurus(order)
     const installment = this.installment(order)
 
@@ -219,7 +223,7 @@ export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosN
     if (order === null || order === undefined) {
       throw new PosError('The order is required to build the 3D form.')
     }
-    const id = this.valueFormatter.formatOrderId(required(order, 'id'))
+    const id = this.valueFormatter.formatOrderId(this.newOrderId(order))
     const amount = this.kurus(order)
     const installment = this.installment(order)
 
@@ -291,6 +295,11 @@ export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosN
         : this.valueFormatter.formatOrderId(order.id as string, lookupTxType, this.paymentModel(order)),
       TransactionType: this.valueMapper.mapTxType(transactionType),
     }
+  }
+
+  /** The id of a new payment follows the shared order id rule. */
+  private newOrderId(order: PosOrder): string {
+    return orderIdOf(order, ORDER_ID_LENGTH)
   }
 
   private paymentModel(order: PosOrder): PaymentModel {

@@ -9,7 +9,7 @@ import type { InterPosAccount } from '../../../model/account/InterPosAccount.js'
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
-import { orderIdOf } from '../../../util/orderId.js'
+import { existingOrderIdOf, orderIdOf } from '../../../util/orderId.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
@@ -51,7 +51,7 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
     responseData: Record<string, unknown>,
   ): Record<string, unknown> {
     this.assertPaymentTxType(txType)
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
     const amount = this.amount(order)
     const md = this.callbackText(responseData, 'MD', false)
     const payerTxnId = this.callbackText(responseData, 'PayerTxnId')
@@ -105,7 +105,7 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
   }
 
   createNonSecurePostAuthPaymentRequestData(account: InterPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
     const amount = this.amount(order)
 
     return {
@@ -121,7 +121,7 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
   }
 
   createStatusRequestData(account: InterPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
 
     return {
       ...this.accountData(account),
@@ -134,7 +134,7 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
   }
 
   createCancelRequestData(account: InterPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
 
     return {
       ...this.accountData(account),
@@ -151,7 +151,7 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
       // Every other type maps to another bank operation; a refund request must never become a sale or a cancel.
       throw new UnsupportedTransactionTypeError(`Unsupported refund transaction type: ${String(refundTxType)}`)
     }
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
     const amount = this.amount(order)
 
     return {
@@ -250,9 +250,14 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
     }
   }
 
-  /** Order ids are signed and posted as plain ASCII (see `orderIdOf`). */
+  /** The id of a new payment: signed and posted as plain ASCII (see `orderIdOf`). */
   private orderId(order: PosOrder): string {
     return orderIdOf(order)
+  }
+
+  /** The id of an order that already exists, possibly created before the shared rule (see `existingOrderIdOf`). */
+  private existingOrderId(order: PosOrder): string {
+    return existingOrderIdOf(order)
   }
 
   /**

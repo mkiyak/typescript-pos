@@ -11,7 +11,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
-import { orderIdOf } from '../util/orderId.js'
+import { existingOrderIdOf } from '../util/orderId.js'
 import { ownValue } from '../util/ownValue.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
@@ -269,11 +269,11 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
 }
 
 /**
- * The order id a callback is compared with, read with the shared order id rule so that an array or object never
- * turns into the text of a matching id. A missing id is `''`, which never matches.
+ * The order id a callback is compared with, read as an existing id (the order may predate the shared order id rule)
+ * so that an array or object never turns into the text of a matching id. A missing id is `''`, which never matches.
  */
 function boundOrderId(order: PosOrder): string {
-  return order.id === undefined || order.id === null || order.id === '' ? '' : orderIdOf(order)
+  return order.id === undefined || order.id === null || order.id === '' ? '' : existingOrderIdOf(order)
 }
 
 function asText(value: unknown): string {

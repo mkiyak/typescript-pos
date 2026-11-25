@@ -1,4 +1,3 @@
-import { ORDER_ID_PATTERN } from '../data-mapper/request/mapper/PayFlexCPV4PosRequestDataMapper.js'
 import type { RequestDataMapperInterface } from '../data-mapper/request/mapper/RequestDataMapperInterface.js'
 import {
   OrderMismatchError,
@@ -21,7 +20,7 @@ import {
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
 import { numberFormat2 } from '../util/numberFormat2.js'
-import { orderIdOf } from '../util/orderId.js'
+import { existingOrderIdOf } from '../util/orderId.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { AbstractGateway, type GatewayConfig, type GatewayDeps, type SupportedTransactions } from './AbstractGateway.js'
 
@@ -332,10 +331,10 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
       throw new UnsupportedTransactionTypeError(`Invalid transaction type "${txType}" provided`)
     }
 
-    // Read with the registration's order id rule before anything is sent, so an array or object never turns into
-    // the text of a matching id. A missing id is '' and never matches an approved answer.
+    // Read as an existing id before anything is sent (the order may predate the registration's stricter rule), so
+    // an array or object never turns into the text of a matching id. A missing id is '' and never matches.
     const expectedOrderId =
-      order.id === undefined || order.id === null || order.id === '' ? '' : orderIdOf(order, 64, ORDER_ID_PATTERN)
+      order.id === undefined || order.id === null || order.id === '' ? '' : existingOrderIdOf(order)
 
     const cb = callback as Raw
     const callbackSaysApproved = firstNonEmptyString(cb, 'Rc', 'RC', 'ResultCode') === SUCCESS_CODE

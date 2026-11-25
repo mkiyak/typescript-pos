@@ -1218,12 +1218,28 @@ describe('InterPos (end to end) 3D Secure', () => {
     ['PurchAmount 1,019', { PurchAmount: '1,019' }],
     ['Response with a digit', { Response: 'A1' }],
     ['OrderId with a space', { OrderId: '3355 4969' }],
-    // addition: L2 the callback order id follows the library-wide rule (a letter or digit first)
-    ['OrderId with a leading "-"', { OrderId: '-33554969' }],
-    ['OrderId with a leading "_"', { OrderId: '_33554969' }],
+    ['OrderId with a dot', { OrderId: '3355.4969' }],
   ])('rejects a signed success callback with %s (malformed, nothing sent)', async (_name, change) => {
     const { sent, promise } = run(fv4(change))
     await expect(promise).rejects.toThrow(MALFORMED)
+    expect(sent).toHaveLength(0)
+  })
+
+  // addition: orders created before the shared order-id rule (a leading "_" or "-") still complete
+  it.each([['_33554969'], ['-33554969']])('provisions the signed callback of the existing order %s', async (id) => {
+    const provision = FULL_SUCCESS_RESPONSE.replace('OrderId=33554969;;', `OrderId=${id};;`)
+    const { sent, promise } = run(fv4({ OrderId: id }), { ...secureOrder, id }, { provision })
+    const res = (await promise) as Data
+    expect(res.status).toBe('approved')
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.fields.OrderId).toBe(id)
+  })
+
+  // addition: an existing order id is still bound exactly
+  it.each([['_33554969'], ['-33554969']])('a signed callback of %s is another order than 33554969', async (id) => {
+    const { sent, promise } = run(fv4({ OrderId: id }))
+    const err = await mismatch(promise)
+    expect([err.field, err.expected, err.actual]).toStrictEqual(['order_id', '33554969', id])
     expect(sent).toHaveLength(0)
   })
 
@@ -1474,6 +1490,17 @@ describe('InterPos (end to end) 3D Pay and 3D Host', () => {
         expect(res.payment_model).toBe(model)
         expect(res.auth_code).toBe('A12345')
         expect(res.transaction_id).toBe('T1')
+      })
+
+      // addition: orders created before the shared order-id rule (a leading "_") still complete
+      it('confirms the approved callback of an existing order with a leading "_"', async () => {
+        const id = `_${orderId}`
+        const { sent, promise } = run(model, fv3({ OrderId: id }), { ...order, id })
+        const res = (await promise) as Data
+        expect(res.status).toBe('approved')
+        expect(res.order_id).toBe(id)
+        expect(sent).toHaveLength(1)
+        expect(sent[0]?.fields.orgOrderId).toBe(id)
       })
 
       it('confirms an approval whose record reports the transaction result Success', async () => {

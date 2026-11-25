@@ -1269,8 +1269,8 @@ describe('AssecoPos (end to end) 3D Secure callback bound to the order before th
     },
   )
 
-  // addition: the order id is read with the shared rule: an array or object never turns into the callback's id text
-  it.each([[['2022103030CB']], [{}], [true], [1.5], [-1], [2 ** 53], ['_2022103030CB'], ['a'.repeat(65)]])(
+  // addition: the order id is read as an existing id: an array or object never turns into the callback's id text
+  it.each([[['2022103030CB']], [{}], [true], [1.5], [-1], [2 ** 53], ['2022103030CB\n'], ['a'.repeat(65)]])(
     'an order id of %j is a PosError before any request',
     async (id) => {
       const { result, sent, hook } = await run(SECURE_CALLBACK, { ...payOrder, id: id as never })
@@ -1330,6 +1330,116 @@ describe('AssecoPos (end to end) 3D Secure callback bound to the order before th
   it('a failed 3D authentication is still mapped as a decline without binding or request', async () => {
     const { result, sent } = await run({ ...SECURE_CALLBACK, oid: 'SOMEONE-ELSE', mdStatus: '0' })
     expect((result as Data).status).toBe('declined')
+    expect(sent).toHaveLength(0)
+  })
+})
+
+// addition: orders created before the shared order-id rule still complete, and can be captured, cancelled, refunded
+// and looked up; new payments need a conforming id
+describe('AssecoPos (end to end) orders created before the shared order-id rule', () => {
+  const LEGACY_IDS = ['INV.2024.1', '_legacy1', 'ord 1']
+  const legacyCallback = (oid: string) => ({ ...payCallback, oid, amount: '10.00' })
+
+  it.each(LEGACY_IDS)('an approved signed 3D Pay callback for %j binds and is approved', async (id) => {
+    const { pos, crypt, account: acc } = realGateway(noNetwork)
+    const res = await pos.payment(
+      MODEL.THREE_D_PAY,
+      { id, amount: 10, currency: CURRENCY.TRY },
+      TX_TYPE.PAY_AUTH,
+      null,
+      signedCallback(crypt, acc, legacyCallback(id)),
+    )
+    expect(res.status).toBe('approved')
+    expect(res.order_id).toBe(id)
+  })
+
+  it.each(LEGACY_IDS)('an approved signed 3D Pay callback of another order than %j is a mismatch', async (id) => {
+    const { pos, crypt, account: acc } = realGateway(noNetwork)
+    const err = (await pos
+      .payment(
+        MODEL.THREE_D_PAY,
+        { id, amount: 10, currency: CURRENCY.TRY },
+        TX_TYPE.PAY_AUTH,
+        null,
+        signedCallback(crypt, acc, legacyCallback(`${id}2`)),
+      )
+      .catch((e: unknown) => e)) as OrderMismatchError
+    expect(err).toBeInstanceOf(OrderMismatchError)
+    expect([err.field, err.expected, err.actual]).toStrictEqual(['order_id', id, `${id}2`])
+    expect(err.paymentMayHaveCompleted).toBe(true)
+  })
+
+  it.each(LEGACY_IDS)('a signed 3D Secure callback for %j is bound and provisioned', async (id) => {
+    const { sent, fetchImpl } = answeringFetch(() => new Response(APPROVED_PROVISION))
+    const { pos, crypt, account: acc } = realGateway(fetchImpl)
+    const res = await pos.payment(
+      MODEL.THREE_D_SECURE,
+      { id, amount: 10, currency: CURRENCY.TRY },
+      TX_TYPE.PAY_AUTH,
+      null,
+      signedCallback(crypt, acc, { ...SECURE_CALLBACK, oid: id, amount: '10.00' }),
+    )
+    expect(res.status).toBe('approved')
+    expect(sent).toHaveLength(1)
+  })
+
+  it.each(LEGACY_IDS)('capture, cancel, refund, status and order history for %j are sent', async (id) => {
+    const { sent, fetchImpl } = answeringFetch(() => new Response(APPROVED_PROVISION))
+    const { pos } = realGateway(fetchImpl)
+    const order = { id, amount: 10, currency: CURRENCY.TRY }
+    await pos.makeRegularPostPayment(order)
+    await pos.cancel(order)
+    await pos.refund(order)
+    await pos.status(order)
+    await pos.orderHistory(order)
+    expect(sent).toHaveLength(5)
+  })
+
+  it.each([['ord\n1'], ['ord\u00001'], ['ord\u00851'], ['\ud800ord'], [{}], [['ord 1']], [2 ** 53]])(
+    'an order id of %j is a PosError on every path, nothing sent',
+    async (id) => {
+      const { sent, fetchImpl } = answeringFetch(() => new Response(APPROVED_PROVISION))
+      const { pos, crypt, account: acc } = realGateway(fetchImpl)
+      const order = { id: id as never, amount: 10, currency: CURRENCY.TRY }
+      const runs: Array<() => Promise<unknown>> = [
+        () => pos.payment(MODEL.THREE_D_PAY, order, TX_TYPE.PAY_AUTH, null, signedCallback(crypt, acc, payCallback)),
+        () =>
+          pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, null, signedCallback(crypt, acc, SECURE_CALLBACK)),
+        () => pos.makeRegularPostPayment(order),
+        () => pos.cancel(order),
+        () => pos.refund(order),
+        () => pos.status(order),
+        () => pos.orderHistory(order),
+      ]
+      for (const run of runs) {
+        const err = await run().catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosError)
+        expect(err).not.toBeInstanceOf(OrderMismatchError)
+        expect((err as Error).message).toMatch(/^Order field "id"/)
+      }
+      expect(sent).toHaveLength(0)
+    },
+  )
+
+  it.each(LEGACY_IDS)('a new payment with %j is refused before anything is built or sent', async (id) => {
+    const { sent, fetchImpl } = answeringFetch(() => new Response(APPROVED_PROVISION))
+    const { pos } = realGateway(fetchImpl)
+    const order = {
+      id,
+      amount: 10,
+      currency: CURRENCY.TRY,
+      success_url: 'https://merchant.example/ok',
+      fail_url: 'https://merchant.example/fail',
+    }
+    const card = CreditCardFactory.createForGateway(pos, '4355084355084358', '26', '12', '000')
+    for (const run of [
+      () => pos.get3DFormData(order, MODEL.THREE_D_PAY, TX_TYPE.PAY_AUTH, card),
+      () => pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card),
+      () => pos.makeRegularPayment(order, card, TX_TYPE.PAY_AUTH),
+      () => pos.makeRegularPayment(order, card, TX_TYPE.PAY_PRE_AUTH),
+    ]) {
+      await expect(run()).rejects.toThrow(/^Order field "id" must be 1-64 letters/)
+    }
     expect(sent).toHaveLength(0)
   })
 })

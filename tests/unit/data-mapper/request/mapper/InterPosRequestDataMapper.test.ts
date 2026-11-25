@@ -443,7 +443,15 @@ describe('InterPosRequestDataMapper', () => {
   })
 
   describe('order id', () => {
-    it.each(['sipariş1', 'a&b', 'a b', '', 'x'.repeat(65)])('rejects %j in every method', async (id) => {
+    const existingOrderCalls = (o: PosOrder): Array<() => unknown> => [
+      () => mapper.create3DPaymentRequestData(D, o, TX_TYPE.PAY_AUTH, callback),
+      () => mapper.createNonSecurePostAuthPaymentRequestData(D, o),
+      () => mapper.createStatusRequestData(D, o),
+      () => mapper.createCancelRequestData(D, o),
+      () => mapper.createRefundRequestData(D, o, TX_TYPE.REFUND),
+    ]
+
+    it.each(['sipariş1', 'a&b', 'a b', 'INV.1'])('rejects %j when a payment starts', async (id) => {
       crypt.create3DHash.mockReturnValue('h')
       crypt.generateRandomString.mockReturnValue('r')
       const o: PosOrder = { ...formOrder, id }
@@ -451,12 +459,28 @@ describe('InterPosRequestDataMapper', () => {
       await expect(
         mapper.create3DFormData(D, o, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, 'https://x.test'),
       ).rejects.toThrow(PosError)
-      expect(() => mapper.create3DPaymentRequestData(D, o, TX_TYPE.PAY_AUTH, callback)).toThrow(PosError)
       expect(() => mapper.createNonSecurePaymentRequestData(D, o, TX_TYPE.PAY_AUTH, card)).toThrow(PosError)
-      expect(() => mapper.createNonSecurePostAuthPaymentRequestData(D, o)).toThrow(PosError)
-      expect(() => mapper.createStatusRequestData(D, o)).toThrow(PosError)
-      expect(() => mapper.createCancelRequestData(D, o)).toThrow(PosError)
-      expect(() => mapper.createRefundRequestData(D, o, TX_TYPE.REFUND)).toThrow(PosError)
+    })
+
+    // addition: orders created before the shared order-id rule can still be completed, captured and looked up
+    it.each(['sipariş1', 'a&b', 'a b', 'INV.2024.1', '_legacy1'])('accepts the existing order id %j', (id) => {
+      for (const call of existingOrderCalls({ ...formOrder, id })) {
+        expect(call).not.toThrow()
+      }
+    })
+
+    it.each(['', 'x'.repeat(65), 'a\n', 'a\u007f'])('rejects %j in every method', async (id) => {
+      crypt.create3DHash.mockReturnValue('h')
+      crypt.generateRandomString.mockReturnValue('r')
+      const o: PosOrder = { ...formOrder, id }
+
+      await expect(
+        mapper.create3DFormData(D, o, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, 'https://x.test'),
+      ).rejects.toThrow(PosError)
+      expect(() => mapper.createNonSecurePaymentRequestData(D, o, TX_TYPE.PAY_AUTH, card)).toThrow(PosError)
+      for (const call of existingOrderCalls(o)) {
+        expect(call).toThrow(PosError)
+      }
     })
 
     // addition: only text or a finite number is an order id; String() would turn these into valid-looking ids

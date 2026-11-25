@@ -89,23 +89,32 @@ describe('PosNetPosRequestValueFormatter', () => {
     ['', null],
     ['x'.repeat(21), TX_TYPE.STATUS],
     ['x'.repeat(21), null],
-    ['sipariş1', null],
-    ['a&b', null],
-    ['a%b', null],
-    ['a b', null],
+    ['a\n', null],
+    ['a\u0000', TX_TYPE.STATUS],
+    ['\ud800', null],
   ])('formatOrderId(%j) is rejected', (orderId, txType) => {
     expect(() => formatter.formatOrderId(orderId, txType, MODEL.THREE_D_SECURE)).toThrow(PosError)
   })
 
-  // addition: L2 the library-wide order-id rule with the bank's 20-character field
-  it.each([['_a'], ['-1'], ['ä1'], ['x'.repeat(21)], [['a']], [true], [{}], [1.5], [-1]])(
-    'formatOrderId(%j) is rejected with the rule message',
+  // addition: lookups and callbacks read an existing id (the mappers hold new payments to the shared rule)
+  it.each([['x'.repeat(21)], [['a']], [true], [{}], [1.5], [-1], ['a\n']])(
+    'formatOrderId(%j) is rejected with the existing-id message',
     (orderId) => {
       expect(() => formatter.formatOrderId(orderId as unknown as string)).toThrow(
-        'Order field "id" must be 1-20 letters, digits, "_" or "-", starting with a letter or digit',
+        'Order field "id" must be text of 1-20 characters without control characters, or a non-negative whole number',
       )
     },
   )
+
+  // addition: ids of orders created before the shared rule are still padded and sent
+  it.each([
+    ['_a', '000000000000000000_a'],
+    ['-1', '000000000000000000-1'],
+    ['ä1', '000000000000000000ä1'],
+    ['a b', '00000000000000000a b'],
+  ])('formatOrderId(%j) of an existing order = %j', (orderId, expected) => {
+    expect(formatter.formatOrderId(orderId)).toBe(expected)
+  })
 
   it('formatOrderId takes a safe integer number as its digits', () => {
     expect(formatter.formatOrderId(7 as unknown as string)).toBe('00000000000000000007')

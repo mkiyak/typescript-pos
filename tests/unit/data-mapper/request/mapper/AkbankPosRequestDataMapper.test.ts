@@ -568,10 +568,9 @@ describe('AkbankPosRequestDataMapper', () => {
     it.each(
       requests.flatMap(([name]) =>
         [
-          ['a leading "_"', '_a'],
-          ['a blank', 'a b'],
-          ['"&"', 'a&b'],
-          ['non-ASCII', 'ä1'],
+          ['a line feed', 'a\nb'],
+          ['a C1 control', 'a\u0085'],
+          ['a lone surrogate', 'a\ud800'],
           ['65 characters', 'a'.repeat(65)],
           ['an array', ['a']],
           ['a boolean', true],
@@ -588,8 +587,17 @@ describe('AkbankPosRequestDataMapper', () => {
 
     // addition: a bad recurring id is reported under its own field name
     it.each(requests)('%s names the recurring_id field in the error', (_name, build) => {
-      expect(() => build('_a')).toThrow(/^Order field "recurring_id" must be/)
+      expect(() => build('a\nb')).toThrow(/^Order field "recurring_id" must be/)
     })
+
+    // addition: recurring orders created before the shared order-id rule can still be cancelled, refunded and listed
+    it.each(requests.flatMap(([name]) => ['_a', 'a b', 'a&b', 'ä1', 'INV.2024.1'].map((id) => [name, id] as const)))(
+      '%s accepts the existing recurring id %j',
+      (name, id) => {
+        const build = requests.find(([n]) => n === name)?.[1] as (recurringId: unknown) => Record<string, unknown>
+        expect((build(id).order as Record<string, unknown>).orderTrackId).toBe(id)
+      },
+    )
   })
 
   it('has no status request', () => {

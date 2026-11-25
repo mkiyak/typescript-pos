@@ -646,8 +646,8 @@ describe('PayFlexCPV4Pos (end to end)', () => {
       expect((err as OrderMismatchError).field).toBe('order_id')
     })
 
-    // addition: the order id is read with the shared rule before the query is sent
-    it.each([[['2023030913ED']], [{}], [true], [1.5], [-1], [2 ** 53], ['a_b'], ['a'.repeat(65)]])(
+    // addition: the order id is read as an existing id before the query is sent
+    it.each([[['2023030913ED']], [{}], [true], [1.5], [-1], [2 ** 53], ['a\n'], ['a'.repeat(65)]])(
       'rejects the order id %j before any request',
       async (id) => {
         const sent: Sent[] = []
@@ -663,6 +663,20 @@ describe('PayFlexCPV4Pos (end to end)', () => {
         expect(sent).toHaveLength(0)
       },
     )
+
+    // addition: orders created before the shared order-id rule (with "_", which new payments refuse) still complete
+    it.each([['a_b'], ['INV.2024.1']])('binds the existing order id %j to the answer text', async (id) => {
+      const pos = realGateway(recordingFetch([], () => answer({ OrderID: id })))
+      const res = await pos.payment(MODEL.THREE_D_HOST, { ...boundOrder, id }, TX_TYPE.PAY_AUTH, null, {
+        ...forgedCallback,
+      })
+      expect(res.status).toBe('approved')
+      const other = await realGateway(recordingFetch([], () => answer({ OrderID: `${id}2` })))
+        .payment(MODEL.THREE_D_HOST, { ...boundOrder, id }, TX_TYPE.PAY_AUTH, null, { ...forgedCallback })
+        .catch((e: unknown) => e)
+      expect(other).toBeInstanceOf(OrderMismatchError)
+      expect((other as OrderMismatchError).field).toBe('order_id')
+    })
 
     it('binds an order id that is a safe integer number to the answer text', async () => {
       const pos = realGateway(recordingFetch([], () => answer({ OrderID: '7' })))

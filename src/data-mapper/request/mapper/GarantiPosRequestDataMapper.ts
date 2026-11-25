@@ -3,7 +3,7 @@ import type { GarantiPosAccount } from '../../../model/account/GarantiPosAccount
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
-import { orderIdOf } from '../../../util/orderId.js'
+import { existingOrderIdOf, orderIdOf } from '../../../util/orderId.js'
 import { isSet, required, requiredString } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
@@ -111,7 +111,7 @@ export class GarantiPosRequestDataMapper extends AbstractRequestDataMapper<Garan
         IPAddress: order.ip ?? '',
       },
       Order: {
-        OrderID: orderIdOf(order),
+        OrderID: existingOrderIdOf(order),
       },
       Transaction: {
         Type: this.valueMapper.mapTxType(TX_TYPE.PAY_POST_AUTH),
@@ -206,7 +206,7 @@ export class GarantiPosRequestDataMapper extends AbstractRequestDataMapper<Garan
         IPAddress: order.ip ?? '',
       },
       Order: {
-        OrderID: orderIdOf(order),
+        OrderID: existingOrderIdOf(order),
       },
       Transaction: {
         Type: this.valueMapper.mapTxType(txType),
@@ -234,7 +234,7 @@ export class GarantiPosRequestDataMapper extends AbstractRequestDataMapper<Garan
         IPAddress: order.ip ?? '',
       },
       Order: {
-        OrderID: orderIdOf(order),
+        OrderID: existingOrderIdOf(order),
       },
       Transaction: {
         Type: this.valueMapper.mapTxType(txType),

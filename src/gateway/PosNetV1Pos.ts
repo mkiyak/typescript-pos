@@ -22,7 +22,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
-import { orderIdOf } from '../util/orderId.js'
+import { existingOrderIdOf } from '../util/orderId.js'
 import { ownValue } from '../util/ownValue.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { required } from '../util/required.js'
@@ -297,7 +297,7 @@ export class PosNetV1Pos extends AbstractGateway<PosNetPosAccount> {
    * them.
    */
   private assertCallbackMatchesOrder(callback: GatewayResponseData, order: PosOrder, txType: TxType): void {
-    const orderId = orderIdOf(order, ORDER_ID_LENGTH)
+    const orderId = existingOrderIdOf(order, ORDER_ID_LENGTH)
     const amount = parseOrderAmount(required(order, 'amount'))
     if (!(amount > 0)) {
       throw new PosError('The order amount must be a positive number.')

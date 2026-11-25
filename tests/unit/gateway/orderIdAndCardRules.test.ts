@@ -261,7 +261,55 @@ const REJECTED: ReadonlyArray<[string, unknown]> = [
   ['a negative number', -1],
   ['an unsafe integer', 2 ** 53],
   ['"&"', 'a&b'],
+  ['a dot', 'INV.2024.1'],
+  ['a line feed', 'a\n'],
   ['empty', ''],
+]
+
+/**
+ * The gateways whose order-id rule became stricter with the shared rule. Orders created before it must still complete
+ * and stay workable: their callbacks and the operations on an existing order accept any id the encoders can carry.
+ */
+const LEGACY_GATEWAYS = new Set([
+  'AssecoPos',
+  'GarantiPos',
+  'AkbankPos',
+  'PosNetPos',
+  'PosNetV1Pos',
+  'PayForPos',
+  'InterPos',
+  'PayFlexV4Pos',
+  'PayFlexCPV4Pos',
+])
+
+/** Operations on an existing order (everything except starting a payment). */
+const EXISTING_ORDER_OPERATIONS = new Set(['post-auth', 'status', 'cancel', 'refund', 'order history'])
+
+const takesExistingId = (gatewayClass: string, name: string): boolean =>
+  LEGACY_GATEWAYS.has(gatewayClass) && EXISTING_ORDER_OPERATIONS.has(name)
+
+/** What an existing order id may still not be: no type other than text or a safe whole number, no control character. */
+const EXISTING_REJECTED: ReadonlyArray<[string, unknown]> = [
+  ['65 characters', 'a'.repeat(65)],
+  ['an array', ['a']],
+  ['a boolean', true],
+  ['an object', {}],
+  ['a fraction', 1.5],
+  ['a negative number', -1],
+  ['an unsafe integer', 2 ** 53],
+  ['empty', ''],
+  ['a line feed', 'a\n'],
+  ['a NUL', 'a\u0000'],
+  ['a DEL', 'a\u007f'],
+  ['a C1 control', 'a\u0085'],
+  ['a lone surrogate', 'a\ud800'],
+]
+
+/** Ids of orders created before the shared rule. */
+const LEGACY_IDS: ReadonlyArray<[string, unknown]> = [
+  ['a dot', 'INV.2024.1'],
+  ['a leading "_"', '_legacy1'],
+  ['a blank', 'ord 1'],
 ]
 
 /** Bank-specific rejections on top of the shared rule. */
@@ -276,9 +324,13 @@ const ORDER_ID_ERROR = /^(Order field "id"|The order id)/
 
 const ORDER_ID_CASES = GATEWAYS.flatMap((gatewayClass) =>
   operationsOf(gatewayClass).flatMap(([name, run]) =>
-    [...REJECTED, ...(EXTRA_REJECTED[gatewayClass] ?? [])].map(
-      ([label, id]) => [gatewayClass, name, label, id, run] as const,
-    ),
+    takesExistingId(gatewayClass, name)
+      ? [...EXISTING_REJECTED, ...(gatewayClass.startsWith('PosNet') ? [['21 characters', 'a'.repeat(21)]] : [])].map(
+          ([label, id]) => [gatewayClass, name, label, id, run] as const,
+        )
+      : [...REJECTED, ...(EXTRA_REJECTED[gatewayClass] ?? [])].map(
+          ([label, id]) => [gatewayClass, name, label, id, run] as const,
+        ),
   ),
 )
 
@@ -346,6 +398,30 @@ describe('one order-id rule on every gateway', () => {
       expect((error as Error).message).not.toMatch(ORDER_ID_ERROR)
       expect(built.fetchImpl).toHaveBeenCalled()
     }
+  })
+
+  // addition: orders created before the shared rule stay workable
+  const LEGACY_CASES = GATEWAYS.flatMap((gatewayClass) =>
+    operationsOf(gatewayClass)
+      .filter(([name]) => takesExistingId(gatewayClass, name))
+      .flatMap(([name, run]) => LEGACY_IDS.map(([label, id]) => [gatewayClass, name, label, id, run] as const)),
+  )
+
+  it('every gateway whose rule became stricter has operations on an existing order', () => {
+    // VakıfBank Common Payment looks orders up by the payment token only; its callback binding is tested on its own
+    const expected = [...LEGACY_GATEWAYS].filter((g) => g !== 'PayFlexCPV4Pos').sort()
+    expect([...new Set(LEGACY_CASES.map(([g]) => g))].sort()).toStrictEqual(expected)
+  })
+
+  it.each(LEGACY_CASES)('%s %s accepts the existing id with %s', async (gatewayClass, _name, _label, id, run) => {
+    const built = build(gatewayClass)
+    const error = await run(built, order(id, gatewayClass)).then(
+      () => undefined,
+      (e: unknown) => e,
+    )
+    // the id passed: the request reached the (failing) transport
+    expect((error as Error).message).not.toMatch(ORDER_ID_ERROR)
+    expect(built.fetchImpl).toHaveBeenCalled()
   })
 
   it.each(

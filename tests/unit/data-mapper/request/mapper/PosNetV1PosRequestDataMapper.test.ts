@@ -737,7 +737,7 @@ describe('PosNetV1PosRequestDataMapper with the real crypt', () => {
       'amount 1e13',
       () => mapper.createNonSecurePaymentRequestData(account, { id: '1', amount: 1e13 }, TX_TYPE.PAY_AUTH, card),
     ],
-    ['order id with &', () => mapper.createStatusRequestData(account, { id: 'a&b' })],
+    ['order id with a control character', () => mapper.createStatusRequestData(account, { id: 'a\nb' })],
   ])('rejects %s', async (_name, run) => {
     await expect(Promise.resolve().then(run)).rejects.toThrow(PosError)
   })

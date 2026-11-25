@@ -3,7 +3,7 @@ import type { PayFlexPosAccount } from '../../../model/account/PayFlexPosAccount
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
-import { orderIdOf } from '../../../util/orderId.js'
+import { existingOrderIdOf, orderIdOf } from '../../../util/orderId.js'
 import { isSet, required, requiredString } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
@@ -33,13 +33,13 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
     const requestData: Record<string, unknown> = {
       ...this.getRequestAccountData(account),
       TransactionType: this.valueMapper.mapTxType(txType),
-      TransactionId: orderIdOf(o),
+      TransactionId: existingOrderIdOf(o),
       CurrencyAmount: this.valueFormatter.formatAmount(required(o, 'amount')),
       CurrencyCode: this.valueMapper.mapCurrency(o.currency),
       ECI: requiredString(responseData, 'Eci', '3D response'),
       CAVV: requiredString(responseData, 'Cavv', '3D response'),
       MpiTransactionId: requiredString(responseData, 'VerifyEnrollmentRequestId', '3D response'),
-      OrderId: orderIdOf(o),
+      OrderId: existingOrderIdOf(o),
       ClientIp: String(required(order, 'ip')),
       TransactionDeviceSource: '0', // ECommerce
       CardHoldersName: creditCard.getHolderName(),
@@ -145,7 +145,7 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
         // TransactionId or OrderId is required; when both are sent the bank uses TransactionId.
         // With OrderId only, the successful transaction of that order (else the last one) is reported.
         TransactionId: String(order.transaction_id ?? ''),
-        OrderId: orderIdOf(order),
+        OrderId: existingOrderIdOf(order),
         AuthCode: '',
       },
     }

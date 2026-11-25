@@ -21,7 +21,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
-import { orderIdOf } from '../util/orderId.js'
+import { existingOrderIdOf } from '../util/orderId.js'
 import { ownValue } from '../util/ownValue.js'
 import { parseInstallment } from '../util/parseInstallment.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
@@ -360,7 +360,7 @@ export class PosNetPos extends AbstractGateway<PosNetPosAccount> {
    * padded order number, the amount in kuruş, the currency code and the installment count.
    */
   private expectedResolve(order: PosOrder): ExpectedResolve {
-    const orderId = orderIdOf(order, ORDER_ID_LENGTH)
+    const orderId = existingOrderIdOf(order, ORDER_ID_LENGTH)
     const amount = parseOrderAmount(required(order, 'amount'))
     if (!(amount > 0)) {
       throw new PosError('The order amount must be a positive number.')

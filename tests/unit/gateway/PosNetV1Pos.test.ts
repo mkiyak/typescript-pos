@@ -899,8 +899,8 @@ describe('PosNetV1Pos (end to end) order binding', () => {
     return err
   }
 
-  // addition: the order id is read with the shared rule, so an array or object never turns into the id text
-  it.each([[['2020110828BC']], [{}], [true], [1.5], [-1], [2 ** 53], ['_2020110828BC'], ['a'.repeat(21)]])(
+  // addition: the order id is read as an existing id, so an array or object never turns into the id text
+  it.each([[['2020110828BC']], [{}], [true], [1.5], [-1], [2 ** 53], ['2020110828BC\n'], ['a'.repeat(21)]])(
     'rejects the order id %j before any request',
     async (id) => {
       const { posted, fetchImpl } = fakeBank()
@@ -912,6 +912,12 @@ describe('PosNetV1Pos (end to end) order binding', () => {
       expect(posted).toHaveLength(0)
     },
   )
+
+  // addition: an order created before the shared order-id rule is still bound exactly
+  it('binds an existing order id with a leading "_" to the echoed order number', async () => {
+    const err = await expectMismatch(SUCCESS_CALLBACK, { ...SUCCESS_ORDER, id: '_legacy1' }, 'order_id')
+    expect([err.expected, err.actual]).toStrictEqual(['000000000000_legacy1', 'ALA_0000080603153823'])
+  })
 
   // addition: P16 the echoed amount must be the order's amount in kuruş
   it('rejects another amount', async () => {

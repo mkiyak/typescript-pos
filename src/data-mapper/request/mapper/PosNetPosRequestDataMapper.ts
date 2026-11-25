@@ -5,6 +5,7 @@ import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
 import { optionalBankReference, requiredBankReference } from '../../../util/bankReference.js'
+import { orderIdOf } from '../../../util/orderId.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
 import { isSet, required } from '../../../util/required.js'
@@ -13,6 +14,9 @@ import type { PosNetPosRequestValueMapper } from '../value-mapper/PosNetPosReque
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
 const GATEWAY_CLASS = 'PosNetPos'
+
+/** The bank's order number field holds 20 characters. */
+const ORDER_ID_LENGTH = 20
 
 /** Creates request data for POSNET gateway requests. */
 export class PosNetPosRequestDataMapper extends AbstractRequestDataMapper<PosNetPosAccount> {
@@ -40,7 +44,7 @@ export class PosNetPosRequestDataMapper extends AbstractRequestDataMapper<PosNet
     if (creditCard === null || creditCard === undefined) {
       throw new PosError('Card data is required for this transaction.')
     }
-    const id = this.valueFormatter.formatOrderId(required(order, 'id'))
+    const id = this.valueFormatter.formatOrderId(this.newOrderId(order))
     const amount = this.kurus(order)
     const installment = this.installment(order)
 
@@ -136,7 +140,7 @@ export class PosNetPosRequestDataMapper extends AbstractRequestDataMapper<PosNet
     txType: TxType,
     creditCard: CreditCard,
   ): Record<string, unknown> {
-    const orderID = this.valueFormatter.formatOrderId(required(order, 'id'))
+    const orderID = this.valueFormatter.formatOrderId(this.newOrderId(order))
     const amount = this.kurus(order)
     const installment = this.installment(order)
 
@@ -234,6 +238,11 @@ export class PosNetPosRequestDataMapper extends AbstractRequestDataMapper<PosNet
       throw new PosError('Order field "id" or "ref_ret_num" is required')
     }
     data.orderID = this.valueFormatter.formatOrderId(order.id, txType, this.paymentModel(order))
+  }
+
+  /** The id of a new payment follows the shared order id rule. */
+  private newOrderId(order: PosOrder): string {
+    return orderIdOf(order, ORDER_ID_LENGTH)
   }
 
   private paymentModel(order: PosOrder): PaymentModel {

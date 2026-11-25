@@ -2,7 +2,7 @@ import { NotImplementedError } from '../../../errors.js'
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import { numberFormat2 } from '../../../util/numberFormat2.js'
-import { orderIdOf } from '../../../util/orderId.js'
+import { existingOrderIdOf } from '../../../util/orderId.js'
 import type { RequestValueFormatterInterface } from './RequestValueFormatterInterface.js'
 
 /** The bank's order number field is 20 characters wide; lookups and reversals use 24 (prefix included). */
@@ -43,9 +43,10 @@ export class PosNetPosRequestValueFormatter implements RequestValueFormatterInte
    * bank's own 3D payments are stored under the `TDSC` prefix, every other order has none.
    */
   formatOrderId(orderId: string, txType: TxType | null = null, orderPaymentModel: PaymentModel | null = null): string {
-    // Only characters that are safe in the raw form body and the signed strings: the id is posted unescaped and
-    // signed as UTF-8, so `&`, `%` and non-ASCII must never get through; the bank's field holds 20 characters.
-    const id = orderIdOf({ id: orderId }, ORDER_ID_LENGTH)
+    // Read as an existing id: lookups, reversals and callbacks of orders created before the shared order id rule
+    // must keep working, so the mappers check new payments against that rule themselves. The bank's field holds 20
+    // characters; the XML client refuses `&`, `%` and characters outside ISO-8859-9 in the raw form body.
+    const id = existingOrderIdOf({ id: orderId }, ORDER_ID_LENGTH)
 
     let prefix = ''
     let padLength = ORDER_ID_LENGTH

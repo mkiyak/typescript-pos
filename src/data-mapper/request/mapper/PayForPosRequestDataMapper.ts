@@ -5,7 +5,7 @@ import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import { QUERY_TYPE } from '../../../pos-query/PosQueryInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
-import { orderIdOf } from '../../../util/orderId.js'
+import { existingOrderIdOf, orderIdOf } from '../../../util/orderId.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
@@ -45,7 +45,7 @@ export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayFor
     _txType: TxType,
     responseData: Record<string, unknown>,
   ): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
     const requestGuid: unknown = ownValue(responseData, 'RequestGuid')
     if (typeof requestGuid !== 'string' || requestGuid === '') {
       throw new PosError('The 3D callback value "RequestGuid" is missing or not text.')
@@ -88,7 +88,7 @@ export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayFor
   }
 
   createNonSecurePostAuthPaymentRequestData(account: PayForPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
     const amount = this.amount(order)
 
     return {
@@ -103,7 +103,7 @@ export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayFor
   }
 
   createStatusRequestData(account: PayForPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
 
     return {
       ...this.accountData(account),
@@ -115,7 +115,7 @@ export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayFor
   }
 
   createCancelRequestData(account: PayForPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
 
     return {
       ...this.accountData(account),
@@ -132,7 +132,7 @@ export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayFor
       // Every other type maps to another bank operation; a refund request must never become a sale or a cancel.
       throw new UnsupportedTransactionTypeError(`Unsupported refund transaction type: ${String(refundTxType)}`)
     }
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
     const amount = this.amount(order)
 
     return {
@@ -147,7 +147,7 @@ export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayFor
   }
 
   createOrderHistoryRequestData(account: PayForPosAccount, order: PosOrder): Record<string, unknown> {
-    const orderId = this.orderId(order)
+    const orderId = this.existingOrderId(order)
 
     return {
       ...this.accountData(account),
@@ -252,9 +252,14 @@ export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayFor
     }
   }
 
-  /** Order ids are signed and posted as plain ASCII (see `orderIdOf`). */
+  /** The id of a new payment: signed and posted as plain ASCII (see `orderIdOf`). */
   private orderId(order: PosOrder): string {
     return orderIdOf(order)
+  }
+
+  /** The id of an order that already exists, possibly created before the shared rule (see `existingOrderIdOf`). */
+  private existingOrderId(order: PosOrder): string {
+    return existingOrderIdOf(order)
   }
 
   /**

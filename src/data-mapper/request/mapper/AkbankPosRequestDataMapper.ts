@@ -3,7 +3,7 @@ import type { AkbankPosAccount } from '../../../model/account/AkbankPosAccount.j
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
-import { ORDER_ID_PATTERN, orderIdOf } from '../../../util/orderId.js'
+import { existingOrderIdOf, orderIdOf } from '../../../util/orderId.js'
 import { isSet, required, requiredString } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
@@ -38,7 +38,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       txnCode: this.valueMapper.mapTxType(txType, MODEL.NON_SECURE),
       requestDateTime: this.now(),
       randomNumber: this.crypt.generateRandomString(),
-      order: { orderId: orderIdOf(order) },
+      order: { orderId: existingOrderIdOf(order) },
       transaction: {
         amount: this.valueFormatter.formatAmount(required(order, 'amount')),
         currencyCode: this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY),
@@ -102,7 +102,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       txnCode: this.valueMapper.mapTxType(TX_TYPE.PAY_POST_AUTH),
       requestDateTime: this.now(),
       randomNumber: this.crypt.generateRandomString(),
-      order: { orderId: orderIdOf(order) },
+      order: { orderId: existingOrderIdOf(order) },
       transaction: {
         amount: this.valueFormatter.formatAmount(required(order, 'amount')),
         currencyCode: this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY),
@@ -138,7 +138,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       }
       requestData.order = { orderTrackId: this.trackIdOf(required(order, 'recurring_id')) }
     } else {
-      requestData.order = { orderId: orderIdOf(order) }
+      requestData.order = { orderId: existingOrderIdOf(order) }
     }
 
     return requestData
@@ -163,7 +163,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       requestData.recurring = { recurringOrder: order.recurringOrderInstallmentNumber }
       requestData.order = { orderTrackId: this.trackIdOf(required(order, 'recurring_id')) }
     } else {
-      requestData.order = { orderId: orderIdOf(order) }
+      requestData.order = { orderId: existingOrderIdOf(order) }
     }
 
     return requestData
@@ -179,7 +179,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       order:
         isSet(order.recurring_id) && order.recurring_id !== ''
           ? { orderTrackId: this.trackIdOf(order.recurring_id) }
-          : { orderId: orderIdOf(order) },
+          : { orderId: existingOrderIdOf(order) },
     }
   }
 
@@ -236,9 +236,9 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
     return { gateway: gatewayURL, method: 'POST', inputs: { ...inputs, hash } }
   }
 
-  /** The recurring order's track id follows the same rule as an order id (plain ASCII, at most 64 characters). */
+  /** The track id of an existing recurring order, read like any existing order id (at most 64 characters). */
   private trackIdOf(recurringId: unknown): string {
-    return orderIdOf({ id: recurringId } as PosOrder, 64, ORDER_ID_PATTERN, 'recurring_id')
+    return existingOrderIdOf({ id: recurringId } as PosOrder, 64, 'recurring_id')
   }
 
   private now(): string {

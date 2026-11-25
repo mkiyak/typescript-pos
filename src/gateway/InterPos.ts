@@ -20,12 +20,18 @@ import {
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
 import { numberFormat2 } from '../util/numberFormat2.js'
-import { ORDER_ID_PATTERN, orderIdOf } from '../util/orderId.js'
+import { existingOrderIdOf } from '../util/orderId.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
 
 /** The return code of an approved payment. */
 const SUCCESS_CODE = '00'
+
+/**
+ * The order id a signed callback may carry: plain ASCII letters, digits, `_` and `-`. A leading `_` or `-` is kept
+ * here although new payments refuse it, so that orders created before the shared order id rule still complete.
+ */
+const CALLBACK_ORDER_ID = /^[A-Za-z0-9_-]{1,64}$/
 
 /**
  * Strict formats of the signed callback fields. The bank concatenates the signed values without separators, so a
@@ -252,7 +258,7 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
       if (ownText(callback, 'ProcReturnCode') === SUCCESS_CODE) {
         // The bank charged the card (a 3D Pay form posted as 3D Secure) although the 3D authentication failed.
         this.assertSignedFields(callback)
-        const orderId = orderIdOf(order)
+        const orderId = existingOrderIdOf(order)
         this.assertCallbackMatchesOrder(callback, order, orderId)
 
         return this.declineUnauthenticatedApproval(declined, order, orderId)
@@ -271,7 +277,7 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
       this.malformed(callback, ['ProcReturnCode'])
     }
 
-    const orderId = orderIdOf(order)
+    const orderId = existingOrderIdOf(order)
     this.assertCallbackMatchesOrder(callback, order, orderId)
 
     if (returnCode === SUCCESS_CODE) {
@@ -402,7 +408,7 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
       return response
     }
 
-    const orderId = orderIdOf(order)
+    const orderId = existingOrderIdOf(order)
     this.assertCallbackMatchesOrder(callback, order, orderId, response)
 
     if (response.status !== TX_APPROVED) {
@@ -664,7 +670,7 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
     check('OkUrl', RETURN_URL, true)
     check('FailUrl', RETURN_URL, true)
     // Order ids are plain ASCII so that the signed bytes are unambiguous.
-    check('OrderId', ORDER_ID_PATTERN, true)
+    check('OrderId', CALLBACK_ORDER_ID, true)
     check('ProcReturnCode', RETURN_CODE, false)
     check('Response', RESPONSE_TEXT, false)
     check('mdStatus', MD_STATUS, true)
