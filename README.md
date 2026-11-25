@@ -7,7 +7,7 @@
 A single, stateless, async TypeScript interface to Turkish bank virtual POS (sanal POS) gateways, including 3D Secure flows. Node.js 22 or newer,
 ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
 
-> Status: v0.1, pre-1.0. Minor versions may contain breaking changes (see [Versioning](#versioning)).
+> Status: pre-1.0. Minor versions may contain breaking changes (see [Versioning](#versioning)).
 
 ## Supported gateways
 
@@ -26,8 +26,8 @@ ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
 | `VakifKatilimPos` | Vakıf Katılım | Unit-tested; request and callback hashes and the kuruş amount conversion differential-tested against PHP (0 mismatches in 1,000 random sets each). |
 | `ToslaPos` | Tosla | Unit-tested; request and callback hashes differential-tested against PHP (0 mismatches in 1,000 random sets each). |
 | `ParamPos` | Param (TURK Elektronik Para) | Unit-tested; request and callback hashes differential-tested against PHP (0 mismatches in 1,000 random sets each). |
-| `PayTrPos` | PayTR (iFrame, Direct API, non-secure) | Unit-tested; request tokens and the notification hash differential-tested against PHP (0 mismatches in 1,000 random sets); the basket JSON against PHP's json_encode (0 mismatches in 1,000 baskets). |
 | `Param3DHostPos` | Param hosted payment page | Unit-tested; callback hashes differential-tested against PHP (0 mismatches in 1,000 random sets); the transaction id against PHP's PBKDF2/HMAC (0 mismatches in 1,000 sets). |
+| `PayTrPos` | PayTR (iFrame, Direct API, non-secure) | Unit-tested; request tokens and the notification hash differential-tested against PHP (0 mismatches in 1,000 random sets); the basket JSON against PHP's json_encode (0 mismatches in 1,000 baskets). |
 | `IyzicoPos` | iyzico (3D Secure, 3D Host checkout form, non-secure) | Unit-tested; the request authorization header and the callback and answer signatures differential-tested against PHP (0 mismatches in 1,000 random sets each). |
 
 ## Install
@@ -77,7 +77,16 @@ const form = await pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AU
 const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, card, callbackBody)
 ```
 
-Complete, compile-checked versions with error handling live in [`examples/`](https://github.com/mkiyak/typescript-pos/tree/main/examples). Step-by-step guides:
+Complete, compile-checked versions with error handling live in [`examples/`](https://github.com/mkiyak/typescript-pos/tree/main/examples). The [guide index](https://github.com/mkiyak/typescript-pos/blob/main/guides/README.md) lists every guide. Start with:
+
+- [Payment models](https://github.com/mkiyak/typescript-pos/blob/main/guides/payment-models.md): who collects the card, PCI scope and which gateway offers which model
+- [3D pages in a redirect, an iframe or a popup](https://github.com/mkiyak/typescript-pos/blob/main/guides/3d-iframe-and-popup.md)
+- [After a payment: cancel, refund, status, order history](https://github.com/mkiyak/typescript-pos/blob/main/guides/after-payment.md)
+- [Pre-authorization and capture](https://github.com/mkiyak/typescript-pos/blob/main/guides/pre-auth-and-capture.md)
+- [Queries (custom bank requests)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
+- [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
+
+Step-by-step guides per gateway:
 
 - [Asseco 3D Pay Hosting](https://github.com/mkiyak/typescript-pos/blob/main/guides/asseco-3d-payment.md)
 - [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
@@ -94,8 +103,6 @@ Complete, compile-checked versions with error handling live in [`examples/`](htt
 - [Param payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/param-payment.md)
 - [PayTR payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/paytr-payment.md)
 - [iyzico payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/iyzico-payment.md)
-- [Queries (custom bank requests)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
-- [Security and production checklist](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Other operations: `pos.cancel(order)`, `pos.refund(order)` (partial when `order.order_amount` is set and
 `order.amount` is lower), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti, Akbank, PayFor, Vakıf Katılım, Tosla and iyzico), `pos.payment(MODEL.NON_SECURE, ...)`
@@ -104,7 +111,9 @@ for payments without 3D Secure, and `TX_TYPE.PAY_PRE_AUTH` / `TX_TYPE.PAY_POST_A
 ### Test vs production configuration
 
 `posProductionConfig` is keyed by bank (`isbank`, `akbank`, `vakifbank`, ...). `posTestConfig` is keyed by
-vendor: `asseco`, `vakifbank`, `ziraat-vpos`. An İşbank test account therefore uses the bank name
+test environment: `asseco`, `akbank-pos`, `albaraka`, `denizbank`, `garanti`, `iyzico`, `kuveytpos`, `param-pos`,
+`param-3d-host-pos`, `paytr`, `qnbfinansbank-payfor`, `tosla`, `vakif-katilim`, `vakifbank`, `vakifbank-cp`,
+`yapikredi`, `ziraat-katilim-payfor` and `ziraat-vpos`. An İşbank test account therefore uses the bank name
 `asseco`, or keep one name in your code with the spread pattern:
 
 ```ts
@@ -120,14 +129,16 @@ Both shipped configs are deeply frozen and their bank keys are typed. To change 
 
 The bank sends the customer back with a cross-site POST, so `SameSite` session cookies may be missing. Look the
 order up by id on the server, always pass the callback through the gateway method (`pos.payment(...)`,
-`make3DPayment`, ...) and never trust callback fields directly. `OrderMismatchError` can occur on any Asseco
-3D Pay / 3D Host callback, including declined ones (`error.field` is `order_id`, `amount` or `storetype`), and on a
-3D Secure callback whose `storetype` does not match the payment model: treat it
-as a failure for the order and read `error.response` (`transaction_id`, `proc_return_code`). When
-`error.paymentMayHaveCompleted` is `true` the bank reported a completed payment for that callback, so the card may
+`make3DPayment`, ...) and never trust callback fields directly. A callback that does not match your order throws
+`OrderMismatchError` (`error.field` names the field): treat it as a failure for the order and read `error.response`.
+When `error.paymentMayHaveCompleted` is `true` the bank reported a completed payment for that callback, so the card may
 have been charged: alert someone and void or refund it. A declined response with `requires_manual_review: true`
-(authorized by the bank although 3D verification failed) may also mean money moved: investigate. Details in the
-guides.
+(authorized by the bank although 3D verification failed) may also mean money moved: investigate. The
+[security guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md) defines both flags and lists what each gateway checks.
+
+To show the bank's 3D page in a redirect, an iframe or a popup, serve a form object with
+`render3DFormHtml(form, options)` (it escapes every value, refuses non-`https:` actions and carries your CSP nonce);
+the [iframe and popup guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/3d-iframe-and-popup.md) has the routes and the `postMessage` rules.
 
 ```ts
 try {
@@ -144,10 +155,11 @@ try {
 }
 ```
 
-**Outcome unknown: never retry payments blindly.** A `PosHttpError` (timeout, non-2xx, HTML/WAF page) after a
-request that moves money (PayFlex 3D Secure or Asseco `MODEL.THREE_D_SECURE` provisioning, non-3D payments,
-post-authorization, cancel, refund) may arrive after the bank has already processed it. Retrying can charge the
-customer twice. Call `pos.status(order)` first and retry only when the bank has no record of the transaction.
+**Outcome unknown: never retry payments blindly.** A `PosHttpError` (timeout, non-2xx, HTML/WAF page, or a 2xx
+answer that carries no result) after a request that moves money (payment, pre-authorization, post-authorization, the
+provision of a 3D payment, refund) may arrive after the bank has already processed it. Retrying can charge the
+customer twice. Keep the order pending and call `pos.status(order)` first; retry only when the bank has no record of
+the transaction. A repeated cancel is safe. See [Outcome unknown](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#outcome-unknown).
 
 Every error the library throws extends `PosError` (for example `HashMismatchError`, `OrderMismatchError`,
 `MissingAccountInfoError`, `InvalidCardError`, `PosHttpError`).
@@ -179,7 +191,7 @@ with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.c
 
 1. Stateless, async API: each network method returns its own response; no `isSuccess()` / `getResponse()` state.
 2. Order and normalized response keys are snake_case and the same for every gateway.
-3. No option disables 3D hash verification. `AssecoPos` always requires a valid hash; `GarantiPos` always verifies a signed callback and accepts an unsigned one only as a decline (`require_3d_hash: true` rejects it too); `AkbankPos` always requires a valid hash for 3D Pay, 3D Host and successful 3D Secure callbacks, and confirms approved 3D Pay/Host results with the bank; `PayFlexV4Pos` verifies a `Hash` whenever the callback carries one and rejects a missing one only with `require_3d_hash: true`; `PosNetPos` always verifies the bank's MAC on the decrypted 3D result; `PosNetV1Pos` always requires a valid MAC on successful callbacks (an unsigned declined one is rejected only with `require_3d_hash: true`); `PayForPos` always verifies a signed callback, and confirms every approved 3D result with the bank before returning it (a Ziraat Katılım callback without a signature never approves a payment by itself); `InterPos` always verifies a signed callback over a fixed field list, accepts an unsigned one only as a decline, and confirms every approved 3D Pay / 3D Host result with the bank before returning it; `KuveytPos` always verifies the bank's `HashData`, builds the provision from your order and binds the bank's answer to it; `VakifKatilimPos` does the same for 3D Secure and confirms every approved 3D Host payment with the bank (the 3D Host form carries the hashed API password); `ToslaPos` always verifies a signed callback over a fixed field list, accepts an unsigned one only as a decline, and confirms every approved 3D Pay / 3D Host result with the bank's own record (the callback signs neither amount nor currency); `ParamPos` and `Param3DHostPos` confirm every approved payment with the bank's status record, because Param's callbacks carry the merchant GUID they are signed with, and bind hosted payments to the order through a derived transaction id; `PayTrPos` approves a payment only from the signed server-to-server notification, bound to the order's id and amount (the browser's success and fail pages never approve); `IyzicoPos` verifies iyzico's callback and answer signatures and binds every payment approval (sale, authorization, capture, checkout record) to the order's basket id, amount, currency and phase; refunds are signed and bound to the payment id and amount, while cancel answers are unsigned and only the conversation id and payment id are checked when present.
+3. No option disables callback verification; how each gateway verifies its callbacks is listed in the [security guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#how-each-gateway-verifies-callbacks).
 4. Sensitive data (PAN, CVV, expiry, passwords, store keys) is masked before it reaches the logger.
 5. Constant-time hash comparison; the Asseco hash uses the exact natural, case-insensitive key ordering the bank expects.
 6. Extra Asseco, Garanti and Akbank safeguards: the returned order id, amount and payment model (Garanti: also terminal and currency) are compared with the order
@@ -192,6 +204,7 @@ with `UnsupportedTransactionTypeError`. See the [queries guide](https://github.c
 8. VakıfBank default endpoints use port 8443; `MerchantType` is configurable per account.
 9. Hooks (`onRequestDataPrepared`, `onBefore3DFormHashCalculated`) to inspect or change outgoing data.
 10. Thin `fetch`-based HTTP layer (injectable, 60 s default timeout); bank HTML/WAF pages raise `PosHttpError`.
+11. Library-wide rules, the same on every gateway ([security guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)): a form built with `createWithoutCard: true` never contains a card ([Building forms without the card](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#building-forms-without-the-card)); one order-id rule, 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit ([Order ids](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#order-ids)); an answer without a result after a request that moves money is an unknown outcome and throws `PosHttpError`, never `declined` ([Outcome unknown](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#outcome-unknown)); every `status`, `cancel`, `refund`, `orderHistory` and `payment` result has the keys `status`, `order_id`, `proc_return_code`, `error_code`, `error_message` and `all` ([After a payment](https://github.com/mkiyak/typescript-pos/blob/main/guides/after-payment.md)).
 
 ## Security
 
@@ -204,6 +217,15 @@ Asseco 3D Pay Hosting keeps card data off your server.
 [SemVer](https://semver.org). Before 1.0, a breaking change bumps the minor version and everything else bumps the
 patch version. Commits follow [Conventional Commits](https://www.conventionalcommits.org); releases are managed
 with [Changesets](https://github.com/changesets/changesets) (see [CONTRIBUTING.md](https://github.com/mkiyak/typescript-pos/blob/main/CONTRIBUTING.md)).
+
+### Upgrading to 0.14
+
+Four rules changed behaviour; the changelog has the details.
+
+- `createWithoutCard: true` never puts a card into a browser form; a card you pass anyway is dropped.
+- Order ids must be 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit (POSNET: at most 20 characters).
+- An answer without a result after a money-moving request, refunds included, throws `PosHttpError` instead of mapping to `declined`.
+- `IyzicoPos.make3DPayPayment` throws `UnsupportedPaymentModelError` (it threw `UnsupportedTransactionTypeError`).
 
 ## License
 

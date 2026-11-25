@@ -8,7 +8,7 @@ Türk bankalarının sanal POS altyapılarını (3D Secure akışları dahil) te
 toplayan TypeScript kütüphanesi. Node.js 22 veya üzeri gerekir; ESM ve CommonJS desteklenir, çalışma zamanı bağımlılıkları yalnızca
 `fast-xml-parser` ve `iconv-lite`'tır.
 
-> Durum: v0.1, 1.0 öncesi. Minor sürümler kırıcı değişiklik içerebilir (bkz. [Versiyonlama](#versiyonlama)).
+> Durum: 1.0 öncesi. Minor sürümler kırıcı değişiklik içerebilir (bkz. [Versiyonlama](#versiyonlama)).
 
 ## Desteklenen gateway'ler
 
@@ -27,8 +27,8 @@ toplayan TypeScript kütüphanesi. Node.js 22 veya üzeri gerekir; ESM ve Common
 | `VakifKatilimPos` | Vakıf Katılım | Birim testli; istek ve callback hash'leri ile kuruş tutarı dönüşümü PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
 | `ToslaPos` | Tosla | Birim testli; istek ve callback hash'leri PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
 | `ParamPos` | Param (TURK Elektronik Para) | Birim testli; istek ve callback hash'leri PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
-| `PayTrPos` | PayTR (iFrame, Direct API, 3D Secure'suz) | Birim testli; istek imzaları ve bildirim hash'i PHP'ye karşı diferansiyel test edildi (1.000 rastgele kümede 0 uyuşmazlık); sepet JSON'u PHP'nin json_encode'una karşı test edildi (1.000 sepette 0 uyuşmazlık). |
 | `Param3DHostPos` | Param ortak ödeme sayfası | Birim testli; callback hash'leri PHP'ye karşı diferansiyel test edildi (1.000 rastgele kümede 0 uyuşmazlık); işlem kimliği PHP'nin PBKDF2/HMAC'ine karşı test edildi (1.000 kümede 0 uyuşmazlık). |
+| `PayTrPos` | PayTR (iFrame, Direct API, 3D Secure'suz) | Birim testli; istek imzaları ve bildirim hash'i PHP'ye karşı diferansiyel test edildi (1.000 rastgele kümede 0 uyuşmazlık); sepet JSON'u PHP'nin json_encode'una karşı test edildi (1.000 sepette 0 uyuşmazlık). |
 | `IyzicoPos` | iyzico (3D Secure, 3D Host ödeme formu, 3D Secure'suz) | Birim testli; istek yetkilendirme başlığı ile callback ve cevap imzaları PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
 
 ## Kurulum
@@ -78,7 +78,16 @@ const form = await pos.get3DFormData(order, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AU
 const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, card, callbackBody)
 ```
 
-Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://github.com/mkiyak/typescript-pos/tree/main/examples) altındadır. Adım adım kılavuzlar:
+Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://github.com/mkiyak/typescript-pos/tree/main/examples) altındadır. Tüm kılavuzlar [kılavuz dizininde](https://github.com/mkiyak/typescript-pos/blob/main/guides/README.md) listelenir. Şunlarla başlayın:
+
+- [Ödeme modelleri](https://github.com/mkiyak/typescript-pos/blob/main/guides/payment-models.md): kartı kimin topladığı, PCI kapsamı ve hangi gateway'in hangi modeli sunduğu
+- [Yönlendirme, iframe veya popup içinde 3D sayfaları](https://github.com/mkiyak/typescript-pos/blob/main/guides/3d-iframe-and-popup.md)
+- [Ödemeden sonra: iptal, iade, durum, sipariş geçmişi](https://github.com/mkiyak/typescript-pos/blob/main/guides/after-payment.md)
+- [Ön provizyon ve kapama](https://github.com/mkiyak/typescript-pos/blob/main/guides/pre-auth-and-capture.md)
+- [Sorgular (özel banka istekleri)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
+- [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
+
+Gateway başına adım adım kılavuzlar:
 
 - [Asseco 3D Pay Hosting](https://github.com/mkiyak/typescript-pos/blob/main/guides/asseco-3d-payment.md)
 - [PayFlex V4 3D Secure](https://github.com/mkiyak/typescript-pos/blob/main/guides/payflex-3d-payment.md)
@@ -95,8 +104,6 @@ Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://g
 - [Param ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/param-payment.md)
 - [PayTR ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/paytr-payment.md)
 - [iyzico ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/iyzico-payment.md)
-- [Sorgular (özel banka istekleri)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
-- [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 
 Diğer işlemler: `pos.cancel(order)`, `pos.refund(order)` (`order.order_amount` verilmiş ve `order.amount` ondan
 küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (Asseco, Garanti, Akbank, PayFor, Vakıf Katılım, Tosla ve iyzico), 3D Secure'suz ödeme için
@@ -105,7 +112,9 @@ küçükse kısmi iade), `pos.status(order)`, `pos.orderHistory(order)` (Asseco,
 ### Test ve canlı yapılandırma
 
 `posProductionConfig` banka adıyla anahtarlanır (`isbank`, `akbank`, `vakifbank`, ...). `posTestConfig` ise
-sağlayıcı adıyla anahtarlanır: `asseco`, `vakifbank`, `ziraat-vpos`. Bu yüzden test ortamındaki bir
+test ortamı adıyla anahtarlanır: `asseco`, `akbank-pos`, `albaraka`, `denizbank`, `garanti`, `iyzico`, `kuveytpos`,
+`param-pos`, `param-3d-host-pos`, `paytr`, `qnbfinansbank-payfor`, `tosla`, `vakif-katilim`, `vakifbank`,
+`vakifbank-cp`, `yapikredi`, `ziraat-katilim-payfor` ve `ziraat-vpos`. Bu yüzden test ortamındaki bir
 İşbank hesabı `asseco` banka adını kullanır; ya da kodunuzda tek ad tutmak için şu kalıbı kullanın:
 
 ```ts
@@ -121,15 +130,17 @@ değiştirmek için onu yeni bir nesneye yayın (spread): `{ ...posProductionCon
 
 Banka müşteriyi siteler arası (cross-site) bir POST ile geri gönderir; bu yüzden `SameSite` oturum çerezleri
 gelmeyebilir. Siparişi sunucuda sipariş numarasıyla bulun, callback'i her zaman gateway metodundan geçirin
-(`pos.payment(...)`, `make3DPayment`, ...) ve callback alanlarına doğrudan güvenmeyin. `OrderMismatchError`
-reddedilen (declined) cevaplar dahil her Asseco 3D Pay / 3D Host callback'inde, ayrıca `storetype` değeri ödeme
-modeliyle eşleşmeyen 3D Secure callback'lerinde oluşabilir (`error.field` değeri `order_id`, `amount` veya
-`storetype` olur): bunu sipariş için başarısızlık sayın ve `error.response` içindeki
-`transaction_id`, `proc_return_code` alanlarını okuyun. `error.paymentMayHaveCompleted` `true` ise banka bu
-callback için tamamlanmış bir ödeme bildirmiştir, yani karttan çekim yapılmış olabilir: ilgili kişiyi uyarın, ödemeyi
-iptal veya iade edin. `requires_manual_review: true` taşıyan reddedilmiş (declined) bir cevap da (3D doğrulaması
-başarısız olduğu hâlde banka provizyon vermiştir) para hareketi olmuş olabileceğini gösterir: inceleyin. Ayrıntılar
-kılavuzlardadır.
+(`pos.payment(...)`, `make3DPayment`, ...) ve callback alanlarına doğrudan güvenmeyin. Siparişinizle eşleşmeyen bir
+callback `OrderMismatchError` fırlatır (`error.field` alanı adlandırır): bunu sipariş için başarısızlık sayın ve
+`error.response` içeriğini okuyun. `error.paymentMayHaveCompleted` `true` ise banka bu callback için tamamlanmış bir
+ödeme bildirmiştir, yani karttan çekim yapılmış olabilir: ilgili kişiyi uyarın, ödemeyi iptal veya iade edin.
+`requires_manual_review: true` taşıyan reddedilmiş (declined) bir cevap da (3D doğrulaması başarısız olduğu hâlde
+banka provizyon vermiştir) para hareketi olmuş olabileceğini gösterir: inceleyin. [Güvenlik kılavuzu](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
+iki bayrağı tanımlar ve her gateway'in neleri kontrol ettiğini listeler.
+
+Bankanın 3D sayfasını yönlendirme, iframe veya popup içinde göstermek için form nesnesini
+`render3DFormHtml(form, options)` ile sunun (her değeri kaçışlar, `https:` olmayan action'ları reddeder ve CSP nonce'unuzu
+taşır); rotalar ve `postMessage` kuralları [iframe ve popup kılavuzundadır](https://github.com/mkiyak/typescript-pos/blob/main/guides/3d-iframe-and-popup.md).
 
 ```ts
 try {
@@ -146,11 +157,12 @@ try {
 }
 ```
 
-**Sonuç bilinmiyor: ödemeleri asla körlemesine tekrar denemeyin.** Para hareketi yapan bir istekten (PayFlex 3D
-Secure veya Asseco `MODEL.THREE_D_SECURE` provizyonu, 3D'siz ödemeler, ön provizyon kapama, iptal, iade) sonra gelen
-bir `PosHttpError` (zaman aşımı, 2xx dışı cevap, HTML/WAF sayfası), banka isteği zaten işledikten sonra oluşmuş
-olabilir. Tekrar denemek müşteriden iki kez çekim yapılmasına yol açabilir. Önce `pos.status(order)` çağırın ve
-yalnızca bankada işlemin kaydı yoksa tekrar deneyin.
+**Sonuç bilinmiyor: ödemeleri asla körlemesine tekrar denemeyin.** Para hareketi yapan bir istekten (ödeme, ön
+provizyon, son provizyon, 3D ödemenin provizyonu, iade) sonra gelen bir `PosHttpError` (zaman aşımı, 2xx dışı cevap,
+HTML/WAF sayfası veya sonuç taşımayan bir 2xx cevap), banka isteği zaten işledikten sonra oluşmuş olabilir. Tekrar
+denemek müşteriden iki kez çekim yapılmasına yol açabilir. Siparişi beklemede tutun ve önce `pos.status(order)`
+çağırın; yalnızca bankada işlemin kaydı yoksa tekrar deneyin. Tekrarlanan iptal güvenlidir. Bkz.
+[Sonuç bilinmiyor](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#outcome-unknown).
 
 Kütüphanenin fırlattığı her hata `PosError` sınıfından türer (örneğin `HashMismatchError`, `OrderMismatchError`,
 `MissingAccountInfoError`, `InvalidCardError`, `PosHttpError`).
@@ -183,7 +195,7 @@ olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos`, `PayFo
 
 1. Durumsuz, async API: her ağ metodu kendi cevabını döner; `isSuccess()` / `getResponse()` durumu yoktur.
 2. Sipariş ve normalize cevap anahtarları snake_case'tir ve her gateway'de aynıdır.
-3. 3D hash doğrulamasını kapatan bir seçenek yoktur. `AssecoPos` her zaman geçerli hash ister; `GarantiPos` imzalı callback'i her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder (`require_3d_hash: true` onu da reddeder); `AkbankPos` 3D Pay, 3D Host ve başarılı 3D Secure callback'lerinde her zaman geçerli hash ister, onaylanan 3D Pay/Host sonuçlarını bankayla doğrular; `PayFlexV4Pos` callback `Hash` taşıyorsa her zaman doğrular, `Hash` eksikse yalnızca `require_3d_hash: true` ile reddeder; `PosNetPos` çözülen 3D sonucundaki bankanın MAC'ini her zaman doğrular; `PosNetV1Pos` başarılı callback'lerde her zaman geçerli MAC ister (imzasız reddedilmiş callback yalnız `require_3d_hash: true` ile reddedilir); `PayForPos` imzalı callback'i her zaman doğrular, onaylanan her 3D sonucunu döndürmeden önce bankayla doğrular (imzasız bir Ziraat Katılım callback'i tek başına ödemeyi asla onaylamaz); `InterPos` imzalı callback'i sabit bir alan listesi üzerinden her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder ve onaylanan her 3D Pay / 3D Host sonucunu döndürmeden önce bankayla doğrular; `KuveytPos` bankanın `HashData`'sını her zaman doğrular, provizyonu sizin siparişinizden kurar ve bankanın cevabını siparişe bağlar; `VakifKatilimPos` 3D Secure için aynısını yapar ve onaylanan her 3D Host ödemesini bankayla doğrular (3D Host formu hash'lenmiş API şifresini taşır); `ToslaPos` imzalı callback'i sabit bir alan listesi üzerinden her zaman doğrular, imzasız olanı yalnız ret olarak kabul eder ve onaylanan her 3D Pay / 3D Host sonucunu bankanın kendi kaydıyla doğrular (callback tutarı ve para birimini imzalamaz); `ParamPos` ve `Param3DHostPos`, Param callback'leri imzalandıkları üye işyeri GUID'ini taşıdığı için onaylanan her ödemeyi bankanın durum kaydıyla doğrular ve ortak sayfa ödemelerini siparişten türetilen bir işlem kimliğiyle siparişe bağlar; `PayTrPos` ödemeyi yalnız imzalı sunucudan sunucuya bildirimle onaylar ve bildirimi siparişin numarasına ve tutarına bağlar (tarayıcının başarılı/başarısız sayfaları asla onaylamaz); `IyzicoPos` iyzico'nun callback ve cevap imzalarını doğrular ve her ödeme onayını (satış, provizyon, provizyon kapama, ödeme formu kaydı) siparişin sepet numarasına, tutarına, para birimine ve aşamasına bağlar; iadeler imzalıdır ve ödeme numarasına ve tutara bağlanır, iptal cevapları ise imzasızdır ve yalnızca (varsa) konuşma numarası ile ödeme numarası kontrol edilir.
+3. Callback doğrulamasını kapatan bir seçenek yoktur; her gateway'in callback'lerini nasıl doğruladığı [güvenlik kılavuzunda](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#how-each-gateway-verifies-callbacks) listelenir.
 4. Hassas veri (PAN, CVV, son kullanma, şifreler, store key) logger'a ulaşmadan maskelenir.
 5. Sabit zamanlı hash karşılaştırması; Asseco hash'i bankanın beklediği doğal, büyük/küçük harf duyarsız anahtar sıralamasını birebir kullanır.
 6. Ek Asseco, Garanti ve Akbank korumaları: dönen sipariş numarası, tutar ve ödeme modeli (Garanti'de ayrıca terminal ve para birimi) siparişle karşılaştırılır
@@ -197,6 +209,7 @@ olmalıdır. `GarantiPos` ayrıca `history` ve `getBinList`, `AkbankPos`, `PayFo
 9. Giden veriyi incelemek veya değiştirmek için kancalar (`onRequestDataPrepared`, `onBefore3DFormHashCalculated`).
 10. `fetch` tabanlı ince HTTP katmanı (enjekte edilebilir, varsayılan zaman aşımı 60 sn); banka HTML/WAF sayfaları
     `PosHttpError` fırlatır.
+11. Her gateway'de aynı olan kütüphane genelindeki kurallar ([güvenlik kılavuzu](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)): `createWithoutCard: true` ile kurulan bir form asla kart içermez ([Building forms without the card](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#building-forms-without-the-card)); tek bir sipariş numarası kuralı vardır: 1 ile 64 arası harf, rakam, `_` veya `-`, ilk karakter harf veya rakam ([Order ids](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#order-ids)); para hareketi yapan bir istekten sonra sonuç taşımayan cevap bilinmeyen bir sonuçtur ve `declined` değil `PosHttpError` fırlatır ([Sonuç bilinmiyor](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md#outcome-unknown)); her `status`, `cancel`, `refund`, `orderHistory` ve `payment` sonucunda `status`, `order_id`, `proc_return_code`, `error_code`, `error_message` ve `all` anahtarları bulunur ([Ödemeden sonra](https://github.com/mkiyak/typescript-pos/blob/main/guides/after-payment.md)).
 
 ## Güvenlik
 
@@ -210,6 +223,15 @@ sunucunuzun dışında tutar.
 [SemVer](https://semver.org). 1.0 öncesinde kırıcı değişiklik minor, diğer değişiklikler patch sürümü artırır.
 Commit'ler [Conventional Commits](https://www.conventionalcommits.org) kurallarına uyar; sürümler
 [Changesets](https://github.com/changesets/changesets) ile yönetilir (bkz. [CONTRIBUTING.md](https://github.com/mkiyak/typescript-pos/blob/main/CONTRIBUTING.md)).
+
+### 0.14'e yükseltme
+
+Dört kural davranış değiştirdi; ayrıntılar değişiklik günlüğündedir.
+
+- `createWithoutCard: true` asla bir tarayıcı formuna kart koymaz; yine de verdiğiniz kart atılır.
+- Sipariş numarası 1 ile 64 arası harf, rakam, `_` veya `-` olmalı ve harf ya da rakamla başlamalıdır (POSNET: en çok 20 karakter).
+- Para hareketi yapan bir istekten (iadeler dahil) sonra sonuç taşımayan cevap `declined` yerine `PosHttpError` fırlatır.
+- `IyzicoPos.make3DPayPayment` artık `UnsupportedPaymentModelError` fırlatır (önceden `UnsupportedTransactionTypeError`).
 
 ## Lisans
 
