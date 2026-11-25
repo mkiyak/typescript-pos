@@ -5,7 +5,7 @@ import type { RequestDataMapperInterface } from '../data-mapper/request/mapper/R
 import type { RequestValueFormatterInterface } from '../data-mapper/request/value-formatter/RequestValueFormatterInterface.js'
 import type { RequestValueMapperInterface } from '../data-mapper/request/value-mapper/RequestValueMapperInterface.js'
 import type { ResponseDataMapperInterface } from '../data-mapper/response/mapper/ResponseDataMapperInterface.js'
-import { PosError, UnsupportedPaymentModelError, UnsupportedTransactionTypeError } from '../errors.js'
+import { PosError, PosHttpError, UnsupportedPaymentModelError, UnsupportedTransactionTypeError } from '../errors.js'
 import { prepareRequestDataWithHooks } from '../hooks.js'
 import { createSafeLogger, type PosLogger } from '../logger.js'
 import type { AbstractPosAccount } from '../model/account/AbstractPosAccount.js'
@@ -293,6 +293,12 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
     throw new UnsupportedPaymentModelError(`Unsupported payment model: ${paymentModel}`)
   }
 
+  /**
+   * Non-secure sale or pre-authorization.
+   *
+   * @throws PosHttpError when the bank's answer carries no result: the payment may have gone through, check `status`
+   *   before any retry
+   */
   async makeRegularPayment(order: PosOrder, card: CreditCard, txType: TxType): Promise<PosResponse> {
     const paymentModel = MODEL.NON_SECURE
     this.logger.debug('making payment', { model: paymentModel, tx_type: txType })
@@ -307,10 +313,17 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
       paymentModel,
     )
     const bankResponse = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, bankResponse)
 
     return this.responseDataMapper.mapPaymentResponse(bankResponse, txType, order)
   }
 
+  /**
+   * Post-authorization (capture) of a pre-authorized order.
+   *
+   * @throws PosHttpError when the bank's answer carries no result: the capture may have gone through, check `status`
+   *   before any retry
+   */
   async makeRegularPostPayment(order: PosOrder): Promise<PosResponse> {
     const txType = TX_TYPE.PAY_POST_AUTH
     const paymentModel = MODEL.NON_SECURE
@@ -323,13 +336,19 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
       paymentModel,
     )
     const bankResponse = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, bankResponse)
 
     return this.responseDataMapper.mapPaymentResponse(bankResponse, txType, order)
   }
 
   // ---- non-payment transactions ----
 
-  /** Full refund, or partial refund when `order.order_amount` is set and `order.amount` is lower. */
+  /**
+   * Full refund, or partial refund when `order.order_amount` is set and `order.amount` is lower.
+   *
+   * @throws PosHttpError when the bank's answer carries no result: the refund may have gone through, check `status`
+   *   before any retry
+   */
   async refund(order: PosOrder): Promise<PosResponse> {
     const paymentModel = MODEL.NON_SECURE
     let txType: TxType = TX_TYPE.REFUND
@@ -345,6 +364,7 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
       paymentModel,
     )
     const bankResponse = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, bankResponse)
 
     return this.responseDataMapper.mapRefundResponse(bankResponse)
   }
@@ -508,6 +528,29 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
     url: string | null = null,
   ): Promise<Record<string, unknown>> {
     return this.getClient(txType, paymentModel).request(txType, paymentModel, requestData, order, url)
+  }
+
+  /**
+   * The answer to a request that can move money (payment, pre-/post-authorization, 3D provision, refund) must carry a
+   * result code. An empty answer (HTTP 204, an empty body or root) or one without a result code says nothing about the
+   * money: it may have moved, so mapping it as a decline would invite a retry and a double charge. Cancels, status
+   * and history requests are not checked: repeating them cannot move money twice.
+   *
+   * @throws PosHttpError when the answer carries no result (the outcome is unknown; check `status` before any retry)
+   */
+  protected assertAnswerHasResult(txType: TxType, answer: Record<string, unknown>): void {
+    const code: unknown = Object.keys(answer).length === 0 ? null : this.responseDataMapper.readProcReturnCode(answer)
+    if (typeof code === 'string' && code.trim() !== '') {
+      return
+    }
+
+    this.logger.error('bank answer carries no result; the outcome is unknown', {
+      tx_type: txType,
+      gateway: this.gatewayClassName(),
+    })
+    throw new PosHttpError('Bank answer carries no result; the outcome is unknown', {
+      url: this.config.gateway_endpoints.payment_api,
+    })
   }
 
   protected is3dAuthSuccess(responseData: Record<string, unknown>): boolean {

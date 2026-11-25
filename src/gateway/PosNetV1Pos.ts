@@ -152,6 +152,8 @@ export class PosNetV1Pos extends AbstractGateway<PosNetPosAccount> {
    *   signed fields of a successful callback are malformed
    * @throws OrderMismatchError when the callback echoes another order number, amount, currency, merchant or
    *   transaction type (nothing is provisioned)
+   * @throws PosHttpError when the provision answer carries no result: the payment may have gone through, check
+   *   `status` before any retry
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -192,6 +194,7 @@ export class PosNetV1Pos extends AbstractGateway<PosNetPosAccount> {
       paymentModel,
     )
     const provisionResponse = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, provisionResponse)
 
     const response = this.responseDataMapper.map3DPaymentData(gatewayResponseData, provisionResponse, txType, order)
     this.logger.debug('finished 3D payment', { mapped_response: response })

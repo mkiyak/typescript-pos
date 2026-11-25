@@ -42,6 +42,13 @@ class TestMapper extends AbstractResponseDataMapper {
 describe('AbstractResponseDataMapper', () => {
   const m = new TestMapper(new BasicResponseValueFormatter(), new VM())
 
+  // addition: L3 the gateway reads the result code of a money answer before mapping it
+  it('readProcReturnCode returns the result code the mapper decides on', () => {
+    expect(m.readProcReturnCode({ ProcReturnCode: '05' })).toBe('05')
+    expect(m.readProcReturnCode({})).toBeNull()
+    expect(m.readProcReturnCode({ ProcReturnCode: '00' })).toBe(m.procCode({ ProcReturnCode: '00' }))
+  })
+
   it('exposes the constants', () => {
     expect(AbstractResponseDataMapper.PROCEDURE_SUCCESS_CODE).toBe('00')
     expect(AbstractResponseDataMapper.TX_APPROVED).toBe('approved')

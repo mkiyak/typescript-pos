@@ -353,7 +353,11 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
     return redactHashPassword(await super.cancel(order))
   }
 
-  /** @throws UnsupportedTransactionTypeError for a partial refund: the bank's request carries no amount */
+  /**
+   * @throws UnsupportedTransactionTypeError for a partial refund: the bank's request carries no amount
+   * @throws PosHttpError when the refund answer carries no response code: the refund may have gone through, check
+   *   `status` before any retry
+   */
   override async refund(order: PosOrder): Promise<PosResponse> {
     const orderAmount = order.order_amount
     if (orderAmount !== undefined && orderAmount !== null && Number(order.amount) < Number(orderAmount)) {

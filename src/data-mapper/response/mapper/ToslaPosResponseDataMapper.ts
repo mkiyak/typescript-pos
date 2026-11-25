@@ -252,6 +252,17 @@ export class ToslaPosResponseDataMapper extends AbstractResponseDataMapper {
     return 'MPI fallback'
   }
 
+  /**
+   * The result code `Code` of an answer as text, when it is an own integer number. Every answer carries it, a refund
+   * declined before it reached the card network has no bank response code, and a refund is approved on `Code` alone;
+   * an answer without it says nothing about the money.
+   */
+  override readProcReturnCode(raw: Raw): string | null {
+    const code = isRecord(raw) && Object.hasOwn(raw, 'Code') ? raw.Code : undefined
+
+    return typeof code === 'number' && Number.isSafeInteger(code) ? String(code) : null
+  }
+
   /** The own `BankResponseCode` text exactly as sent. */
   protected getProcReturnCode(response: Raw): string | null {
     return ownString(response, 'BankResponseCode')

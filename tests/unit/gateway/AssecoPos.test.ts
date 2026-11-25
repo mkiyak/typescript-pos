@@ -17,6 +17,7 @@ import {
   HashMismatchError,
   OrderMismatchError,
   PosError,
+  PosHttpError,
   UnsupportedFormFormatError,
   UnsupportedTransactionTypeError,
 } from '../../../src/errors.js'
@@ -123,6 +124,8 @@ describe('AssecoPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -515,7 +518,8 @@ describe('AssecoPos (mocked collaborators)', () => {
     ],
     [
       '3d_auth_success_payment_fail',
-      { currency: CURRENCY.TRY, amount: 1.01 },
+      // deviation: L8 a 3D-successful callback is bound to the order id before the provision; the order names it
+      { id: '20221030FE4C', currency: CURRENCY.TRY, amount: 1.01 },
       TX_TYPE.PAY_AUTH,
       { oid: '20221030FE4C', mdStatus: '1' },
       { ProcReturnCode: '99' },
@@ -524,7 +528,8 @@ describe('AssecoPos (mocked collaborators)', () => {
     ],
     [
       'success',
-      { currency: CURRENCY.TRY, amount: 1.01 },
+      // deviation: L8 a 3D-successful callback is bound to the order id before the provision; the order names it
+      { id: '202210304547', currency: CURRENCY.TRY, amount: 1.01 },
       TX_TYPE.PAY_AUTH,
       { oid: '202210304547', mdStatus: '1' },
       { ProcReturnCode: '00' },
@@ -1008,5 +1013,231 @@ describe('AssecoPos (end to end)', () => {
     expect(form.gateway).toBe(config.gateway_endpoints.gateway_3d)
     expect(form.inputs.oid).toBe('order222')
     expect(crypt.check3DHash(acc, { ...form.inputs, HASH: form.inputs.hash })).toBe(true)
+  })
+})
+
+// ---------- unknown outcome after a money request, 3D Secure callback bound to the order ----------
+
+const SECURE_CALLBACK = {
+  ...payCallback,
+  storetype: '3d',
+  md: '435508:EC9C:4333:##700655000200',
+  xid: 'xid',
+}
+
+const xmlAnswer = (inner: string): string =>
+  `<?xml version="1.0" encoding="ISO-8859-9"?><CC5Response>${inner}</CC5Response>`
+
+const APPROVED_PROVISION = xmlAnswer(
+  '<OrderId>2022103030CB</OrderId><GroupId>2022103030CB</GroupId><Response>Approved</Response><AuthCode>P1</AuthCode>' +
+    '<HostRefNum>1</HostRefNum><ProcReturnCode>00</ProcReturnCode><TransId>T1</TransId><ErrMsg></ErrMsg>' +
+    '<Extra><TRXDATE>20221030 11:51:41</TRXDATE><NUMCODE>00</NUMCODE></Extra>',
+)
+
+/** A fetch answering every request with `answer()` and counting the requests. */
+function answeringFetch(answer: () => Response) {
+  const sent: string[] = []
+  const fetchImpl = (async (url: unknown) => {
+    sent.push(String(url))
+    return answer()
+  }) as unknown as typeof fetch
+
+  return { sent, fetchImpl }
+}
+
+const RESULTLESS: Array<[string, () => Response]> = [
+  ['HTTP 204', () => new Response(null, { status: 204 })],
+  ['an empty root', () => new Response(xmlAnswer(''))],
+  [
+    'a record without ProcReturnCode',
+    () => new Response(xmlAnswer('<OrderId>2022103030CB</OrderId><Response>Approved</Response><TransId>T1</TransId>')),
+  ],
+  [
+    'an empty ProcReturnCode',
+    () => new Response(xmlAnswer('<OrderId>2022103030CB</OrderId><ProcReturnCode></ProcReturnCode>')),
+  ],
+  [
+    'a blank ProcReturnCode',
+    () => new Response(xmlAnswer('<OrderId>2022103030CB</OrderId><ProcReturnCode>  </ProcReturnCode>')),
+  ],
+  [
+    'ProcReturnCode twice',
+    () =>
+      new Response(
+        xmlAnswer(
+          '<OrderId>2022103030CB</OrderId><ProcReturnCode>00</ProcReturnCode><ProcReturnCode>00</ProcReturnCode>',
+        ),
+      ),
+  ],
+]
+
+const UNKNOWN_OUTCOME = 'Bank answer carries no result; the outcome is unknown'
+
+describe('AssecoPos (end to end) unknown outcome after a money request', () => {
+  const saleCard = (p: AssecoPos) =>
+    CreditCardFactory.createForGateway(p, '5555444433332222', '21', '12', '122', 'ahmet', CARD_TYPE.VISA)
+  const order: PosOrder = { id: '2022103030CB', amount: 1.01, currency: CURRENCY.TRY }
+
+  // addition: L3 a sale, pre-/post-authorization or refund whose answer carries no result is an unknown outcome
+  it.each(RESULTLESS)(
+    'a non-secure sale, pre-/post-auth and refund answered with %s are PosHttpError',
+    async (_n, answer) => {
+      const actions: Array<(p: AssecoPos) => Promise<unknown>> = [
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, saleCard(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_PRE_AUTH, saleCard(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_POST_AUTH),
+        (p) => p.refund(order),
+        (p) => p.refund({ ...order, amount: 0.5, order_amount: 1.01 }),
+      ]
+      for (const action of actions) {
+        const { sent, fetchImpl } = answeringFetch(answer)
+        const err = await action(realGateway(fetchImpl).pos).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([
+          UNKNOWN_OUTCOME,
+          config.gateway_endpoints.payment_api,
+        ])
+        expect(sent).toHaveLength(1)
+      }
+    },
+  )
+
+  // addition: L3 the 3D provision answer is checked before it is mapped
+  it.each(RESULTLESS)('a 3D Secure provision answered with %s is PosHttpError, never mapped', async (_n, answer) => {
+    const { sent, fetchImpl } = answeringFetch(answer)
+    const { pos, crypt, account: acc } = realGateway(fetchImpl)
+    const mapped = vi.spyOn(AssecoPosResponseDataMapper.prototype, 'map3DPaymentData')
+    try {
+      const err = await pos
+        .payment(MODEL.THREE_D_SECURE, payOrder, TX_TYPE.PAY_AUTH, null, signedCallback(crypt, acc, SECURE_CALLBACK))
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([
+        UNKNOWN_OUTCOME,
+        config.gateway_endpoints.payment_api,
+      ])
+      expect(sent).toHaveLength(1)
+      expect(mapped).not.toHaveBeenCalled()
+    } finally {
+      mapped.mockRestore()
+    }
+  })
+
+  // addition: L3 a genuine decline with a result code is still a decline; a cancel moves no new money
+  it('a sale and a provision declined with ProcReturnCode 99 are declined; a cancel answered with 204 too', async () => {
+    const declined = () =>
+      new Response(
+        xmlAnswer(
+          '<OrderId>2022103030CB</OrderId><Response>Declined</Response><ProcReturnCode>99</ProcReturnCode><ErrMsg>Red</ErrMsg>',
+        ),
+      )
+    const sale = realGateway(answeringFetch(declined).fetchImpl).pos
+    const res = await sale.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, saleCard(sale))
+    expect([res.status, res.proc_return_code]).toStrictEqual(['declined', '99'])
+
+    const { pos, crypt, account: acc } = realGateway(answeringFetch(declined).fetchImpl)
+    const provision = await pos.payment(
+      MODEL.THREE_D_SECURE,
+      payOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      signedCallback(crypt, acc, SECURE_CALLBACK),
+    )
+    expect([provision.status, provision.proc_return_code]).toStrictEqual(['declined', '99'])
+
+    const cancel = realGateway(answeringFetch(() => new Response(null, { status: 204 })).fetchImpl).pos
+    expect((await cancel.cancel(order)).status).toBe('declined')
+  })
+})
+
+describe('AssecoPos (end to end) 3D Secure callback bound to the order before the provision', () => {
+  const run = async (callback: Record<string, string>, order: PosOrder = payOrder) => {
+    const { sent, fetchImpl } = answeringFetch(() => new Response(APPROVED_PROVISION))
+    const hook = vi.fn()
+    const { pos, crypt, account: acc } = realGateway(fetchImpl, { onRequestDataPrepared: [hook] })
+    const result = await pos
+      .payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH, null, signedCallback(crypt, acc, callback))
+      .catch((e: unknown) => e)
+
+    return { result, sent, hook }
+  }
+
+  // addition: L8 a signed callback of another order, amount or currency never reaches the provision
+  it.each([
+    [
+      'another order id',
+      { ...SECURE_CALLBACK, oid: 'ORDER1' },
+      { ...payOrder, id: 'ORDER12' },
+      'order_id',
+      'ORDER12',
+      'ORDER1',
+    ],
+    [
+      'a longer order id',
+      { ...SECURE_CALLBACK, oid: 'ORDER12' },
+      { ...payOrder, id: 'ORDER1' },
+      'order_id',
+      'ORDER1',
+      'ORDER12',
+    ],
+    [
+      'a padded order id',
+      { ...SECURE_CALLBACK, oid: ' 2022103030CB' },
+      payOrder,
+      'order_id',
+      '2022103030CB',
+      ' 2022103030CB',
+    ],
+    ['no order id', (({ oid: _o, ...rest }) => rest)(SECURE_CALLBACK), payOrder, 'order_id', '2022103030CB', ''],
+    ['an empty order id', { ...SECURE_CALLBACK, oid: '' }, payOrder, 'order_id', '2022103030CB', ''],
+    ['an order without id', SECURE_CALLBACK, { amount: 1.01, currency: CURRENCY.TRY }, 'order_id', '', '2022103030CB'],
+    ['another amount', { ...SECURE_CALLBACK, amount: '10.01' }, { ...payOrder, amount: 10 }, 'amount', '10', '10.01'],
+    ['a malformed amount', { ...SECURE_CALLBACK, amount: '1.01x' }, payOrder, 'amount', '1.01', '1.01x'],
+    ['an empty amount', { ...SECURE_CALLBACK, amount: '' }, payOrder, 'amount', '1.01', ''],
+    ['another currency', { ...SECURE_CALLBACK, currency: '840' }, payOrder, 'currency', '949', '840'],
+    ['a padded currency', { ...SECURE_CALLBACK, currency: '949 ' }, payOrder, 'currency', '949', '949 '],
+    ['the currency of a USD order', SECURE_CALLBACK, { ...payOrder, currency: CURRENCY.USD }, 'currency', '840', '949'],
+  ] as const)(
+    'a hash-valid callback with %s is OrderMismatchError before any request',
+    async (_n, cb, order, field, expected, actual) => {
+      const { result, sent, hook } = await run(cb as Record<string, string>, order as PosOrder)
+      expect(result).toBeInstanceOf(OrderMismatchError)
+      const err = result as OrderMismatchError
+      expect([err.field, err.expected, err.actual]).toStrictEqual([field, expected, actual])
+      expect(err.paymentMayHaveCompleted).toBe(false)
+      expect(err.response).toBeUndefined()
+      expect(sent).toHaveLength(0)
+      expect(hook).not.toHaveBeenCalled()
+    },
+  )
+
+  it('the same callback provisions an order whose amount is within 0.005, with or without a currency', async () => {
+    for (const order of [
+      payOrder,
+
+      { ...payOrder, amount: 1.0149 },
+      { id: '2022103030CB', amount: 1.01 },
+    ]) {
+      const { result, sent, hook } = await run(SECURE_CALLBACK, order as PosOrder)
+      expect((result as Data).status).toBe('approved')
+      expect(sent).toHaveLength(1)
+      expect(hook).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('a callback without amount or currency is bound by its order id only', async () => {
+    const { amount: _a, currency: _c, ...withoutBoth } = SECURE_CALLBACK
+    const { result, sent } = await run(withoutBoth)
+    expect((result as Data).status).toBe('approved')
+    expect(sent).toHaveLength(1)
+    const other = await run({ ...withoutBoth, oid: 'X' })
+    expect((other.result as OrderMismatchError).field).toBe('order_id')
+    expect(other.sent).toHaveLength(0)
+  })
+
+  it('a failed 3D authentication is still mapped as a decline without binding or request', async () => {
+    const { result, sent } = await run({ ...SECURE_CALLBACK, oid: 'SOMEONE-ELSE', mdStatus: '0' })
+    expect((result as Data).status).toBe('declined')
+    expect(sent).toHaveLength(0)
   })
 })

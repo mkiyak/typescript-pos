@@ -187,6 +187,8 @@ export class AkbankPos extends AbstractGateway<AkbankPosAccount> {
    * @throws HashMismatchError when a present hash does not verify, a 3D-successful callback is unsigned, or the
    *   signed fields are malformed
    * @throws OrderMismatchError when the callback does not belong to the order or account (nothing is sent)
+   * @throws PosHttpError when the provision answer carries no result: the payment may have gone through, check the
+   *   order history before any retry
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -231,6 +233,7 @@ export class AkbankPos extends AbstractGateway<AkbankPosAccount> {
       paymentModel,
     )
     const provisionResponse = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, provisionResponse)
 
     const response = this.responseDataMapper.map3DPaymentData(gatewayResponseData, provisionResponse, txType, order)
     this.logger.debug('finished 3D payment', { mapped_response: response })

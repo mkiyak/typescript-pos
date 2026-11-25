@@ -279,6 +279,10 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
     return redactHashPassword(await super.cancel(order))
   }
 
+  /**
+   * @throws PosHttpError when the refund answer carries no response code (at the top or under the drawback result):
+   *   the refund may have gone through, check `status` before any retry
+   */
   override async refund(order: PosOrder): Promise<PosResponse> {
     return redactHashPassword(await super.refund(order))
   }

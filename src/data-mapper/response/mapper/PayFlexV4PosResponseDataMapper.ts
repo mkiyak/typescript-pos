@@ -248,8 +248,13 @@ export class PayFlexV4PosResponseDataMapper extends AbstractResponseDataMapper {
     return text(raw3DAuthResponseData, 'Status')
   }
 
+  /** `ResultCode` as text; a repeated or nested element (a list or record) reads as no code. */
   protected getProcReturnCode(response: Raw): string | null {
-    return text(response, 'ResultCode')
+    const code = field(response, 'ResultCode')
+    if (typeof code === 'string') return code
+    if ((typeof code === 'number' && Number.isFinite(code)) || typeof code === 'bigint') return String(code)
+
+    return null
   }
 
   private getCommonPaymentResponse(responseData: Raw, txType: TxType): PosResponse {

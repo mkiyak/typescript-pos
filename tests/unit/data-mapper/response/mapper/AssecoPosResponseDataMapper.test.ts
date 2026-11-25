@@ -70,6 +70,19 @@ describe('AssecoPosResponseDataMapper', () => {
   const integrationMapper = () =>
     new AssecoPosResponseDataMapper(new AssecoPosResponseValueFormatter(), new AssecoPosResponseValueMapper())
 
+  // addition: L3 the result code the gateway checks after a money request; a repeated or nested element is no code
+  it.each([
+    [{ ProcReturnCode: '00' }, '00'],
+    [{ ProcReturnCode: '99' }, '99'],
+    [{ ProcReturnCode: '' }, ''],
+    [{}, null],
+    [{ ProcReturnCode: ['00', '00'] }, null],
+    [{ ProcReturnCode: { a: '00' } }, null],
+    [{ ProcReturnCode: true }, null],
+  ] as Array<[Record<string, unknown>, string | null]>)('readProcReturnCode(%j) is %j', (raw, expected) => {
+    expect(mapper.readProcReturnCode(raw)).toBe(expected)
+  })
+
   it('supports', () => {
     expect(AssecoPosResponseDataMapper.supports('AssecoPos')).toBe(true)
     expect(AssecoPosResponseDataMapper.supports('AkbankPos')).toBe(false)

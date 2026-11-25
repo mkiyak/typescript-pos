@@ -11,6 +11,7 @@ import { BasicResponseValueFormatter } from '../../../src/data-mapper/response/v
 import { AbstractResponseValueMapper } from '../../../src/data-mapper/response/value-mapper/AbstractResponseValueMapper.js'
 import {
   PosError,
+  PosHttpError,
   UnsupportedFormFormatError,
   UnsupportedPaymentModelError,
   UnsupportedTransactionTypeError,
@@ -127,8 +128,8 @@ class StubResponseDataMapper extends AbstractResponseDataMapper {
   mapOrderHistoryResponse = (raw: Record<string, unknown>): PosResponse => this.map(raw, TX_TYPE.ORDER_HISTORY)
   extractMdStatus = (raw: Record<string, unknown>): string | null => (raw.mdStatus as string | undefined) ?? null
   is3dAuthSuccess = (md: string | null): boolean => md === '1'
-  protected getProcReturnCode(): string | null {
-    return null
+  protected getProcReturnCode(raw: Record<string, unknown>): string | null {
+    return Object.hasOwn(raw, 'code') && typeof raw.code === 'string' ? raw.code : null
   }
 }
 
@@ -215,7 +216,7 @@ function echoTransport(sent: Sent[], delayFor: (body: Record<string, unknown>) =
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>
     sent.push({ url: String(url), body })
     await new Promise((r) => setTimeout(r, delayFor(body)))
-    return new Response(JSON.stringify({ order_id: body.id, echo: body }), { status: 200 })
+    return new Response(JSON.stringify({ order_id: body.id, code: '00', echo: body }), { status: 200 })
   }
   return new HttpTransport({ fetch: fakeFetch as typeof fetch })
 }
@@ -625,6 +626,77 @@ describe('AbstractGateway', () => {
       await gateway.refund({ id: 'F', amount: 10, order_amount: 10 })
       await gateway.refund({ id: 'N', amount: 10 })
       expect(sent.map((s) => s.body.txType)).toEqual(['refund_partial', 'refund', 'refund'])
+    })
+  })
+
+  // addition: L3 a money request whose answer carries no result code is an unknown outcome, never a decline
+  describe('unknown outcome after a money request', () => {
+    const answering = (body: string | null, status = 200): HttpTransport =>
+      new HttpTransport({ fetch: (async () => new Response(body, { status })) as unknown as typeof fetch })
+
+    const moneyRequests: Array<[string, TxType, (g: StubGateway) => Promise<PosResponse>]> = [
+      ['makeRegularPayment (pay)', TX_TYPE.PAY_AUTH, (g) => g.makeRegularPayment({ id: 'O1' }, card, TX_TYPE.PAY_AUTH)],
+      [
+        'makeRegularPayment (pre)',
+        TX_TYPE.PAY_PRE_AUTH,
+        (g) => g.makeRegularPayment({ id: 'O1' }, card, TX_TYPE.PAY_PRE_AUTH),
+      ],
+      ['makeRegularPostPayment', TX_TYPE.PAY_POST_AUTH, (g) => g.makeRegularPostPayment({ id: 'O1' })],
+      ['refund (full)', TX_TYPE.REFUND, (g) => g.refund({ id: 'O1', amount: 10 })],
+      ['refund (partial)', TX_TYPE.REFUND_PARTIAL, (g) => g.refund({ id: 'O1', amount: 5, order_amount: 10 })],
+    ]
+    const resultless: Array<[string, string | null, number]> = [
+      ['an empty JSON object', '{}', 200],
+      ['an unrelated field only', '{"unrelated":"x"}', 200],
+      ['HTTP 204', null, 204],
+      ['a blank code', '{"code":"   "}', 200],
+      ['an empty code', '{"code":""}', 200],
+      ['a null code', '{"code":null}', 200],
+      ['a list code', '{"code":["00"]}', 200],
+    ]
+    const cases = moneyRequests.flatMap(([name, txType, call]) =>
+      resultless.map(([answer, body, status]) => [name, answer, txType, call, body, status] as const),
+    )
+
+    it.each(cases)('%s answered with %s -> PosHttpError', async (_name, _answer, txType, call, body, status) => {
+      const logger = spyLogger()
+      const { gateway } = build({ transport: answering(body, status), logger })
+      const mapper = (gateway as unknown as { responseDataMapper: StubResponseDataMapper }).responseDataMapper
+      const mapPayment = vi.spyOn(mapper, 'mapPaymentResponse')
+      const mapRefund = vi.spyOn(mapper, 'mapRefundResponse')
+
+      const err = (await call(gateway).catch((e: unknown) => e)) as PosHttpError
+
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect(err.message).toBe('Bank answer carries no result; the outcome is unknown')
+      expect(err.url).toBe(config.gateway_endpoints.payment_api)
+      expect(err.status).toBeUndefined()
+      expect(logger.error).toHaveBeenCalledWith('bank answer carries no result; the outcome is unknown', {
+        tx_type: txType,
+        gateway: 'StubGateway',
+      })
+      expect(mapPayment).not.toHaveBeenCalled()
+      expect(mapRefund).not.toHaveBeenCalled()
+    })
+
+    it.each(moneyRequests)('%s with a result code is still mapped', async (_name, _txType, call) => {
+      const { gateway } = build({ transport: answering('{"code":"05","order_id":"O1"}') })
+      const res = await call(gateway)
+      expect(res.order_id).toBe('O1')
+      expect(res.all).toStrictEqual({ code: '05', order_id: 'O1' })
+    })
+
+    it.each([
+      ['cancel', (g: StubGateway) => g.cancel({ id: 'O1' }), 'mapCancelResponse'],
+      ['status', (g: StubGateway) => g.status({ id: 'O1' }), 'mapStatusResponse'],
+      ['orderHistory', (g: StubGateway) => g.orderHistory({ id: 'O1' }), 'mapOrderHistoryResponse'],
+    ] as const)('%s with {} still reaches the mapper (no money moves twice)', async (_name, call, method) => {
+      const { gateway } = build({ transport: answering('{}') })
+      const mapper = (gateway as unknown as { responseDataMapper: StubResponseDataMapper }).responseDataMapper
+      const spy = vi.spyOn(mapper, method)
+      const res = await call(gateway)
+      expect(spy).toHaveBeenCalledWith({})
+      expect(res.all).toStrictEqual({})
     })
   })
 

@@ -207,6 +207,8 @@ describe('AkbankPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -1624,5 +1626,86 @@ describe('AkbankPos (end to end) API requests', () => {
     }
     expect(logged).not.toContain('5555444433332222')
     expect(logged).not.toMatch(/cvv2?\\?"\s*:\s*\\?"?122/i)
+  })
+})
+
+describe('AkbankPos (end to end) unknown outcome after a money request', () => {
+  const UNKNOWN = 'Bank answer carries no result; the outcome is unknown'
+  const resultless: Array<[string, () => Response | Data]> = [
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['an empty object', () => ({})],
+    [
+      'a record without responseCode',
+      () => ({ txnCode: '1000', responseMessage: 'Başarılı', order: { orderId: 'A1' } }),
+    ],
+    ['an empty responseCode', () => ({ txnCode: '1000', responseCode: '' })],
+    ['a blank responseCode', () => ({ txnCode: '1000', responseCode: '  ' })],
+    ['a null responseCode', () => ({ txnCode: '1000', responseCode: null })],
+    ['a list responseCode', () => ({ txnCode: '1000', responseCode: ['VPS-0000'] })],
+    ['a record responseCode', () => ({ txnCode: '1000', responseCode: { code: 'VPS-0000' } })],
+  ]
+  const saleCard = (p: AkbankPos) =>
+    CreditCardFactory.createForGateway(p, '5555444433332222', '21', '12', '122', 'ahmet', CARD_TYPE.VISA)
+  const order: PosOrder = { ...secureE2EOrder }
+
+  // addition: L3 a sale, pre-/post-authorization or refund whose answer carries no result is an unknown outcome
+  it.each(resultless)(
+    'a sale, pre-/post-auth and full/partial refund answered with %s are PosHttpError',
+    async (_n, answer) => {
+      const actions: Array<(p: AkbankPos) => Promise<unknown>> = [
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, saleCard(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_PRE_AUTH, saleCard(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_POST_AUTH),
+        (p) => p.refund(order),
+        (p) => p.refund({ ...order, amount: 0.5, order_amount: 1.01 }),
+      ]
+      for (const action of actions) {
+        const { sent, fetchImpl } = bankFetch(answer)
+        const err = await action(realGateway(fetchImpl)).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+        expect(sent).toHaveLength(1)
+      }
+    },
+  )
+
+  // addition: L3 the 3D provision answer is checked before it is mapped
+  it.each(resultless)('a 3D Secure provision answered with %s is PosHttpError, never mapped', async (_n, answer) => {
+    const { sent, fetchImpl } = bankFetch(answer)
+    const mapped = vi.spyOn(AkbankPosResponseDataMapper.prototype, 'map3DPaymentData')
+    try {
+      const err = await realGateway(fetchImpl)
+        .payment(MODEL.THREE_D_SECURE, secureE2EOrder, TX_TYPE.PAY_AUTH, null, cb(secureSuccess()))
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+      expect(sent).toHaveLength(1)
+      expect(mapped).not.toHaveBeenCalled()
+    } finally {
+      mapped.mockRestore()
+    }
+  })
+
+  // addition: L3 a genuine decline with a result code is still a decline; a cancel moves no new money
+  it('a partial refund and a provision declined with VPS-1073 are declined; a cancel answered with 204 too', async () => {
+    const declined = () => ({ txnCode: '1000', responseCode: 'VPS-1073', responseMessage: 'Red' })
+    const refund = await realGateway(bankFetch(declined).fetchImpl).refund({
+      ...order,
+      amount: 0.5,
+      order_amount: 1.01,
+    })
+    expect([refund.status, refund.proc_return_code]).toStrictEqual(['declined', 'VPS-1073'])
+
+    const provision = await realGateway(bankFetch(declined).fetchImpl).payment(
+      MODEL.THREE_D_SECURE,
+      secureE2EOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      cb(secureSuccess()),
+    )
+    expect([provision.status, provision.proc_return_code]).toStrictEqual(['declined', 'VPS-1073'])
+
+    const cancel = await realGateway(bankFetch(() => new Response(null, { status: 204 })).fetchImpl).cancel(order)
+    expect(cancel.status).toBe('declined')
   })
 })

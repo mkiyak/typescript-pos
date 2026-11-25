@@ -140,6 +140,8 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
    * @throws HashMismatchError when the callback is 3D-successful but its hash is missing or does not verify
    * @throws PosError when a callback field is not a string
    * @throws OrderMismatchError when the callback does not belong to the order (nothing is sent to the bank)
+   * @throws PosHttpError when the provision answer carries no result: the payment may have gone through, check
+   *   `status` before any retry
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -183,6 +185,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
       paymentModel,
     )
     const provisionResponse = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, provisionResponse)
 
     const response = this.responseDataMapper.map3DPaymentData(gatewayResponseData, provisionResponse, txType, order)
     this.logger.debug('finished 3D payment', { mapped_response: response })

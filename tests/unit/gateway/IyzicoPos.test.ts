@@ -249,6 +249,7 @@ describe('IyzicoPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      readProcReturnCode: vi.fn(),
     }
     crypt = {
       hashString: vi.fn(),

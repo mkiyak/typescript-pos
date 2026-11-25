@@ -63,6 +63,21 @@ describe('KuveytPosResponseDataMapper', () => {
   const realMapper = (log?: PosLogger) =>
     new KuveytPosResponseDataMapper(new BoaPosResponseValueFormatter(), new KuveytPosResponseValueMapper(), log)
 
+  // addition: L3 the gateway checks the response code of a payment answer or, in a refund answer, of the drawback
+  // result's Value
+  it.each([
+    [{ ResponseCode: '00' }, '00'],
+    [{ PartialDrawbackResponse: { PartialDrawbackResult: { Value: { ResponseCode: '28' } } } }, '28'],
+    [{ DrawBackResponse: { DrawBackResult: { Value: { ResponseCode: '00' } } } }, '00'],
+    [{ DrawBackResponse: { DrawBackResult: { Value: { OrderId: 0 } } } }, null],
+    [{ DrawBackResponse: { DrawBackResult: { Value: { ResponseCode: { '@xsi:nil': 'true' } } } } }, null],
+    [{ DrawBackResponse: { DrawBackResult: [{ Value: { ResponseCode: '00' } }] } }, null],
+    [{ SaleReversalResponse: { SaleReversalResult: { Value: { ResponseCode: '00' } } } }, null],
+    [{}, null],
+  ] as Array<[Record<string, unknown>, string | null]>)('readProcReturnCode(%j) is %j', (raw, expected) => {
+    expect(mapper.readProcReturnCode(raw)).toBe(expected)
+  })
+
   it('supports', () => {
     expect(KuveytPosResponseDataMapper.supports('KuveytPos')).toBe(true)
     expect(KuveytPosResponseDataMapper.supports('AkbankPos')).toBe(false)

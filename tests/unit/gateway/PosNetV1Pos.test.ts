@@ -197,6 +197,8 @@ describe('PosNetV1Pos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -1225,5 +1227,72 @@ describe('PosNetV1Pos (end to end) partial refund', () => {
 
     expect(posted).toHaveLength(1)
     expect(posted[0]?.body.Amount).toBe(2500)
+  })
+})
+
+describe('PosNetV1Pos (end to end) unknown outcome after a money request', () => {
+  const UNKNOWN = 'Bank answer carries no result; the outcome is unknown'
+  const resultless: Array<[string, () => Data | Response]> = [
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['an empty object', () => ({})],
+    ['a record without ServiceResponseData', () => ({ AuthCode: '449324', ReferenceCode: '159044932490000231' })],
+    ['an empty ServiceResponseData', () => ({ ServiceResponseData: {}, AuthCode: '449324' })],
+    ['a null ResponseCode', () => ({ ServiceResponseData: { ResponseCode: null } })],
+    ['an empty ResponseCode', () => ({ ServiceResponseData: { ResponseCode: '' } })],
+    ['a blank ResponseCode', () => ({ ServiceResponseData: { ResponseCode: '  ' } })],
+    ['a list ResponseCode', () => ({ ServiceResponseData: { ResponseCode: ['00'] } })],
+    ['a list ServiceResponseData', () => ({ ServiceResponseData: [{ ResponseCode: '00' }] })],
+  ]
+  const card = () => CreditCardFactory.create('5555444433332222', '21', '12', '122', 'ahmet')
+  const order: PosOrder = { ...SUCCESS_ORDER, ref_ret_num: '159044932490000231', payment_model: MODEL.NON_SECURE }
+
+  // addition: L3 a sale, pre-/post-authorization or refund whose answer carries no result is an unknown outcome
+  it.each(resultless)(
+    'a sale, pre-/post-auth and full/partial refund answered with %s are PosHttpError',
+    async (_n, answer) => {
+      const actions: Array<(p: PosNetV1Pos) => Promise<unknown>> = [
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, card()),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_PRE_AUTH, card()),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_POST_AUTH),
+        (p) => p.refund(order),
+        (p) => p.refund({ ...order, amount: 1, order_amount: 1.75 }),
+      ]
+      for (const action of actions) {
+        const { posted, fetchImpl } = fakeBank(answer)
+        const err = await action(realGateway(fetchImpl)).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+        expect(posted).toHaveLength(1)
+      }
+    },
+  )
+
+  // addition: L3 the 3D provision answer is checked before it is mapped
+  it.each(resultless)('a 3D provision answered with %s is PosHttpError, never mapped', async (_n, answer) => {
+    const { posted, fetchImpl } = fakeBank(answer)
+    const mapped = vi.spyOn(PosNetV1PosResponseDataMapper.prototype, 'map3DPaymentData')
+    try {
+      const err = await pay3D(realGateway(fetchImpl), SUCCESS_ORDER, SUCCESS_CALLBACK).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+      expect(posted.map((p) => p.url)).toStrictEqual([`${PAYMENT_API}/Sale`])
+      expect(mapped).not.toHaveBeenCalled()
+    } finally {
+      mapped.mockRestore()
+    }
+  })
+
+  // addition: L3 a genuine decline with a result code is still a decline; a cancel moves no new money
+  it('a sale declined with ResponseCode 0148 is declined and a cancel answered with 204 too', async () => {
+    const sale = await realGateway(fakeBank(() => FAIL_PAYMENT_RESPONSE).fetchImpl).payment(
+      MODEL.NON_SECURE,
+      order,
+      TX_TYPE.PAY_AUTH,
+      card(),
+    )
+    expect([sale.status, sale.proc_return_code]).toStrictEqual(['declined', '0148'])
+
+    const cancel = await realGateway(fakeBank(() => new Response(null, { status: 204 })).fetchImpl).cancel(order)
+    expect(cancel.status).toBe('declined')
   })
 })

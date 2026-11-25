@@ -7,6 +7,14 @@ import { TX_APPROVED, TX_DECLINED } from './ResponseDataMapperInterface.js'
 
 const POSITIVE_INTEGER = /^\d+$/
 
+/** The result record of a partial or full refund answer. */
+function refundResult(source: Raw): Raw | null {
+  return (
+    child(child(source, 'PartialDrawbackResponse'), 'PartialDrawbackResult') ??
+    child(child(source, 'DrawBackResponse'), 'DrawBackResult')
+  )
+}
+
 /**
  * Response mapper of the Kuveyt Turk gateway. Every decision (approved or not) is taken on the exact `ResponseCode`
  * text of the untouched answer, so padded, numeric or nested values never approve anything. The mapped amount,
@@ -164,11 +172,8 @@ export class KuveytPosResponseDataMapper extends AbstractResponseDataMapper {
   mapRefundResponse(rawResponseData: Raw): PosResponse {
     const exact = isRecord(rawResponseData) ? rawResponseData : {}
     const raw = this.emptyStringsToNull(exact)
-    const node = (source: Raw): Raw | null =>
-      child(child(source, 'PartialDrawbackResponse'), 'PartialDrawbackResult') ??
-      child(child(source, 'DrawBackResponse'), 'DrawBackResult')
 
-    return this.mapReversalResult(raw, node(raw), node(exact), TX_TYPE.REFUND, false)
+    return this.mapReversalResult(raw, refundResult(raw), refundResult(exact), TX_TYPE.REFUND, false)
   }
 
   mapCancelResponse(rawResponseData: Raw): PosResponse {
@@ -191,6 +196,17 @@ export class KuveytPosResponseDataMapper extends AbstractResponseDataMapper {
   /** The exact `ResponseCode` text of the callback; anything that is not an own text field reads as null. */
   extractMdStatus(raw3DAuthResponseData: Raw): string | null {
     return this.getProcReturnCode(raw3DAuthResponseData)
+  }
+
+  /**
+   * The exact `ResponseCode` text of an answer: at the top of a payment answer, under the `Value` of the drawback
+   * result in a refund answer (where the refund mapping decides on it). Anything else reads as null.
+   */
+  override readProcReturnCode(raw: Raw): string | null {
+    const exact = isRecord(raw) ? raw : {}
+    const value = child(refundResult(exact), 'Value')
+
+    return this.getProcReturnCode(exact) ?? (value === null ? null : this.getProcReturnCode(value))
   }
 
   protected getProcReturnCode(response: Raw): string | null {

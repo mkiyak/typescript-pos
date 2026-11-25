@@ -199,6 +199,8 @@ export class PosNetPos extends AbstractGateway<PosNetPosAccount> {
    * @throws HashMismatchError when the MAC of a successful resolve does not verify or its signed fields are malformed
    * @throws OrderMismatchError when the bank resolved another order, amount, currency or installment count (nothing
    *   is provisioned)
+   * @throws PosHttpError when the provision answer carries no result: the payment may have gone through, check
+   *   `status` before any retry
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -250,6 +252,7 @@ export class PosNetPos extends AbstractGateway<PosNetPosAccount> {
       paymentModel,
     )
     const tranResponse = await this.sendRequest(txType, paymentModel, tranRequest, order)
+    this.assertAnswerHasResult(txType, tranResponse)
 
     const response = this.responseDataMapper.map3DPaymentData(resolveResponse, tranResponse, txType, order)
     this.logger.debug('finished 3D payment', { mapped_response: response })

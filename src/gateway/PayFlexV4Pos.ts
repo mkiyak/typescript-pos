@@ -99,6 +99,8 @@ export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
    * Unlike other gateways PayFlex needs the card again for the provision request.
    *
    * @throws HashMismatchError when 3D authentication succeeded but the callback `Hash` does not verify
+   * @throws PosHttpError when the provision answer carries no result: the payment may have gone through, check
+   *   `status` before any retry
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -131,6 +133,7 @@ export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
       paymentModel,
     )
     const bankResponse = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, bankResponse)
 
     const response = this.responseDataMapper.map3DPaymentData(gatewayResponseData, bankResponse, txType, order)
     this.logger.debug('finished 3D payment', { mapped_response: response })

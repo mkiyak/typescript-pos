@@ -21,6 +21,14 @@ function text(data: unknown, key: string | number): string | null {
   return typeof value === 'string' ? value : String(value)
 }
 
+/** A string or finite number as text; anything else (lists, records, booleans, missing) reads as null. */
+function scalarText(value: unknown): string | null {
+  if (typeof value === 'string') return value
+  if ((typeof value === 'number' && Number.isFinite(value)) || typeof value === 'bigint') return String(value)
+
+  return null
+}
+
 /** PHP `(int)` cast of a numeric string. */
 function phpInt(value: string | null): number {
   if (value === null) return 0
@@ -415,8 +423,9 @@ export class AssecoPosResponseDataMapper extends AbstractResponseDataMapper {
     return 'MPI fallback'
   }
 
+  /** `ProcReturnCode` as text; a repeated or nested element (a list or record) reads as no code. */
   protected getProcReturnCode(response: Raw): string | null {
-    return text(response, 'ProcReturnCode')
+    return scalarText(field(response, 'ProcReturnCode'))
   }
 
   /**

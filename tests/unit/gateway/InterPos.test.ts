@@ -267,6 +267,8 @@ describe('InterPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -660,7 +662,9 @@ describe('InterPos (mocked collaborators)', () => {
   })
 
   // addition: F15/Task 4 a provision answer without the approval code never approves, whatever the mapper says
-  it.each([[{}], [{ OrderId: '33554969', TxnResult: 'Success', Amount: '1,00' }]])(
+  // deviation: L3 an empty provision answer ({}) now stops before the mapper as an unknown outcome (see below); the
+  // record without the approval code still reaches the mapper here because the mocked mapper reports a result code
+  it.each([[{ OrderId: '33554969', TxnResult: 'Success', Amount: '1,00' }]])(
     'make3DPayment: a provision answer %j mapped as approved is OrderMismatchError order_status',
     async (provision) => {
       crypt.check3DHash.mockReturnValue(true)
@@ -681,6 +685,23 @@ describe('InterPos (mocked collaborators)', () => {
       expect(httpClient.request).toHaveBeenCalledTimes(1)
     },
   )
+
+  // deviation: L3 the empty provision answer of the row above is an unknown outcome, never mapped
+  it('make3DPayment: a provision answer {} is PosHttpError before the mapper', async () => {
+    crypt.check3DHash.mockReturnValue(true)
+    responseMapper.extractMdStatus.mockReturnValue('1')
+    responseMapper.is3dAuthSuccess.mockReturnValue(true)
+    const provisionRequest = { request: 'create3DPaymentRequestData' }
+    requestMapper.create3DPaymentRequestData.mockReturnValue(provisionRequest)
+    configureClientResponse(TX_TYPE.PAY_AUTH, provisionRequest, {}, secureOrder, MODEL.THREE_D_SECURE)
+
+    const err = await pos
+      .payment(MODEL.THREE_D_SECURE, secureOrder, TX_TYPE.PAY_AUTH, null, cb(fv4()))
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect(responseMapper.map3DPaymentData).not.toHaveBeenCalled()
+    expect(httpClient.request).toHaveBeenCalledTimes(1)
+  })
 
   // ---- 3D Pay / 3D Host ----
 
@@ -1280,13 +1301,36 @@ describe('InterPos (end to end) 3D Secure', () => {
   })
 
   // addition: Task 4 an answer without the approval code never approves
+  // deviation: L3 such a provision answer is an unknown outcome (PosHttpError naming the payment endpoint), no longer
+  // a decline, and it never reaches the mapper
   it.each([
-    ['HTTP 204', new Response(null, { status: 204 })],
-    ['a record without ProcReturnCode', bankBody({ OrderId: '33554969', TxnResult: 'Success', Amount: '1,00' })],
-  ])('a provision answered with %s is declined', async (_name, provision) => {
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['a record without ProcReturnCode', () => bankBody({ OrderId: '33554969', TxnResult: 'Success', Amount: '1,00' })],
+    ['an empty ProcReturnCode', () => bankBody({ OrderId: '33554969', ProcReturnCode: '', TxnResult: 'Success' })],
+    ['a blank ProcReturnCode', () => bankBody({ OrderId: '33554969', ProcReturnCode: '  ', TxnResult: 'Success' })],
+  ])('a provision answered with %s is PosHttpError, never mapped', async (_name, provision) => {
+    const mapped = vi.spyOn(InterPosResponseDataMapper.prototype, 'map3DPaymentData')
+    try {
+      const { sent, promise } = run(fv4(), secureOrder, { provision: provision() })
+      const err = await promise.catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([
+        'Bank answer carries no result; the outcome is unknown',
+        PAYMENT_API,
+      ])
+      expect(sent).toHaveLength(1)
+      expect(mapped).not.toHaveBeenCalled()
+    } finally {
+      mapped.mockRestore()
+    }
+  })
+
+  // addition: L3 a provision declined with a result code is still a decline
+  it('a provision declined with ProcReturnCode 05 is declined', async () => {
+    const provision = bankBody({ OrderId: '33554969', ProcReturnCode: '05', ErrorMessage: 'Red', TxnResult: 'Failed' })
     const { sent, promise } = run(fv4(), secureOrder, { provision })
     const res = (await promise) as Data
-    expect(res.status).toBe('declined')
+    expect([res.status, res.proc_return_code]).toStrictEqual(['declined', '05'])
     expect(sent).toHaveLength(1)
   })
 
@@ -1793,7 +1837,7 @@ describe('InterPos (end to end) non-3D transactions', () => {
     ['a record without ProcReturnCode', () => bankBody({ OrderId: 'N1', TxnResult: 'Success', AuthCode: 'A1' })],
   ])('%s never approves', async (_name, answer) => {
     const order = { id: 'N1', amount: 1.01 }
-    const results: Data[] = []
+    const results: unknown[] = []
     for (const action of [
       (p: InterPos) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, c(p)),
       (p: InterPos) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_PRE_AUTH, c(p)),
@@ -1802,9 +1846,50 @@ describe('InterPos (end to end) non-3D transactions', () => {
       (p: InterPos) => p.refund(order),
     ]) {
       const { fetchImpl } = bankFetch({ other: answer() })
-      results.push((await action(realGateway(fetchImpl))) as Data)
+      results.push(await action(realGateway(fetchImpl)).catch((e: unknown) => e))
     }
-    expect(results.map((r) => r.status)).toStrictEqual(['declined', 'declined', 'declined', 'declined', 'declined'])
+    // deviation: L3 the sale, pre-authorization, post-authorization and refund are unknown outcomes (PosHttpError
+    // naming the payment endpoint), no longer declines; the cancel is still mapped as declined
+    expect(
+      results.map((r) => (r instanceof PosHttpError ? `${r.message} @ ${r.url}` : (r as Data).status)),
+    ).toStrictEqual([
+      `Bank answer carries no result; the outcome is unknown @ ${PAYMENT_API}`,
+      `Bank answer carries no result; the outcome is unknown @ ${PAYMENT_API}`,
+      `Bank answer carries no result; the outcome is unknown @ ${PAYMENT_API}`,
+      'declined',
+      `Bank answer carries no result; the outcome is unknown @ ${PAYMENT_API}`,
+    ])
+  })
+
+  // addition: L3 empty and blank result codes after a sale, post-authorization or (partial) refund are unknown outcomes;
+  // a decline with a code stays a decline
+  it.each([
+    ['an empty ProcReturnCode', () => bankBody({ OrderId: 'N1', ProcReturnCode: '', TxnResult: 'Success' })],
+    ['a blank ProcReturnCode', () => bankBody({ OrderId: 'N1', ProcReturnCode: ' ', TxnResult: 'Success' })],
+  ])('a sale, post-auth and full/partial refund answered with %s are PosHttpError', async (_name, answer) => {
+    const order = { id: 'N1', amount: 1.01 }
+    for (const action of [
+      (p: InterPos) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, c(p)),
+      (p: InterPos) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_POST_AUTH),
+      (p: InterPos) => p.refund(order),
+      (p: InterPos) => p.refund({ ...order, amount: 0.5, order_amount: 1.01 }),
+    ]) {
+      const { sent, fetchImpl } = bankFetch({ other: answer() })
+      const err = await action(realGateway(fetchImpl)).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([
+        'Bank answer carries no result; the outcome is unknown',
+        PAYMENT_API,
+      ])
+      expect(sent).toHaveLength(1)
+    }
+  })
+
+  it('a sale declined with ProcReturnCode 05 is declined', async () => {
+    const { fetchImpl } = bankFetch({ other: bankBody({ OrderId: 'N1', ProcReturnCode: '05', ErrorMessage: 'Red' }) })
+    const p = realGateway(fetchImpl)
+    const res = (await p.payment(MODEL.NON_SECURE, { id: 'N1', amount: 1.01 }, TX_TYPE.PAY_AUTH, c(p))) as Data
+    expect([res.status, res.proc_return_code]).toStrictEqual(['declined', '05'])
   })
 
   it('a status request returns the mapped record; order history is unsupported', async () => {

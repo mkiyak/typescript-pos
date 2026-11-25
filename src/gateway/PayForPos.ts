@@ -221,6 +221,8 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
    *   are malformed
    * @throws OrderMismatchError when the callback does not belong to the order or account (nothing is sent), or when
    *   the bank's status record does not confirm an approved provision (the result is attached)
+   * @throws PosHttpError when the provision answer carries no result: the payment may have gone through, check
+   *   `status` before any retry
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -274,6 +276,7 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
       paymentModel,
     )
     const provisionResponse = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, provisionResponse)
 
     const response = this.responseDataMapper.map3DPaymentData(gatewayResponseData, provisionResponse, txType, order)
     this.logger.debug('finished 3D payment', { mapped_response: response })

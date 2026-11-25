@@ -21,6 +21,7 @@ import {
   HashMismatchError,
   OrderMismatchError,
   PosError,
+  PosHttpError,
   UnsupportedFormFormatError,
   UnsupportedPaymentModelError,
   UnsupportedTransactionTypeError,
@@ -115,6 +116,8 @@ describe('PayFlexV4Pos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -491,7 +494,8 @@ describe('PayFlexV4Pos (mocked collaborators)', () => {
     crypt.check3DHash.mockReturnValue(true)
     requestMapper.create3DPaymentRequestData.mockReturnValue({ request: 'x' })
     clientStrategy.getClient.mockReturnValue(httpClient as unknown as AbstractHttpClient)
-    httpClient.request.mockResolvedValue({})
+    // deviation: L3 an empty provision answer is an unknown outcome; the bank answers with a record
+    httpClient.request.mockResolvedValue({ ResultCode: '0000' })
     responseMapper.map3DPaymentData.mockReturnValue({ status: 'approved' })
     const data = { Status: 'Y', MerchantId: '000000000111111', PurchAmount: '100.00', PurchCurrency: '949' }
 
@@ -1106,5 +1110,94 @@ describe('PayFlexV4Pos (end to end)', () => {
       expect(res.status).toBe('approved')
       expect(sent).toHaveLength(1)
     })
+  })
+})
+
+describe('PayFlexV4Pos (end to end) unknown outcome after a money request', () => {
+  const UNKNOWN = 'Bank answer carries no result; the outcome is unknown'
+  const PAYMENT_API = config.gateway_endpoints.payment_api
+  const vpos = (inner: string): string => `<?xml version="1.0" encoding="utf-8"?><VposResponse>${inner}</VposResponse>`
+  const resultless: Array<[string, () => Response]> = [
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['an empty root', () => new Response(vpos(''))],
+    [
+      'a record without ResultCode',
+      () => new Response(vpos('<TransactionId>T1</TransactionId><AuthCode>822641</AuthCode>')),
+    ],
+    ['an empty ResultCode', () => new Response(vpos('<ResultCode></ResultCode><TransactionId>T1</TransactionId>'))],
+    ['a blank ResultCode', () => new Response(vpos('<ResultCode> </ResultCode><TransactionId>T1</TransactionId>'))],
+    ['ResultCode twice', () => new Response(vpos('<ResultCode>0000</ResultCode><ResultCode>0000</ResultCode>'))],
+    ['a nested ResultCode', () => new Response(vpos('<ResultCode><Code>0000</Code></ResultCode>'))],
+  ]
+  const answering = (answer: () => Response) => {
+    const sent: string[] = []
+    const fetchImpl = (async (url: unknown) => {
+      sent.push(String(url))
+      return answer()
+    }) as unknown as typeof fetch
+    return { sent, fetchImpl }
+  }
+  const order: PosOrder = { ...defaultOrder, ref_ret_num: '209411062014', transaction_id: '20230309B838' }
+
+  // addition: L3 a sale, pre-/post-authorization or refund whose answer carries no result is an unknown outcome
+  it.each(resultless)(
+    'a sale, pre-/post-auth and full/partial refund answered with %s are PosHttpError',
+    async (_n, answer) => {
+      const actions: Array<(p: PayFlexV4Pos) => Promise<unknown>> = [
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, card),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_PRE_AUTH, card),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_POST_AUTH),
+        (p) => p.refund(order),
+        (p) => p.refund({ ...order, amount: 50, order_amount: 100 }),
+      ]
+      for (const action of actions) {
+        const { sent, fetchImpl } = answering(answer)
+        const err = await action(realGateway(fetchImpl)).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+        expect(sent).toStrictEqual([PAYMENT_API])
+      }
+    },
+  )
+
+  // addition: L3 the 3D provision answer is checked before it is mapped
+  it.each(resultless)('a 3D Secure provision answered with %s is PosHttpError, never mapped', async (_n, answer) => {
+    const { sent, fetchImpl } = answering(answer)
+    const mapped = vi.spyOn(PayFlexV4PosResponseDataMapper.prototype, 'map3DPaymentData')
+    try {
+      const err = await realGateway(fetchImpl)
+        .payment(MODEL.THREE_D_SECURE, defaultOrder, TX_TYPE.PAY_AUTH, card, { ...callback, Hash: sign(callback) })
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+      expect(sent).toStrictEqual([PAYMENT_API])
+      expect(mapped).not.toHaveBeenCalled()
+    } finally {
+      mapped.mockRestore()
+    }
+  })
+
+  // addition: L3 a genuine decline with a result code is still a decline; a cancel moves no new money
+  it('a sale and a provision declined with ResultCode 1059 are declined; a cancel answered with 204 too', async () => {
+    const declined = () => new Response(vpos('<ResultCode>1059</ResultCode><ResultDetail>Red</ResultDetail>'))
+    const sale = await realGateway(answering(declined).fetchImpl).payment(
+      MODEL.NON_SECURE,
+      order,
+      TX_TYPE.PAY_AUTH,
+      card,
+    )
+    expect([sale.status, sale.proc_return_code]).toStrictEqual(['declined', '1059'])
+
+    const provision = await realGateway(answering(declined).fetchImpl).payment(
+      MODEL.THREE_D_SECURE,
+      defaultOrder,
+      TX_TYPE.PAY_AUTH,
+      card,
+      { ...callback, Hash: sign(callback) },
+    )
+    expect([provision.status, provision.proc_return_code]).toStrictEqual(['declined', '1059'])
+
+    const cancel = await realGateway(answering(() => new Response(null, { status: 204 })).fetchImpl).cancel(order)
+    expect(cancel.status).toBe('declined')
   })
 })

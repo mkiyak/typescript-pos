@@ -84,6 +84,19 @@ describe('GarantiPosResponseDataMapper', () => {
   const integrationMapper = (log: PosLogger = noopLogger) =>
     new GarantiPosResponseDataMapper(new GarantiPosResponseValueFormatter(), new GarantiPosResponseValueMapper(), log)
 
+  // addition: L3 the result code the gateway checks after a money request; a repeated or nested element is no code
+  it.each([
+    [{ Transaction: { Response: { Code: '00' } } }, '00'],
+    [{ Transaction: { Response: { Code: '92' } } }, '92'],
+    [{ Transaction: { Response: {} } }, null],
+    [{}, null],
+    [{ Transaction: { Response: { Code: ['00', '00'] } } }, null],
+    [{ Transaction: { Response: { Code: { Value: '00' } } } }, null],
+    [{ Transaction: [{ Response: { Code: '00' } }] }, null],
+  ] as Array<[Record<string, unknown>, string | null]>)('readProcReturnCode(%j) is %j', (raw, expected) => {
+    expect(mapper.readProcReturnCode(raw)).toBe(expected)
+  })
+
   it('supports', () => {
     expect(GarantiPosResponseDataMapper.supports('GarantiPos')).toBe(true)
     expect(GarantiPosResponseDataMapper.supports('AkbankPos')).toBe(false)

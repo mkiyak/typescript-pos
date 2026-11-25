@@ -628,6 +628,17 @@ describe('PayFlexV4PosResponseDataMapper', () => {
   const integrationMapper = () =>
     new PayFlexV4PosResponseDataMapper(new BasicResponseValueFormatter(), new PayFlexV4PosResponseValueMapper())
 
+  // addition: L3 the result code the gateway checks after a money request; a repeated or nested element is no code
+  it.each([
+    [{ ResultCode: '0000' }, '0000'],
+    [{ ResultCode: '1059' }, '1059'],
+    [{}, null],
+    [{ ResultCode: ['0000', '0000'] }, null],
+    [{ ResultCode: { Code: '0000' } }, null],
+  ] as Array<[Record<string, unknown>, string | null]>)('readProcReturnCode(%j) is %j', (raw, expected) => {
+    expect(mapper.readProcReturnCode(raw)).toBe(expected)
+  })
+
   it('supports', () => {
     expect(PayFlexV4PosResponseDataMapper.supports('PayFlexV4Pos')).toBe(true)
     expect(PayFlexV4PosResponseDataMapper.supports('AkbankPos')).toBe(false)

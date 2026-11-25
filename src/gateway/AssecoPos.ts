@@ -1,7 +1,15 @@
 import { HashMismatchError, OrderMismatchError, UnsupportedFormFormatError } from '../errors.js'
 import type { AssecoPosAccount } from '../model/account/AssecoPosAccount.js'
 import type { CreditCard } from '../model/card/CreditCard.js'
-import { FORM_FORMAT, type FormFormat, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../PosInterface.js'
+import {
+  CURRENCY,
+  FORM_FORMAT,
+  type FormFormat,
+  MODEL,
+  type PaymentModel,
+  TX_TYPE,
+  type TxType,
+} from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
 import { ownValue } from '../util/ownValue.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
@@ -23,6 +31,12 @@ const STORE_TYPES_3D_HOST = ['3d_host'] as const
  * After the hash check, 3D Pay / 3D Pay Hosting / 3D Host callbacks must belong to the order
  * they are completed for: the mapped `order_id` must equal `order.id` and the callback `amount` must equal
  * `order.amount` (within 0.005), otherwise `OrderMismatchError`.
+ *
+ * A hash-valid 3D Secure callback must belong to the order before anything is provisioned: its `oid` must equal
+ * `order.id` exactly, its `amount` (when present) must equal `order.amount` within 0.005 and its `currency` (when
+ * present) must be the order's numeric currency code, otherwise `OrderMismatchError` without a response (nothing was
+ * charged) and no request is sent. The provision then answers with a result code, or the outcome is unknown
+ * (`PosHttpError`).
  *
  * Addition: the hash-covered callback `storetype` must match the payment method it is completed with
  * (`3d_pay`/`3d_pay_hosting` for 3D Pay and 3D Pay Hosting, `3d_host` for 3D Host, `3d` for 3D Secure when present),
@@ -53,7 +67,10 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
 
   /**
    * @throws HashMismatchError when 3D authentication succeeded but the callback hash does not verify
-   * @throws OrderMismatchError (field `storetype`) when the callback carries a storetype other than `3d`
+   * @throws OrderMismatchError (field `storetype`) when the callback carries a storetype other than `3d`, or (fields
+   *   `order_id`, `amount`, `currency`, no response attached) when it belongs to another order; nothing is sent
+   * @throws PosHttpError when the provision answer carries no result: the payment may have gone through, check
+   *   `status` before any retry
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -69,6 +86,7 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
 
     this.assertValid3DHash(gatewayResponseData)
     this.assertStoreType(gatewayResponseData, STORE_TYPES_3D, true, txType, order)
+    this.assertSecureCallbackMatchesOrder(gatewayResponseData, order)
 
     const requestData = await this.dispatchRequestDataPrepared(
       this.requestDataMapper.create3DPaymentRequestData(this.account, order, txType, gatewayResponseData),
@@ -77,6 +95,7 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
       paymentModel,
     )
     const provisionResponse = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, provisionResponse)
 
     const response = this.responseDataMapper.map3DPaymentData(gatewayResponseData, provisionResponse, txType, order)
     this.logger.debug('finished 3D payment', { mapped_response: response })
@@ -183,6 +202,46 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
     const expected = allowed.join(' | ')
     this.logger.error('3D callback storetype does not match the payment model', { expected, actual: asText(raw) })
     throw new OrderMismatchError('storetype', expected, asText(raw), response)
+  }
+
+  /**
+   * A verified 3D Secure callback must belong to this order before it is provisioned: the order id always, the amount
+   * and the currency when the callback carries them. Nothing was charged yet, so no response is attached.
+   */
+  private assertSecureCallbackMatchesOrder(callback: GatewayResponseData, order: PosOrder): void {
+    const expectedId = asText(order.id)
+    const oid = ownValue(callback, 'oid')
+    if (expectedId === '' || typeof oid !== 'string' || oid !== expectedId) {
+      this.logger.error('3D callback order id does not match the order', { expected: expectedId, actual: asText(oid) })
+      throw new OrderMismatchError('order_id', expectedId, asText(oid))
+    }
+
+    const amount = ownValue(callback, 'amount')
+    if (amount !== undefined && amount !== null) {
+      // NaN (non-numeric on either side) never matches
+      if (!(Math.abs(parseOrderAmount(amount) - parseOrderAmount(order.amount)) < AMOUNT_TOLERANCE)) {
+        const expectedAmount = asText(order.amount)
+        this.logger.error('3D callback amount does not match the order', {
+          order_id: expectedId,
+          expected: expectedAmount,
+          actual: asText(amount),
+        })
+        throw new OrderMismatchError('amount', expectedAmount, asText(amount))
+      }
+    }
+
+    const currency = ownValue(callback, 'currency')
+    if (currency !== undefined && currency !== null) {
+      const expectedCurrency = String(this.requestValueMapper.mapCurrency(order.currency ?? CURRENCY.TRY))
+      if (typeof currency !== 'string' || currency !== expectedCurrency) {
+        this.logger.error('3D callback currency does not match the order', {
+          order_id: expectedId,
+          expected: expectedCurrency,
+          actual: asText(currency),
+        })
+        throw new OrderMismatchError('currency', expectedCurrency, asText(currency))
+      }
+    }
   }
 
   /** A verified callback must still belong to this order (id and amount). */

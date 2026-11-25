@@ -81,6 +81,20 @@ describe('ToslaPosResponseDataMapper', () => {
   const realMapper = (log?: PosLogger) =>
     new ToslaPosResponseDataMapper(new ToslaPosResponseValueFormatter(), new ToslaPosResponseValueMapper(), log)
 
+  // addition: L3 the gateway checks the integer result code Code of a refund answer, which a decline also carries
+  it.each([
+    [{ Code: 0, BankResponseCode: '00' }, '0'],
+    [{ Code: 101, BankResponseCode: null }, '101'],
+    [{ BankResponseCode: '00' }, null],
+    [{ Code: '0', BankResponseCode: '00' }, null],
+    [{ Code: null }, null],
+    [{ Code: [0] }, null],
+    [{ Code: 0.5 }, null],
+    [{}, null],
+  ] as Array<[Record<string, unknown>, string | null]>)('readProcReturnCode(%j) is %j', (raw, expected) => {
+    expect(mapper.readProcReturnCode(raw)).toBe(expected)
+  })
+
   it('supports', () => {
     expect(ToslaPosResponseDataMapper.supports('ToslaPos')).toBe(true)
     expect(ToslaPosResponseDataMapper.supports('AkbankPos')).toBe(false)

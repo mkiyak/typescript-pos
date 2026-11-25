@@ -265,6 +265,8 @@ describe('VakifKatilimPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -1027,8 +1029,10 @@ type BankOptions = {
   status?: (fields: Data) => Answer
   /** The answer to a sale, pre-authorization or close, from the path and the posted fields. */
   sale?: (path: string, fields: Data) => Answer
-  /** The answer to a cancel or refund. */
+  /** The answer to a cancel. */
   reversal?: () => Answer
+  /** The answer to a refund. */
+  refund?: () => Answer
 }
 
 const esc = (text: string): string =>
@@ -1173,7 +1177,7 @@ function bankFetch(options: BankOptions = {}) {
         break
       case 'DrawBack':
       case 'PreAuthorizationDrawBack':
-        reply = answerXml(REFUND_ANSWER)
+        reply = options.refund?.() ?? answerXml(REFUND_ANSWER)
         break
       case 'SelectOrder':
         reply = answerXml(HISTORY_ANSWER)
@@ -2012,6 +2016,47 @@ describe('VakifKatilimPos (end to end) non-3D transactions and routes', () => {
     const { fetchImpl } = bankFetch({ reversal: () => new Response(null, { status: 204 }) })
     const res = (await realGateway(fetchImpl).cancel(reversal())) as Data
     expect(res.status).toBe('declined')
+  })
+
+  // addition: L3 a refund answer that carries no response code is an unknown outcome, never a decline
+  it.each([
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['an empty root', () => answerXml({})],
+    ['a root with namespaces only', () => answerXml({ ...NS })],
+    [
+      'no ResponseCode',
+      () => {
+        const { ResponseCode: _code, ...rest } = REFUND_ANSWER
+        return answerXml(rest)
+      },
+    ],
+    ['a nil ResponseCode', () => answerXml({ ...REFUND_ANSWER, ResponseCode: NIL })],
+    ['a blank ResponseCode', () => answerXml({ ...REFUND_ANSWER, ResponseCode: '  ' })],
+  ])('a refund of a sale or a pre-authorization answered with %s is PosHttpError', async (_n, answer) => {
+    const { sent, fetchImpl } = bankFetch({ refund: answer })
+    const logger = createLogger()
+    const p = realGateway(fetchImpl, { logger })
+    for (const order of [reversal(), reversal({ transaction_type: TX_TYPE.PAY_PRE_AUTH })]) {
+      const err = await p.refund(order).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([
+        'Bank answer carries no result; the outcome is unknown',
+        PAYMENT_API,
+      ])
+    }
+    expect(sent.map((s) => s.path)).toStrictEqual(['DrawBack', 'PreAuthorizationDrawBack'])
+    expect(logger.error).toHaveBeenCalledWith('bank answer carries no result; the outcome is unknown', {
+      tx_type: TX_TYPE.REFUND,
+      gateway: 'VakifKatilimPos',
+    })
+  })
+
+  // addition: L3 a refund declined with a response code is still a decline
+  it('a refund declined with ResponseCode OrderDataNotFound is declined', async () => {
+    const declined = pick(refundTestDataProvider, 'fail_order_not_found').responseData
+    const { fetchImpl } = bankFetch({ refund: () => answerXml(declined) })
+    const res = (await realGateway(fetchImpl).refund(reversal())) as Data
+    expect([res.status, res.proc_return_code]).toStrictEqual(['declined', 'OrderDataNotFound'])
   })
 
   it('cancel and refund follow the order transaction type', async () => {

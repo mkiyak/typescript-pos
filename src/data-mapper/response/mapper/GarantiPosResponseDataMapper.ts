@@ -299,8 +299,13 @@ export class GarantiPosResponseDataMapper extends AbstractResponseDataMapper {
     return 'Half 3D Secure'
   }
 
+  /** `Transaction.Response.Code` as text; a repeated or nested element (a list or record) reads as no code. */
   protected getProcReturnCode(response: Raw): string | null {
-    return text(path(response, 'Transaction', 'Response'), 'Code')
+    const code = field(path(response, 'Transaction', 'Response'), 'Code')
+    if (typeof code === 'string') return code
+    if ((typeof code === 'number' && Number.isFinite(code)) || typeof code === 'bigint') return String(code)
+
+    return null
   }
 
   private mapSingleOrderHistoryTransaction(rawTx: Raw): Raw {

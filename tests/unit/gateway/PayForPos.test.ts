@@ -183,6 +183,8 @@ describe('PayForPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -947,6 +949,8 @@ type BankOptions = {
   status?: (orderId: string) => Data | Response
   /** The answer to the 3D form post. */
   form?: Response | string
+  /** The answer to a non-secure sale, post-authorization, cancel or refund. */
+  other?: Data | Response | string
 }
 
 /**
@@ -968,7 +972,7 @@ function bankFetch(options: BankOptions = {}) {
     } else if (fields.SecureType === 'Inquiry') {
       reply = options.status ? options.status(String(fields.OrgOrderId)) : statusRecord(String(fields.OrgOrderId))
     } else if (fields.SecureType === 'NonSecure') {
-      reply = { ProcReturnCode: '00', AuthCode: 'S11111', TransId: String(fields.OrderId) }
+      reply = options.other ?? { ProcReturnCode: '00', AuthCode: 'S11111', TransId: String(fields.OrderId) }
     }
     if (reply === undefined) {
       throw new Error(`unexpected request ${String(fields.SecureType)} to ${target}`)
@@ -1941,5 +1945,70 @@ describe('PayForPos (end to end) masking', () => {
     const htmlFormHash = sent.find((s) => s.url === GATEWAY_3D)?.fields.Hash as string
     expect(htmlFormHash).toMatch(/^[A-Za-z0-9+/]{27}=$/)
     expect(logged).not.toContain(htmlFormHash)
+  })
+})
+
+describe('PayForPos (end to end) unknown outcome after a money request', () => {
+  const UNKNOWN = 'Bank answer carries no result; the outcome is unknown'
+  const resultless: Array<[string, () => Data | Response | string]> = [
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['an empty root', () => ({})],
+    ['a record without ProcReturnCode', () => ({ AuthCode: 'S37397', TransId: '20221031CFD0', ErrMsg: '' })],
+    ['an empty ProcReturnCode', () => ({ ProcReturnCode: '', TransId: '20221031CFD0' })],
+    ['a blank ProcReturnCode', () => ({ ProcReturnCode: ' ', TransId: '20221031CFD0' })],
+    ['ProcReturnCode twice', () => ({ ProcReturnCode: ['00', '00'], TransId: '20221031CFD0' })],
+    ['a nested ProcReturnCode', () => ({ ProcReturnCode: { Code: '00' }, TransId: '20221031CFD0' })],
+  ]
+  const order: PosOrder = { ...secureOrder }
+
+  // addition: L3 a sale, pre-/post-authorization or refund whose answer carries no result is an unknown outcome
+  it.each(resultless)(
+    'a sale, pre-/post-auth and full/partial refund answered with %s are PosHttpError',
+    async (_n, answer) => {
+      const card = (p: PayForPos) =>
+        CreditCardFactory.createForGateway(p, '5555444433332222', '21', '12', '122', 'ahmet', CARD_TYPE.VISA)
+      const actions: Array<(p: PayForPos) => Promise<unknown>> = [
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, card(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_PRE_AUTH, card(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_POST_AUTH),
+        (p) => p.refund(order),
+        (p) => p.refund({ ...order, amount: 0.5, order_amount: 1.01 }),
+      ]
+      for (const action of actions) {
+        const { sent, fetchImpl } = bankFetch({ other: answer() })
+        const err = await action(realGateway(fetchImpl)).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+        expect(sent).toHaveLength(1)
+      }
+    },
+  )
+
+  // addition: L3 the 3D provision answer is checked before it is mapped or confirmed
+  it.each(resultless)('a 3D Secure provision answered with %s is PosHttpError, never mapped', async (_n, answer) => {
+    const reply = answer()
+    const { sent, fetchImpl } = bankFetch({ provision: typeof reply === 'string' ? new Response(reply) : reply })
+    const mapped = vi.spyOn(PayForPosResponseDataMapper.prototype, 'map3DPaymentData')
+    try {
+      const err = await realGateway(fetchImpl)
+        .payment(MODEL.THREE_D_SECURE, secureOrder, TX_TYPE.PAY_AUTH, null, cb(secureSuccess()))
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+      expect(sent.map((s) => s.fields.SecureType)).toStrictEqual(['3DModelPayment'])
+      expect(mapped).not.toHaveBeenCalled()
+    } finally {
+      mapped.mockRestore()
+    }
+  })
+
+  // addition: L3 a genuine decline with a result code is still a decline; a cancel moves no new money
+  it('a refund declined with ProcReturnCode M041 is declined and a cancel answered with 204 too', async () => {
+    const declined = { ProcReturnCode: 'M041', ErrMsg: 'Kayıp kart', TransId: '20221031CFD0' }
+    const refund = await realGateway(bankFetch({ other: declined }).fetchImpl).refund(order)
+    expect([refund.status, refund.proc_return_code]).toStrictEqual(['declined', 'M041'])
+
+    const cancel = await realGateway(bankFetch({ other: new Response(null, { status: 204 }) }).fetchImpl).cancel(order)
+    expect(cancel.status).toBe('declined')
   })
 })

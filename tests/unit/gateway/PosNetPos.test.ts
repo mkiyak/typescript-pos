@@ -178,6 +178,8 @@ describe('PosNetPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -1562,5 +1564,80 @@ describe('PosNetPos (end to end) other transactions', () => {
     expect(logged).not.toContain('<expDate>2201</expDate>')
     // the hook below changes every request, so the logged before/after request data was masked too
     expect(logged).toContain('Request data is changed via listeners')
+  })
+})
+
+describe('PosNetPos (end to end) unknown outcome after a money request', () => {
+  const UNKNOWN = 'Bank answer carries no result; the outcome is unknown'
+  const resultless: Array<[string, () => Data | Response]> = [
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['an empty root', () => ({})],
+    [
+      'a record without approved',
+      () => ({ respCode: '', respText: '', hostlogkey: '0000000002P0806031', authCode: '901477' }),
+    ],
+    ['an empty approved', () => ({ ...tranAnswer, approved: '' })],
+    ['a blank approved', () => ({ ...tranAnswer, approved: ' ' })],
+    ['approved twice', () => ({ ...tranAnswer, approved: ['1', '1'] })],
+    ['a nested approved', () => ({ ...tranAnswer, approved: { value: '1' } })],
+  ]
+  const saleCard = (p: PosNetPos) =>
+    CreditCardFactory.createForGateway(p, '5555444433332222', '21', '12', '122', 'ahmet')
+  const order: PosOrder = { ...orderO, ref_ret_num: '0000000002P0806031' }
+
+  // addition: L3 a sale, pre-/post-authorization or refund whose answer carries no result is an unknown outcome
+  it.each(resultless)(
+    'a sale, pre-/post-auth and full/partial refund answered with %s are PosHttpError',
+    async (_n, answer) => {
+      const actions: Array<(p: PosNetPos) => Promise<unknown>> = [
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, saleCard(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_PRE_AUTH, saleCard(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_POST_AUTH),
+        (p) => p.refund(order),
+        (p) => p.refund({ ...order, amount: 50, order_amount: 100.01 }),
+      ]
+      for (const action of actions) {
+        const { posted, fetchImpl } = fakeBank(answer)
+        const err = await action(realGateway(fetchImpl)).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+        expect(posted).toHaveLength(1)
+      }
+    },
+  )
+
+  // addition: L3 the provision answer of the 3D flow is checked before it is mapped
+  it.each(resultless)('a 3D provision answered with %s is PosHttpError, never mapped', async (_n, answer) => {
+    const { posted, fetchImpl } = fakeBank((data) =>
+      data.oosResolveMerchantData !== undefined ? resolveAnswer() : answer(),
+    )
+    const mapped = vi.spyOn(PosNetPosResponseDataMapper.prototype, 'map3DPaymentData')
+    try {
+      const err = await pay3D(realGateway(fetchImpl), orderO, callbackC).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+      expect(posted.map((p) => Object.keys(p.data).at(-1))).toStrictEqual(['oosResolveMerchantData', 'oosTranData'])
+      expect(mapped).not.toHaveBeenCalled()
+    } finally {
+      mapped.mockRestore()
+    }
+  })
+
+  // addition: L3 a genuine decline with a result code is still a decline; a cancel moves no new money
+  it('a sale and a provision declined with approved 0 are declined; a cancel answered with 204 too', async () => {
+    const declined = { approved: '0', respCode: '0127', respText: 'ORDERID DAHA ONCE KULLANILMIS' }
+    const sale = await realGateway(fakeBank(() => declined).fetchImpl).payment(
+      MODEL.NON_SECURE,
+      order,
+      TX_TYPE.PAY_AUTH,
+      CreditCardFactory.create('5555444433332222', '21', '12', '122', 'ahmet'),
+    )
+    expect([sale.status, sale.proc_return_code, sale.error_code]).toStrictEqual(['declined', '0', '0127'])
+
+    const provision = await pay3D(realGateway(threeDBank(resolveAnswer(), declined).fetchImpl), orderO, callbackC)
+    expect([provision.status, provision.error_code]).toStrictEqual(['declined', '0127'])
+
+    const cancel = await realGateway(fakeBank(() => new Response(null, { status: 204 })).fetchImpl).cancel(order)
+    expect(cancel.status).toBe('declined')
   })
 })

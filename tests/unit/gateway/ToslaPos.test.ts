@@ -232,6 +232,8 @@ describe('ToslaPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -905,6 +907,8 @@ type BankOptions = {
   inquiry?: (json: Data) => Answer
   /** The answer to a sale or post-authorization. */
   sale?: (path: string, json: Data) => Answer
+  /** The answer to a cancel (`void`) or refund, by path. */
+  reversal?: (path: string) => Answer
 }
 
 /** Requests whose `hash` was not the request hash of the body's own client id, user, random value and time span. */
@@ -962,10 +966,10 @@ function bankFetch(options: BankOptions = {}) {
         }
         break
       case 'void':
-        reply = fixture(cancelCases, 'success1')
+        reply = options.reversal?.(entry.path) ?? fixture(cancelCases, 'success1')
         break
       case 'refund':
-        reply = fixture(refundCases, 'success1')
+        reply = options.reversal?.(entry.path) ?? fixture(refundCases, 'success1')
         break
       case 'history':
         reply = fixture(orderHistoryCases, 'success_only_payment_transaction')
@@ -1889,6 +1893,52 @@ describe('ToslaPos (end to end) money requests', () => {
     const post = await pos.payment(MODEL.NON_SECURE, { id: 'S1', amount: 1.01 }, TX_TYPE.PAY_POST_AUTH)
     expect([sale.status, post.status]).toStrictEqual(['approved', 'approved'])
     expect(sent[0]?.json).toMatchObject({ orderId: 'S1', amount: 101, currency: 949, installmentCount: 0 })
+  })
+
+  // addition: L3 a refund answer without an integer result code is an unknown outcome, never a decline
+  it.each([
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['an empty object', () => ({})],
+    [
+      'no Code',
+      () => {
+        const { Code: _code, ...rest } = fixture(refundCases, 'fail2')
+        return rest
+      },
+    ],
+    ['a null Code', () => ({ ...fixture(refundCases, 'success1'), Code: null })],
+    ['Code as text', () => ({ ...fixture(refundCases, 'success1'), Code: '0' })],
+    ['Code as a list', () => ({ ...fixture(refundCases, 'success1'), Code: [0] })],
+    ['a fractional Code', () => ({ ...fixture(refundCases, 'fail2'), Code: 0.5 })],
+  ])('a full or partial refund answered with %s is PosHttpError', async (_n, answer) => {
+    const { sent, fetchImpl } = bankFetch({ reversal: () => answer() })
+    const logger = createLogger()
+    const { pos } = realGateway(fetchImpl, { logger })
+    for (const order of [
+      { id: 'C1', amount: 1.01 },
+      { id: 'C1', amount: 0.59, order_amount: 1.01 },
+    ]) {
+      const err = await pos.refund(order).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([
+        'Bank answer carries no result; the outcome is unknown',
+        PAYMENT_API,
+      ])
+    }
+    expect(sent.map((s) => s.path)).toStrictEqual(['refund', 'refund'])
+    expect(logger.error).toHaveBeenCalledWith('bank answer carries no result; the outcome is unknown', {
+      tx_type: TX_TYPE.REFUND_PARTIAL,
+      gateway: 'ToslaPos',
+    })
+  })
+
+  // addition: L3 a refund declined with a result code is still a decline; a cancel moves no new money
+  it('a refund declined with Code 101 (no bank response code) is declined and a cancel answered {} too', async () => {
+    const { fetchImpl } = bankFetch({ reversal: (path) => (path === 'void' ? {} : fixture(refundCases, 'fail2')) })
+    const { pos } = realGateway(fetchImpl)
+    const refund = await pos.refund({ id: '202312051B4E', amount: 1.01 })
+    expect([refund.status, refund.error_code, refund.proc_return_code]).toStrictEqual(['declined', '101', null])
+    expect((await pos.cancel({ id: '202312051B4E' })).status).toBe('declined')
   })
 
   // addition: T25 cancel, refund and order history go to their paths

@@ -66,6 +66,14 @@ export abstract class AbstractResponseDataMapper implements ResponseDataMapperIn
 
   abstract is3dAuthSuccess(mdStatus: string | null, raw3DAuthResponseData?: Raw | null): boolean
 
+  /**
+   * The result code of a raw bank answer (see `ResponseDataMapperInterface.readProcReturnCode`). By default the
+   * procedure return code; a mapper whose answers carry their result elsewhere for some requests reads it there.
+   */
+  readProcReturnCode(raw: Record<string, unknown>): string | null {
+    return this.getProcReturnCode(raw)
+  }
+
   /** Bank procedure return code of a response (e.g. ProcReturnCode, ResultCode). */
   protected abstract getProcReturnCode(response: Record<string, unknown>): string | null
 

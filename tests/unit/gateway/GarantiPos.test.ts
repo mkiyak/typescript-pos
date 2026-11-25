@@ -131,6 +131,8 @@ describe('GarantiPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -650,7 +652,8 @@ describe('GarantiPos (mocked collaborators)', () => {
     it('accepts null optional fields', async () => {
       requestMapper.create3DPaymentRequestData.mockReturnValue({ r: 1 })
       clientStrategy.getClient.mockReturnValue(httpClient as unknown as AbstractHttpClient)
-      httpClient.request.mockResolvedValue({})
+      // deviation: L3 an empty provision answer is an unknown outcome; the bank answers with a record
+      httpClient.request.mockResolvedValue({ Transaction: { Response: { Code: '00' } } })
       responseMapper.map3DPaymentData.mockReturnValue({ status: 'approved' })
       await expect(run(callback({ mdstatus: '2', cavv: null, eci: null, txnstatus: null }))).resolves.toStrictEqual({
         status: 'approved',
@@ -984,7 +987,8 @@ describe('GarantiPos (mocked collaborators)', () => {
     crypt.check3DHash.mockReturnValue(true)
     requestMapper.create3DPaymentRequestData.mockReturnValue({ r: 1 })
     clientStrategy.getClient.mockReturnValue(httpClient as unknown as AbstractHttpClient)
-    httpClient.request.mockResolvedValue({})
+    // deviation: L3 an empty provision answer is an unknown outcome; the bank answers with a record
+    httpClient.request.mockResolvedValue({ Transaction: { Response: { Code: '00' } } })
     responseMapper.map3DPaymentData.mockReturnValue({ status: 'approved' })
     await expect(
       pos.payment(MODEL.THREE_D_SECURE, boundOrder('ORDER-1'), TX_TYPE.PAY_AUTH, null, {
@@ -2244,5 +2248,88 @@ describe('GarantiPos (end to end) order amount as text', () => {
     const { result } = await run(amount)
     expect(result).toBeInstanceOf(OrderMismatchError)
     expect((result as OrderMismatchError).field).toBe('amount')
+  })
+})
+
+describe('GarantiPos (end to end) unknown outcome after a money request', () => {
+  const UNKNOWN = 'Bank answer carries no result; the outcome is unknown'
+  const gvps = (inner: string): string => `<?xml version="1.0" encoding="UTF-8"?><GVPSResponse>${inner}</GVPSResponse>`
+  const withCode = (code: string): string =>
+    gvps(
+      `<Order><OrderID>2023100354BB</OrderID></Order><Transaction><Response><Source>HOST</Source>${code}` +
+        '<Message>Approved</Message></Response><RetrefNum>1</RetrefNum><AuthCode>304919</AuthCode></Transaction>',
+    )
+  const resultless: Array<[string, () => Response]> = [
+    ['HTTP 204', () => new Response(null, { status: 204 })],
+    ['an empty root', () => new Response(gvps(''))],
+    ['a transaction without Code', () => new Response(withCode(''))],
+    ['an empty Code', () => new Response(withCode('<Code></Code>'))],
+    ['a blank Code', () => new Response(withCode('<Code> </Code>'))],
+    ['Code twice', () => new Response(withCode('<Code>00</Code><Code>00</Code>'))],
+    ['a nested Code', () => new Response(withCode('<Code><Value>00</Value></Code>'))],
+  ]
+  const saleCard = (p: GarantiPos) =>
+    CreditCardFactory.createForGateway(p, '5555444433332222', '21', '12', '122', 'ahmet', CARD_TYPE.VISA)
+  const order: PosOrder = { ...secureOrder, ref_ret_num: '327614071583' }
+
+  // addition: L3 a sale, pre-/post-authorization or refund whose answer carries no result is an unknown outcome
+  it.each(resultless)(
+    'a sale, pre-/post-auth and full/partial refund answered with %s are PosHttpError',
+    async (_n, answer) => {
+      const actions: Array<(p: GarantiPos) => Promise<unknown>> = [
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_AUTH, saleCard(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_PRE_AUTH, saleCard(p)),
+        (p) => p.payment(MODEL.NON_SECURE, order, TX_TYPE.PAY_POST_AUTH),
+        (p) => p.refund(order),
+        (p) => p.refund({ ...order, amount: 0.5, order_amount: 1.01 }),
+      ]
+      for (const action of actions) {
+        const { sent, fetchImpl } = recordingFetch(answer)
+        const err = await action(realGateway(fetchImpl)).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+        expect(sent).toHaveLength(1)
+      }
+    },
+  )
+
+  // addition: L3 the 3D provision answer is checked before it is mapped
+  it.each(resultless)('a 3D Secure provision answered with %s is PosHttpError, never mapped', async (_n, answer) => {
+    const { sent, fetchImpl } = recordingFetch(answer)
+    const mapped = vi.spyOn(GarantiPosResponseDataMapper.prototype, 'map3DPaymentData')
+    try {
+      const err = await realGateway(fetchImpl)
+        .payment(MODEL.THREE_D_SECURE, secureOrder, TX_TYPE.PAY_AUTH, null, secureCallback)
+        .catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual([UNKNOWN, PAYMENT_API])
+      expect(sent).toHaveLength(1)
+      expect(mapped).not.toHaveBeenCalled()
+    } finally {
+      mapped.mockRestore()
+    }
+  })
+
+  // addition: L3 a genuine decline with a result code is still a decline; a cancel moves no new money
+  it('a post-auth and a provision declined with Code 92 are declined; a cancel answered with 204 too', async () => {
+    const declined = () => new Response(withCode('<Code>92</Code><ReasonCode>92</ReasonCode><ErrorMsg>Red</ErrorMsg>'))
+    const post = await realGateway(recordingFetch(declined).fetchImpl).payment(
+      MODEL.NON_SECURE,
+      order,
+      TX_TYPE.PAY_POST_AUTH,
+    )
+    expect([post.status, post.proc_return_code]).toStrictEqual(['declined', '92'])
+
+    const provision = await realGateway(recordingFetch(declined).fetchImpl).payment(
+      MODEL.THREE_D_SECURE,
+      secureOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      secureCallback,
+    )
+    expect([provision.status, provision.proc_return_code]).toStrictEqual(['declined', '92'])
+
+    const cancel = await realGateway(recordingFetch(() => new Response(null, { status: 204 })).fetchImpl).cancel(order)
+    expect(cancel.status).toBe('declined')
   })
 })

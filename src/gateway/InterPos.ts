@@ -218,6 +218,8 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
    * @throws OrderMismatchError when the callback does not belong to the order or account (nothing is sent), when it
    *   is an approved 3D Pay result (`payment_model`, result attached only when the bank's record shows the payment),
    *   or when the approved provision answer does not belong to the order (result attached)
+   * @throws PosHttpError when the provision answer carries no result: the payment may have gone through, check
+   *   `status` before any retry
    */
   async make3DPayment(
     gatewayResponseData: GatewayResponseData,
@@ -287,6 +289,7 @@ export class InterPos extends AbstractGateway<InterPosAccount> {
       paymentModel,
     )
     const provision = await this.sendRequest(txType, paymentModel, requestData, order)
+    this.assertAnswerHasResult(txType, provision)
 
     const response = this.responseDataMapper.map3DPaymentData(callback, provision, txType, order)
     this.logger.debug('finished 3D payment', { mapped_response: response })

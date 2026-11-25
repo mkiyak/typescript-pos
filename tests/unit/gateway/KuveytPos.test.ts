@@ -399,6 +399,8 @@ describe('KuveytPos (mocked collaborators)', () => {
       mapOrderHistoryResponse: vi.fn(),
       extractMdStatus: vi.fn(),
       is3dAuthSuccess: vi.fn(),
+      // deviation: L3 a money answer's result code is read before mapping; the mocked mapper reports one
+      readProcReturnCode: vi.fn().mockReturnValue('00'),
     }
     crypt = {
       hashString: vi.fn(),
@@ -1907,6 +1909,64 @@ describe('KuveytPos (end to end) non-3D and SOAP transactions', () => {
       `${SOAP_ACTION_PREFIX}DrawBack`,
       `${SOAP_ACTION_PREFIX}SaleReversal`,
     ])
+  })
+
+  // addition: L3 a refund answer that carries no response code is an unknown outcome, never a decline
+  const noValueCode = pick(refundTestDataProvider, 'fail2').responseData
+  const UNKNOWN: [string, string] = ['Bank answer carries no result; the outcome is unknown', PAYMENT_API]
+  it.each([
+    ['HTTP 204', () => new Response(null, { status: 204 }), UNKNOWN],
+    // the SOAP client already refuses an envelope without a body
+    ['an empty SOAP body', () => soapXml({}), ['Bank SOAP response has no body', QUERY_API]],
+    ['a drawback result without ResponseCode', () => soapXml(noValueCode), UNKNOWN],
+    [
+      'a nil ResponseCode',
+      () =>
+        soapXml({
+          DrawBackResponse: {
+            DrawBackResult: { Results: [], Success: true, Value: { ...NS, ResponseCode: NIL, OrderId: 0 } },
+          },
+        }),
+      UNKNOWN,
+    ],
+    [
+      'a blank ResponseCode',
+      () => soapXml({ DrawBackResponse: { DrawBackResult: { Value: { ResponseCode: '  ', OrderId: 0 } } } }),
+      UNKNOWN,
+    ],
+  ])('a full or partial refund answered with %s is PosHttpError', async (_n, answer, expected) => {
+    const { sent, fetchImpl } = bankFetch({ soap: () => answer() })
+    const logger = createLogger()
+    const p = realGateway(fetchImpl, { logger })
+    for (const order of [reversal(), reversal({ amount: 9.01, order_amount: 10.01 })]) {
+      const err = await p.refund(order).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect([(err as PosHttpError).message, (err as PosHttpError).url]).toStrictEqual(expected)
+    }
+    expect(sent.map((s) => s.headers.get('SOAPAction'))).toStrictEqual([
+      `${SOAP_ACTION_PREFIX}DrawBack`,
+      `${SOAP_ACTION_PREFIX}PartialDrawback`,
+    ])
+    if (expected === UNKNOWN) {
+      expect(logger.error).toHaveBeenCalledWith('bank answer carries no result; the outcome is unknown', {
+        tx_type: TX_TYPE.REFUND,
+        gateway: 'KuveytPos',
+      })
+    }
+  })
+
+  // addition: L3 a refund declined with a response code is still a decline; a cancel moves no new money
+  it('a refund declined with ResponseCode 28 is declined and a cancel answered with HTTP 204 too', async () => {
+    const { fetchImpl } = bankFetch({
+      soap: (action) =>
+        action === 'SaleReversal'
+          ? new Response(null, { status: 204 })
+          : soapXml(pick(refundTestDataProvider, 'fail1').responseData),
+    })
+    const p = realGateway(fetchImpl)
+    const refund = (await p.refund(reversal())) as Data
+    expect([refund.status, refund.proc_return_code, refund.error_code]).toStrictEqual(['declined', '28', '28'])
+    expect(((await p.cancel(reversal())) as Data).status).toBe('declined')
   })
 
   it('a SOAP fault in a 200 answer is PosHttpError with the fault text', async () => {
