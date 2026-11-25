@@ -1150,6 +1150,64 @@ describe('AssecoPos (end to end) unknown outcome after a money request', () => {
   })
 })
 
+describe('AssecoPos (end to end) explicit declines without ProcReturnCode', () => {
+  // the refund decline 'fail2' of the response mapper vectors, as the bank sends it
+  const FAIL2 = xmlAnswer(
+    '<OrderId>2c544d</OrderId><Response>Declined</Response><HostRefNum>413051</HostRefNum><TransId>24082</TransId>' +
+      '<ErrMsg>Net Tutar 0.</ErrMsg><Extra><TRXDATE>20240517 14:28:33</TRXDATE><TRACEID>73631448ab0c1e</TRACEID>' +
+      '<ERRORCODE>215021</ERRORCODE></Extra>',
+  )
+  const saleCard = (p: AssecoPos) =>
+    CreditCardFactory.createForGateway(p, '5555444433332222', '21', '12', '122', 'ahmet', CARD_TYPE.VISA)
+
+  // addition: L3 an answer that says Declined (or Error) is a known decline even without ProcReturnCode
+  it('the refund decline fail2 is declined with its error code', async () => {
+    const res = await realGateway(answeringFetch(() => new Response(FAIL2)).fetchImpl).pos.refund({
+      id: '2c544d',
+      amount: 1,
+      currency: CURRENCY.TRY,
+    })
+    expect([res.status, res.error_code, res.error_message, res.proc_return_code]).toStrictEqual([
+      'declined',
+      '215021',
+      'Net Tutar 0.',
+      null,
+    ])
+  })
+
+  it('a non-secure sale answered like fail2 is declined with its error code', async () => {
+    const p = realGateway(answeringFetch(() => new Response(FAIL2)).fetchImpl).pos
+    const res = await p.payment(MODEL.NON_SECURE, payOrder, TX_TYPE.PAY_AUTH, saleCard(p))
+    expect([res.status, res.error_code, res.proc_return_code]).toStrictEqual(['declined', '215021', null])
+  })
+
+  it('a 3D Secure provision answered like fail2 is declined with its error code', async () => {
+    const { pos, crypt, account: acc } = realGateway(answeringFetch(() => new Response(FAIL2)).fetchImpl)
+    const res = await pos.payment(
+      MODEL.THREE_D_SECURE,
+      payOrder,
+      TX_TYPE.PAY_AUTH,
+      null,
+      signedCallback(crypt, acc, SECURE_CALLBACK),
+    )
+    expect([res.status, res.error_code, res.proc_return_code]).toStrictEqual(['declined', '215021', null])
+  })
+
+  it('an Error answer without any code is declined; an Approved answer without a code stays unknown', async () => {
+    const error = xmlAnswer('<OrderId>2c544d</OrderId><Response>Error</Response><ErrMsg>Hata</ErrMsg>')
+    const res = await realGateway(answeringFetch(() => new Response(error)).fetchImpl).pos.refund(payOrder)
+    expect(res.status).toBe('declined')
+
+    const approved = xmlAnswer(
+      '<OrderId>2c544d</OrderId><Response>Approved</Response><Extra><ERRORCODE>1</ERRORCODE></Extra>',
+    )
+    const err = await realGateway(answeringFetch(() => new Response(approved)).fetchImpl)
+      .pos.refund(payOrder)
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+  })
+})
+
 describe('AssecoPos (end to end) 3D Secure callback bound to the order before the provision', () => {
   const run = async (callback: Record<string, string>, order: PosOrder = payOrder) => {
     const { sent, fetchImpl } = answeringFetch(() => new Response(APPROVED_PROVISION))

@@ -79,6 +79,18 @@ describe('AssecoPosResponseDataMapper', () => {
     [{ ProcReturnCode: ['00', '00'] }, null],
     [{ ProcReturnCode: { a: '00' } }, null],
     [{ ProcReturnCode: true }, null],
+    // addition: L3 an explicit decline or error without ProcReturnCode carries its result in Extra.ERRORCODE or Response
+    [{ Response: 'Declined', ErrMsg: 'Net Tutar 0.', Extra: { ERRORCODE: '215021' } }, '215021'],
+    [{ Response: 'Error', Extra: { ERRORCODE: 'CORE-2008' } }, 'CORE-2008'],
+    [{ Response: 'Declined', ErrMsg: 'Red' }, 'Declined'],
+    [{ Response: 'Error', Extra: { ERRORCODE: ['1', '2'] } }, 'Error'],
+    [{ Response: 'Error', Extra: [{ ERRORCODE: '1' }] }, 'Error'],
+    [{ Response: 'Declined', ProcReturnCode: '99', Extra: { ERRORCODE: '215021' } }, '99'],
+    [{ Response: 'Approved' }, null],
+    [{ Response: 'Approved', Extra: { ERRORCODE: '215021' } }, null],
+    [{ Response: 'declined', Extra: { ERRORCODE: '215021' } }, null],
+    [{ Response: ' Declined', Extra: { ERRORCODE: '215021' } }, null],
+    [{ Response: ['Declined'] }, null],
   ] as Array<[Record<string, unknown>, string | null]>)('readProcReturnCode(%j) is %j', (raw, expected) => {
     expect(mapper.readProcReturnCode(raw)).toBe(expected)
   })

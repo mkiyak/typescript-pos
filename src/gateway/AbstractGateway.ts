@@ -533,14 +533,15 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
   /**
    * The answer to a request that can move money (payment, pre-/post-authorization, 3D provision, refund) must carry a
    * result code. An empty answer (HTTP 204, an empty body or root) or one without a result code says nothing about the
-   * money: it may have moved, so mapping it as a decline would invite a retry and a double charge. Cancels, status
-   * and history requests are not checked: repeating them cannot move money twice.
+   * money: it may have moved, so mapping it as a decline would invite a retry and a double charge. A code with
+   * surrounding whitespace is not the bank's exact code and counts as none. Cancels, status and history requests are
+   * not checked: repeating them cannot move money twice.
    *
    * @throws PosHttpError when the answer carries no result (the outcome is unknown; check `status` before any retry)
    */
   protected assertAnswerHasResult(txType: TxType, answer: Record<string, unknown>): void {
     const code: unknown = Object.keys(answer).length === 0 ? null : this.responseDataMapper.readProcReturnCode(answer)
-    if (typeof code === 'string' && code.trim() !== '') {
+    if (typeof code === 'string' && code !== '' && code === code.trim()) {
       return
     }
 

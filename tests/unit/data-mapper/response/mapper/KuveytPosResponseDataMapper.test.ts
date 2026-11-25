@@ -63,10 +63,10 @@ describe('KuveytPosResponseDataMapper', () => {
   const realMapper = (log?: PosLogger) =>
     new KuveytPosResponseDataMapper(new BoaPosResponseValueFormatter(), new KuveytPosResponseValueMapper(), log)
 
-  // addition: L3 the gateway checks the response code of a payment answer or, in a refund answer, of the drawback
-  // result's Value
+  // addition: L3 the gateway checks the response code under the Value of a refund answer's drawback result
   it.each([
-    [{ ResponseCode: '00' }, '00'],
+    // deviation: L3 (ruling) only the refund result's Value.ResponseCode counts; a top-level code is no refund result
+    [{ ResponseCode: '00' }, null],
     [{ PartialDrawbackResponse: { PartialDrawbackResult: { Value: { ResponseCode: '28' } } } }, '28'],
     [{ DrawBackResponse: { DrawBackResult: { Value: { ResponseCode: '00' } } } }, '00'],
     [{ DrawBackResponse: { DrawBackResult: { Value: { OrderId: 0 } } } }, null],

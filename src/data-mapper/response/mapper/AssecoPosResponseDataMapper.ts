@@ -423,6 +423,24 @@ export class AssecoPosResponseDataMapper extends AbstractResponseDataMapper {
     return 'MPI fallback'
   }
 
+  /**
+   * The result of a raw answer: its `ProcReturnCode` when present. The bank answers some declines and errors without
+   * one (`Response` `Declined` or `Error`, the reason in `Extra.ERRORCODE`); such an answer still says that nothing was
+   * done, so its error code, or else the `Response` text, is its result. Any other answer without `ProcReturnCode`
+   * (an `Approved` one included) carries no result.
+   */
+  override readProcReturnCode(raw: Raw): string | null {
+    const code = this.getProcReturnCode(raw)
+    if (code !== null) return code
+
+    const response = field(raw, 'Response')
+    if (response !== 'Declined' && response !== 'Error') return null
+    const extra = field(raw, 'Extra')
+    const errorCode = extra !== null && !Array.isArray(extra) ? scalarText(field(extra, 'ERRORCODE')) : null
+
+    return errorCode !== null && errorCode.trim() !== '' ? errorCode : response
+  }
+
   /** `ProcReturnCode` as text; a repeated or nested element (a list or record) reads as no code. */
   protected getProcReturnCode(response: Raw): string | null {
     return scalarText(field(response, 'ProcReturnCode'))

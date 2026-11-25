@@ -199,14 +199,14 @@ export class KuveytPosResponseDataMapper extends AbstractResponseDataMapper {
   }
 
   /**
-   * The exact `ResponseCode` text of an answer: at the top of a payment answer, under the `Value` of the drawback
-   * result in a refund answer (where the refund mapping decides on it). Anything else reads as null.
+   * The exact `ResponseCode` text under the `Value` of a refund answer's drawback result, where the refund mapping
+   * decides on it (the gateway reads it only after a refund; payments check their own answers). Anything else,
+   * a top-level `ResponseCode` included, reads as null.
    */
   override readProcReturnCode(raw: Raw): string | null {
-    const exact = isRecord(raw) ? raw : {}
-    const value = child(refundResult(exact), 'Value')
+    const value = child(refundResult(isRecord(raw) ? raw : {}), 'Value')
 
-    return this.getProcReturnCode(exact) ?? (value === null ? null : this.getProcReturnCode(value))
+    return value === null ? null : this.getProcReturnCode(value)
   }
 
   protected getProcReturnCode(response: Raw): string | null {

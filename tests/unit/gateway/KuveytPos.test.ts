@@ -1929,6 +1929,8 @@ describe('KuveytPos (end to end) non-3D and SOAP transactions', () => {
         }),
       UNKNOWN,
     ],
+    // addition: L3 (ruling) a code outside the drawback result is no refund result
+    ['a top-level ResponseCode only', () => soapXml({ ResponseCode: '00' }), UNKNOWN],
     [
       'a blank ResponseCode',
       () => soapXml({ DrawBackResponse: { DrawBackResult: { Value: { ResponseCode: '  ', OrderId: 0 } } } }),

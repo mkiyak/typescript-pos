@@ -1643,6 +1643,8 @@ describe('AkbankPos (end to end) unknown outcome after a money request', () => {
     ['a null responseCode', () => ({ txnCode: '1000', responseCode: null })],
     ['a list responseCode', () => ({ txnCode: '1000', responseCode: ['VPS-0000'] })],
     ['a record responseCode', () => ({ txnCode: '1000', responseCode: { code: 'VPS-0000' } })],
+    // addition: L3 (ruling) a padded code is not the bank's exact code
+    ['a padded responseCode', () => ({ txnCode: '1000', responseCode: ' VPS-0000' })],
   ]
   const saleCard = (p: AkbankPos) =>
     CreditCardFactory.createForGateway(p, '5555444433332222', '21', '12', '122', 'ahmet', CARD_TYPE.VISA)

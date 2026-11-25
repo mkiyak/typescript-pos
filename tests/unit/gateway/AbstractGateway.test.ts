@@ -653,6 +653,9 @@ describe('AbstractGateway', () => {
       ['an empty code', '{"code":""}', 200],
       ['a null code', '{"code":null}', 200],
       ['a list code', '{"code":["00"]}', 200],
+      // addition: L3 (ruling) a code with surrounding whitespace is not the bank's exact code
+      ['a code with a leading blank', '{"code":" 00"}', 200],
+      ['a code with a trailing newline', '{"code":"05\\n"}', 200],
     ]
     const cases = moneyRequests.flatMap(([name, txType, call]) =>
       resultless.map(([answer, body, status]) => [name, answer, txType, call, body, status] as const),
