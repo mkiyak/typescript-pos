@@ -14,6 +14,7 @@ import { PayForPos3DFormHttpClient } from '../../../src/client/PayForPos3DFormHt
 import { PayForPosHttpClient } from '../../../src/client/PayForPosHttpClient.js'
 import { PosNetPosHttpClient } from '../../../src/client/PosNetPosHttpClient.js'
 import { PosNetV1PosHttpClient } from '../../../src/client/PosNetV1PosHttpClient.js'
+import { ToslaPosHttpClient } from '../../../src/client/ToslaPosHttpClient.js'
 import { VakifKatilimPosHttpClient } from '../../../src/client/VakifKatilimPosHttpClient.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { AkbankPosCrypt } from '../../../src/crypt/AkbankPosCrypt.js'
@@ -321,6 +322,35 @@ describe('PosHttpClientStrategyFactory', () => {
       ] as const) {
         expect(strategy.getClient(txType, model)).toBeInstanceOf(VakifKatilimPosHttpClient)
       }
+    })
+  })
+
+  describe('ToslaPos', () => {
+    const toslaConfig: GatewayConfig = {
+      name: 'Tosla',
+      class: 'ToslaPos',
+      gateway_endpoints: { payment_api: 'https://ent.akodepos.com/api/Payment' },
+    }
+
+    // addition: one JSON client serves every transaction and query
+    it('holds one client', () => {
+      expect(classesOf('ToslaPos', toslaConfig)).toEqual([ToslaPosHttpClient])
+      const strategy = PosHttpClientStrategyFactory.createForGateway('ToslaPos', toslaConfig, transport, noopLogger)
+      expect(strategy.getClient('installment_prices', 'regular')).toBeInstanceOf(ToslaPosHttpClient)
+      expect(strategy.getClient('pay', '3d_pay')).toBeInstanceOf(ToslaPosHttpClient)
+    })
+
+    // addition: a missing endpoint is a PosError, never a request to "undefined"
+    it('requires the payment_api endpoint', () => {
+      expect(() => classesOf('ToslaPos', { ...toslaConfig, gateway_endpoints: {} as never })).toThrow(
+        /Endpoint \[payment_api\] is required for/,
+      )
+    })
+
+    // addition: card data never travels over plain HTTP
+    it('rejects an http: endpoint', () => {
+      const config = { ...toslaConfig, gateway_endpoints: { payment_api: 'http://ent.akodepos.com/api/Payment' } }
+      expect(() => assertHttpsEndpoints(config)).toThrow(/Endpoint \[payment_api\] of .* must be an https: URL\./)
     })
   })
 

@@ -366,3 +366,11 @@ describe('request hash masking', () => {
     })
   })
 })
+
+// addition: a JSON error page that echoes the request must not leak the request hash or the API password
+describe('maskSensitiveData JSON request echo', () => {
+  it('masks a hash and an apiPass inside a JSON string', () => {
+    const out = maskSensitiveData('{"clientId":"1","hash":"c2VjcmV0","apiPass":"pw","Hash":"x"}')
+    expect(out).toBe('{"clientId":"1","hash":"***","apiPass":"***","Hash":"***"}')
+  })
+})

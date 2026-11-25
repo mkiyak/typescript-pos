@@ -48,6 +48,7 @@ const SENSITIVE_KEYS = new Set([
   'hashdata',
   // A request hash signs no body field, so a logged hash plus its body lets a reader send any request.
   'hash',
+  'apipass',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -89,12 +90,15 @@ const SENSITIVE_TAGS = [
   'HashPassword',
   'HashData',
 ]
+// Request fields a JSON error page may echo back. Only the JSON form is masked: a `Hash=` form field of another
+// gateway stays readable on purpose.
+const JSON_ONLY_TAGS = ['Hash', 'ApiPass']
 const XML_PATTERN = new RegExp(`(<(${SENSITIVE_TAGS.join('|')})(?:\\s[^>]*)?>)[^<]*(</\\2\\s*>)`, 'gi')
 const QUERY_PATTERN = new RegExp(`(?<![A-Za-z0-9_])(${SENSITIVE_TAGS.join('|')})=[^&\\s"']*`, 'gi')
 // JSON-encoded pairs inside strings: "Password" : "value" (escaped quotes allowed in the value) or a bare number
 // such as "cvv2":123.
 const JSON_PATTERN = new RegExp(
-  `"(${SENSITIVE_TAGS.join('|')})"\\s*:\\s*(?:"(?:[^"\\\\]|\\\\.)*"|-?\\d[\\d.eE+-]*)`,
+  `"(${[...SENSITIVE_TAGS, ...JSON_ONLY_TAGS].join('|')})"\\s*:\\s*(?:"(?:[^"\\\\]|\\\\.)*"|-?\\d[\\d.eE+-]*)`,
   'gi',
 )
 

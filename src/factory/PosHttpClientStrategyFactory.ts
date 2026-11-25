@@ -14,6 +14,7 @@ import { PayForPos3DFormHttpClient } from '../client/PayForPos3DFormHttpClient.j
 import { PayForPosHttpClient } from '../client/PayForPosHttpClient.js'
 import { PosNetPosHttpClient } from '../client/PosNetPosHttpClient.js'
 import { PosNetV1PosHttpClient } from '../client/PosNetV1PosHttpClient.js'
+import { ToslaPosHttpClient } from '../client/ToslaPosHttpClient.js'
 import { VakifKatilimPosHttpClient } from '../client/VakifKatilimPosHttpClient.js'
 import { AkbankPosCrypt } from '../crypt/AkbankPosCrypt.js'
 import type { CryptInterface } from '../crypt/CryptInterface.js'
@@ -125,6 +126,10 @@ export const PosHttpClientStrategyFactory = {
         // One XML gateway for payments, status, reversals, history and the 3D form.
         return new HttpClientStrategy([
           new VakifKatilimPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
+        ])
+      case 'ToslaPos':
+        return new HttpClientStrategy([
+          new ToslaPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger),
         ])
       case 'AkbankPos': {
         const account = signing?.account
