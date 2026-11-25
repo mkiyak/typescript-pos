@@ -526,4 +526,42 @@ describe('Param credentials', () => {
       })
     })
   })
+
+  // addition: iyzico credentials and card fields
+  it('masks the authorization header value, the secret key and the card fields', () => {
+    const out = maskSensitiveData({
+      Authorization: 'IYZWSv2 abc',
+      cardHolderName: 'John Doe',
+      paymentCard: { cardNumber: '4603450000000000', cvc: '000', expireMonth: '12', expireYear: '2026' },
+    })
+    expect(out).toEqual({
+      Authorization: '***',
+      cardHolderName: '***',
+      paymentCard: { cardNumber: '***', cvc: '***', expireMonth: '***', expireYear: '***' },
+    })
+  })
+
+  it('masks the same fields inside a JSON text', () => {
+    const text =
+      '{"paymentCard":{"cardHolderName":"John Doe","cardNumber":"4603450000000000","cvc":"000","expireMonth":"12","expireYear":"2026"}}'
+    const out = maskSensitiveData(text)
+    for (const leaked of ['John Doe', '4603450000000000', '"000"', '"12"', '"2026"']) expect(out).not.toContain(leaked)
+    // the card number keeps its first six and last four digits, as in every other JSON text
+    expect(out).toContain('460345****0000')
+    expect(out).toContain('"cardHolderName":"***"')
+  })
+
+  it('masks an authorization header carried in a JSON text', () => {
+    expect(maskSensitiveData('{"Authorization":"IYZWSv2 abc","x":"y"}')).not.toContain('IYZWSv2 abc')
+  })
+
+  it('leaves non-secret iyzico fields readable', () => {
+    expect(maskSensitiveData({ signature: 'ab', conversationId: 'order-1' })).toEqual({
+      signature: 'ab',
+      conversationId: 'order-1',
+    })
+    expect(maskSensitiveData('{"conversationId":"order-1","status":"success"}')).toBe(
+      '{"conversationId":"order-1","status":"success"}',
+    )
+  })
 })

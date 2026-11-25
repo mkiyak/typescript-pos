@@ -4,6 +4,7 @@ import { AssecoPosAccount } from '../model/account/AssecoPosAccount.js'
 import { BoaPosAccount } from '../model/account/BoaPosAccount.js'
 import { GarantiPosAccount } from '../model/account/GarantiPosAccount.js'
 import { InterPosAccount } from '../model/account/InterPosAccount.js'
+import { IyzicoPosAccount } from '../model/account/IyzicoPosAccount.js'
 import { ParamPosAccount } from '../model/account/ParamPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../model/account/PayForPosAccount.js'
@@ -11,7 +12,7 @@ import { PayTrPosAccount } from '../model/account/PayTrPosAccount.js'
 import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
 import { ToslaPosAccount } from '../model/account/ToslaPosAccount.js'
 
-/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor, InterPos, BOA (Kuveyt, Vakif Katilim), Tosla, Param and PayTR gateways. */
+/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor, InterPos, BOA (Kuveyt, Vakif Katilim), Tosla, Param, PayTR and iyzico gateways. */
 export const AccountFactory = {
   createAssecoPosAccount(
     bank: string,
@@ -116,6 +117,15 @@ export const AccountFactory = {
 
   createToslaPosAccount(bank: string, clientId: string, apiUser: string, apiPass: string): ToslaPosAccount {
     return new ToslaPosAccount(bank, clientId, apiUser, apiPass)
+  },
+
+  createIyzicoPosAccount(
+    bank: string,
+    apiKey: string,
+    secretKey: string,
+    subMerchantKey: string | null = null,
+  ): IyzicoPosAccount {
+    return new IyzicoPosAccount(bank, apiKey, secretKey, subMerchantKey)
   },
 
   createPayTrPosAccount(bank: string, merchantId: string, merchantSalt: string, merchantKey: string): PayTrPosAccount {

@@ -122,4 +122,67 @@ describe('HttpTransport', () => {
     expect(res.bytes).toStrictEqual(raw)
     expect(res.body).toBe('<a>\uFFFD</a>')
   })
+
+  // addition: GET requests (signed-URL gateways)
+  describe('get', () => {
+    it('sends a GET without a body, with the headers and redirect: error', async () => {
+      let seen: { url: unknown; init: RequestInit | undefined } | undefined
+      const f = (async (url: unknown, init?: RequestInit) => {
+        seen = { url, init }
+        return new Response('{"ok":1}', { status: 200, headers: { 'x-a': 'b' } })
+      }) as unknown as typeof fetch
+      const res = await new HttpTransport({ fetch: f }).get('https://bank.test/api?a=1', { Authorization: 'x' })
+      expect(res.status).toBe(200)
+      expect(res.body).toBe('{"ok":1}')
+      expect(res.headers.get('x-a')).toBe('b')
+      expect(seen?.url).toBe('https://bank.test/api?a=1')
+      expect(seen?.init?.method).toBe('GET')
+      expect(seen?.init).not.toHaveProperty('body')
+      expect(seen?.init?.redirect).toBe('error')
+      expect(seen?.init?.headers).toEqual({ Authorization: 'x' })
+    })
+
+    it('rejects a 404 with the status and a body snippet', async () => {
+      const err = await new HttpTransport({ fetch: fakeFetch(404, 'not here') })
+        .get('https://bank.test/api', {})
+        .catch((e) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect(err.status).toBe(404)
+      expect(err.bodySnippet).toBe('not here')
+    })
+
+    it('rejects a 3xx it is handed', async () => {
+      const err = await new HttpTransport({ fetch: fakeFetch(308, '') })
+        .get('https://bank.test/api', {})
+        .catch((e) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect(err.status).toBe(308)
+    })
+
+    it('wraps a fetch rejection', async () => {
+      const f = (async () => {
+        throw new TypeError('boom')
+      }) as unknown as typeof fetch
+      const err = await new HttpTransport({ fetch: f }).get('https://bank.test/api', {}).catch((e) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect(err.message).toContain('boom')
+    })
+
+    it('times out', async () => {
+      const f = ((_url: unknown, init?: RequestInit) =>
+        new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+        })) as unknown as typeof fetch
+      const err = await new HttpTransport({ fetch: f, timeoutMs: 20 }).get('https://bank.test/api', {}).catch((e) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect(err.message).toContain('timed out')
+    })
+
+    it('keeps the query string out of an error url', async () => {
+      const err = await new HttpTransport({ fetch: fakeFetch(500, 'x') })
+        .get('https://bank.test/api?token=abc', {})
+        .catch((e) => e)
+      expect(err.url).toBe('https://bank.test/api')
+    })
+  })
 })

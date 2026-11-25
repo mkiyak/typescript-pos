@@ -27,6 +27,23 @@ export class HttpTransport {
   }
 
   async post(url: string, body: string | Uint8Array, headers: Record<string, string>): Promise<HttpTransportResponse> {
+    return this.exchange('POST', url, body, headers)
+  }
+
+  /**
+   * A GET sends no body. An error carries the URL without its query string, since a query may hold request values.
+   */
+  async get(url: string, headers: Record<string, string>): Promise<HttpTransportResponse> {
+    return this.exchange('GET', url, undefined, headers)
+  }
+
+  private async exchange(
+    method: 'POST' | 'GET',
+    url: string,
+    body: string | Uint8Array | undefined,
+    headers: Record<string, string>,
+  ): Promise<HttpTransportResponse> {
+    const errorUrl = method === 'GET' ? (url.split('?')[0] ?? url) : url
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {
@@ -36,15 +53,15 @@ export class HttpTransport {
       }, this.timeoutMs)
     })
 
-    const exchange = async (): Promise<HttpTransportResponse> => {
+    const run = async (): Promise<HttpTransportResponse> => {
       let res: Response
       let bytes: Uint8Array
       let text: string
       try {
         // redirect: 'error' — a 307/308 would resend the body (card data, credentials) to another host
         res = await this.fetchImpl(url, {
-          method: 'POST',
-          body: body as string,
+          method,
+          ...(body === undefined ? {} : { body: body as string }),
           headers,
           signal: controller.signal,
           redirect: 'error',
@@ -55,17 +72,17 @@ export class HttpTransport {
         if (e instanceof PosHttpError) throw e
         throw new PosHttpError(
           `HTTP request failed: ${e instanceof Error ? e.message : String(e)}`,
-          { url },
+          { url: errorUrl },
           { cause: e },
         )
       }
       if (res.status < 200 || res.status >= 300) {
-        throw new PosHttpError(`Bank returned HTTP ${res.status}`, { url, status: res.status, body: text })
+        throw new PosHttpError(`Bank returned HTTP ${res.status}`, { url: errorUrl, status: res.status, body: text })
       }
       return { status: res.status, body: text, bytes, headers: res.headers }
     }
 
-    const pending = exchange()
+    const pending = run()
     pending.catch(() => {}) // a late rejection after the timeout won must not be unhandled
     try {
       return await Promise.race([pending, timeout])

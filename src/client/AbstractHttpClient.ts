@@ -1,4 +1,4 @@
-import { PosHttpError } from '../errors.js'
+import { PosError, PosHttpError } from '../errors.js'
 import { createSafeLogger, type PosLogger } from '../logger.js'
 import type { PaymentModel, TxType } from '../PosInterface.js'
 import type { QueryType } from '../pos-query/PosQueryInterface.js'
@@ -40,6 +40,15 @@ export function hideSecrets(text: string, secrets: readonly string[]): string {
   }
 
   return out
+}
+
+function stripQuery(url: string): string {
+  return url.split('?')[0] ?? url
+}
+
+function appendQuery(url: string, query: string): string {
+  if (query === '') return url
+  return `${url}${url.includes('?') ? '&' : '?'}${query}`
 }
 
 /** Payment transaction types and query types both go through the HTTP clients. */
@@ -91,18 +100,21 @@ export abstract class AbstractHttpClient {
     order: PosOrder,
     url?: string | null,
   ): Promise<Record<string, unknown>> {
-    const target = url ?? this.getApiUrl(txType, paymentModel)
+    const apiUrl = url ?? this.getApiUrl(txType, paymentModel)
+    // Logs and header builders see the URL without its query string: request values may travel in it.
+    const target = stripQuery(apiUrl)
     const encoded = this.encode(txType, paymentModel, requestData, order)
+    const method = this.httpMethod(txType, paymentModel)
 
     this.logger.debug('sending request', { url: target, tx_type: txType, payment_model: paymentModel })
 
     let response: HttpTransportResponse
     try {
-      response = await this.transport.post(
-        target,
-        this.requestBody(encoded),
-        this.headers(txType, paymentModel, encoded),
-      )
+      const headers = this.headers(txType, paymentModel, encoded, target)
+      response =
+        method === 'GET'
+          ? await this.transport.get(appendQuery(apiUrl, this.queryString(encoded)), headers)
+          : await this.transport.post(apiUrl, this.requestBody(encoded), headers)
     } catch (e) {
       const secrets = this.logSecrets(requestData)
       this.logger.error('api request failed', {
@@ -166,6 +178,17 @@ export abstract class AbstractHttpClient {
     return []
   }
 
+  /** `GET` sends the encoded data as the query string and no body. Default: POST. */
+  protected httpMethod(_txType: ClientTxType, _paymentModel: PaymentModel): 'POST' | 'GET' {
+    return 'POST'
+  }
+
+  /** The query string of a GET request: the encoded data, which must be a form encoding. */
+  private queryString(encoded: EncodedData): string {
+    if (encoded.format !== 'form') throw new PosError('A GET request carries form-encoded data only.')
+    return encoded.data
+  }
+
   /** Overridable for gateways whose URL depends on the transaction. */
   protected getApiUrl(_txType: ClientTxType, _paymentModel: PaymentModel): string {
     return this.endpoint
@@ -196,7 +219,13 @@ export abstract class AbstractHttpClient {
     return response.body
   }
 
-  protected headers(_txType: ClientTxType, _paymentModel: PaymentModel, encoded: EncodedData): Record<string, string> {
+  /** `url` is the request URL without its query string, exactly as it is sent (a signed-URL gateway signs it). */
+  protected headers(
+    _txType: ClientTxType,
+    _paymentModel: PaymentModel,
+    encoded: EncodedData,
+    _url: string,
+  ): Record<string, string> {
     return { 'Content-Type': CONTENT_TYPES[encoded.format] }
   }
 

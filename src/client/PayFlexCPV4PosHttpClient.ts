@@ -63,8 +63,9 @@ export class PayFlexCPV4PosHttpClient extends AbstractHttpClient {
     txType: ClientTxType,
     paymentModel: PaymentModel,
     encoded: EncodedData,
+    url: string,
   ): Record<string, string> {
-    return { ...super.headers(txType, paymentModel, encoded), Accept: 'application/json' }
+    return { ...super.headers(txType, paymentModel, encoded, url), Accept: 'application/json' }
   }
 
   protected override decode(body: string): Promise<Record<string, unknown>> {

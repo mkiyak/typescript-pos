@@ -66,6 +66,9 @@ const SENSITIVE_KEYS = new Set([
   'expiry_month',
   'expiry_year',
   'cc_owner',
+  // iyzico: the signature header carries the key and the request signature, and the card fields.
+  'authorization',
+  'cardholdername',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -124,6 +127,8 @@ const SENSITIVE_TAGS = [
   'cc_owner',
   'merchant_key',
   'merchant_salt',
+  'Authorization',
+  'cardHolderName',
 ]
 // Request fields a JSON error page may echo back. Only the JSON form is masked: a `Hash=` form field of another
 // gateway stays readable on purpose.

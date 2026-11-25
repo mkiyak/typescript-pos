@@ -7,6 +7,7 @@ import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js
 import { BoaPosAccount } from '../../../src/model/account/BoaPosAccount.js'
 import { GarantiPosAccount } from '../../../src/model/account/GarantiPosAccount.js'
 import { InterPosAccount } from '../../../src/model/account/InterPosAccount.js'
+import { IyzicoPosAccount } from '../../../src/model/account/IyzicoPosAccount.js'
 import { ParamPosAccount } from '../../../src/model/account/ParamPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../../../src/model/account/PayForPosAccount.js'
@@ -517,6 +518,8 @@ describe('account credential leakage', () => {
     ['Tosla', () => AccountFactory.createToslaPosAccount('tosla', 'mid', 'api-user', 'api-pass')],
     // addition: C1
     ['PayTR', () => AccountFactory.createPayTrPosAccount('paytr', 'mid', 'paytr-salt-x', 'paytr-key-x')],
+    // addition: C1
+    ['Iyzico', () => AccountFactory.createIyzicoPosAccount('iyzico', 'mid', 'iyz-secret-x', 'iyz-sub-x')],
     // addition: C2
     [
       'Param',
@@ -550,9 +553,53 @@ describe('account credential leakage', () => {
         '99001',
         'paytr-salt-x',
         'paytr-key-x',
+        'iyz-secret-x',
+        'iyz-sub-x',
       ])
         expect(out).not.toContain(secret)
     }
     expect(JSON.stringify(a)).toContain('mid')
+  })
+})
+
+describe('createIyzicoPosAccount', () => {
+  it('creates an account without a sub merchant key', () => {
+    const account = AccountFactory.createIyzicoPosAccount('iyzico', 'api-key', 'api-secret-key')
+    expect(account).toBeInstanceOf(IyzicoPosAccount)
+    expect(account.getBankName()).toBe('iyzico')
+    expect(account.getApiKey()).toBe('api-key')
+    expect(account.getSecretKey()).toBe('api-secret-key')
+    expect(account.getSubMerchantId()).toBeNull()
+  })
+
+  it('creates an account with a sub merchant key', () => {
+    const account = AccountFactory.createIyzicoPosAccount('iyzico', 'api-key', 'api-secret-key', 'sub-merchant-key')
+    expect(account.getApiKey()).toBe('api-key')
+    expect(account.getSecretKey()).toBe('api-secret-key')
+    expect(account.getSubMerchantId()).toBe('sub-merchant-key')
+  })
+
+  // addition: blank credentials are never signed or sent
+  it.each([
+    ['empty api key', '', 'sk'],
+    ['blank api key', '  ', 'sk'],
+    ['empty secret key', 'ak', ''],
+    ['blank secret key', 'ak', ' \t '],
+    ['non-string api key', 123 as unknown as string, 'sk'],
+    ['undefined secret key', 'ak', undefined as unknown as string],
+  ])('rejects %s', (_n, apiKey, secretKey) => {
+    expect(() => AccountFactory.createIyzicoPosAccount('iyzico', apiKey, secretKey)).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: a blank sub merchant key means none
+  it('treats a blank sub merchant key as none', () => {
+    expect(AccountFactory.createIyzicoPosAccount('iyzico', 'ak', 'sk', '  ').getSubMerchantId()).toBeNull()
+  })
+
+  // addition: there is no API user or password
+  it('has no username or password', () => {
+    const account = AccountFactory.createIyzicoPosAccount('iyzico', 'ak', 'sk')
+    expect(account.getUsername()).toBe('')
+    expect(account.getPassword()).toBe('')
   })
 })
