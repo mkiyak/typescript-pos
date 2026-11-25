@@ -100,10 +100,10 @@ describe('KuveytPosSoapApiXmlDecoder', () => {
     ).toThrow(PosHttpError)
   })
 
-  // addition: K6, entity definitions in an answer are not expanded
-  it('does not expand entities defined in the answer', () => {
+  // deviation: entity definitions in an answer are refused outright (previously an internal entity was left as text)
+  it('refuses an answer that defines entities', () => {
     const xml =
       '<!DOCTYPE s [<!ENTITY a "AAAAAAAAAA"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">]><s:Envelope xmlns:s="x"><s:Body><r>&b;</r></s:Body></s:Envelope>'
-    expect(KuveytPosSoapApiXmlDecoder.decode(xml)).toStrictEqual({ r: '&b;' })
+    expect(() => KuveytPosSoapApiXmlDecoder.decode(xml)).toThrow(PosHttpError)
   })
 })

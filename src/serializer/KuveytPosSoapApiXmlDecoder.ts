@@ -1,7 +1,7 @@
-import { decodeSoapBody } from './SoapXmlDecoder.js'
+import { SoapXmlDecoder } from './SoapXmlDecoder.js'
 
 /**
- * The SOAP body decoder of the Kuveyt Turk query endpoint: the shared body logic without the refusal of document
- * types, so the answers this endpoint has always been read with keep reading the same way.
+ * The SOAP body decoder of the Kuveyt Turk query endpoint: the shared strict decoder, which refuses an answer that
+ * defines a document type or entities.
  */
-export const KuveytPosSoapApiXmlDecoder = { decode: decodeSoapBody }
+export const KuveytPosSoapApiXmlDecoder = SoapXmlDecoder

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { PosHttpError } from '../../../src/errors.js'
 import { KuveytPosSoapApiXmlDecoder } from '../../../src/serializer/KuveytPosSoapApiXmlDecoder.js'
-import { SoapXmlDecoder } from '../../../src/serializer/SoapXmlDecoder.js'
+import { decodeSoapBody, SoapXmlDecoder } from '../../../src/serializer/SoapXmlDecoder.js'
 
 const ENV = 'http://schemas.xmlsoap.org/soap/envelope/'
 
@@ -73,11 +73,11 @@ describe('SoapXmlDecoder', () => {
     const xml = `${head}<soap:Envelope xmlns:soap="${ENV}"><soap:Body><R><A>&e;</A></R></soap:Body></soap:Envelope>`
     expect(() => SoapXmlDecoder.decode(xml)).toThrow(PosHttpError)
     // The lenient body decoder reads the same text (so the row is well-formed and only the refusal stops it).
-    if (parsesWithoutRefusal) expect(() => KuveytPosSoapApiXmlDecoder.decode(xml)).not.toThrow()
+    if (parsesWithoutRefusal) expect(() => decodeSoapBody(xml)).not.toThrow()
   })
 
-  // addition: the Kuveyt name reads the same body logic (it does not refuse document types)
-  it('reads the same bodies as the Kuveyt decoder', () => {
+  // deviation: the Kuveyt name is now the strict decoder itself
+  it('is the decoder the Kuveyt endpoint reads with', () => {
     const xml = `<s:Envelope xmlns:s="${ENV}"><s:Body><R><A>1</A></R></s:Body></s:Envelope>`
     expect(KuveytPosSoapApiXmlDecoder.decode(xml)).toStrictEqual(SoapXmlDecoder.decode(xml))
   })
