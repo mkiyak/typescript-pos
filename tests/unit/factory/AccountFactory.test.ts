@@ -529,7 +529,16 @@ describe('account credential leakage', () => {
 
   it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
     const a = make()
-    const outputs = [JSON.stringify(a), JSON.stringify(maskSensitiveData(a)), inspect(a, { depth: 5 })]
+    // The #private credentials are not own properties, so masking the instance itself gives `{}` whatever it holds;
+    // the masked `toJSON()` output is what shows that only the identifiers survive.
+    const masked = maskSensitiveData(a.toJSON())
+    expect(masked).toStrictEqual({ bankName: a.getBankName(), merchantId: 'mid' })
+    const outputs = [
+      JSON.stringify(a),
+      JSON.stringify(masked),
+      JSON.stringify(maskSensitiveData(a)),
+      inspect(a, { depth: 5 }),
+    ]
     for (const out of outputs) {
       for (const secret of [
         'PW1',

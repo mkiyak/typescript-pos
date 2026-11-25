@@ -211,14 +211,18 @@ describe('AbstractPosQuery', () => {
 
     it('an origin that is only allowed on another port stays rejected', async () => {
       const { q } = setup({ allowedApiOrigins: ['https://apipos.vakifbank.com.tr:8443'] })
-      await expect(q.customQuery({}, 'https://apipos.vakifbank.com.tr/x')).rejects.toBeInstanceOf(PosError)
+      await expect(q.customQuery({}, 'https://apipos.vakifbank.com.tr/x')).rejects.toThrow(
+        /^Custom query URL must be an https: URL on /,
+      )
     })
 
     it('http endpoints in the config never become allowed origins', async () => {
       const { q } = setup({
         config: { ...config, gateway_endpoints: { payment_api: 'http://plain.test/api' } },
       })
-      await expect(q.customQuery({}, 'http://plain.test/api')).rejects.toBeInstanceOf(PosError)
+      await expect(q.customQuery({}, 'http://plain.test/api')).rejects.toThrow(
+        /^Custom query URL must be an https: URL on /,
+      )
     })
   })
 

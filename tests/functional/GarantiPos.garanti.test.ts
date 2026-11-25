@@ -65,6 +65,9 @@ describe.skipIf(!RUN)('GarantiPos against the Garanti test environment', () => {
     console.info('[functional] sale', summary(sale))
     expect(sale.status, JSON.stringify(summary(sale))).toBe('approved')
 
+    // the cancel below needs the bank reference of the sale; stop here with a clear message when it is missing
+    expect(sale.ref_ret_num, JSON.stringify(summary(sale))).toBeTruthy()
+
     const status = await pos.status({ id: order.id, currency: order.currency, amount: order.amount, ip: order.ip })
     console.info('[functional] status', summary(status))
     expect(status.status, JSON.stringify(summary(status))).toBe('approved')

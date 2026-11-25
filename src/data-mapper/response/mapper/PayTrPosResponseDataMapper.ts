@@ -123,7 +123,7 @@ export class PayTrPosResponseDataMapper extends AbstractResponseDataMapper {
     // A declined answer refunded nothing, whatever amount it echoes.
     const readable = approved && Object.hasOwn(raw, 'return_amount') && payTrDecimalKurus(raw.return_amount) !== null
 
-    return {
+    return this.withBaseKeys({
       order_id: ownText(raw, 'merchant_oid'),
       status: approved ? TX_APPROVED : TX_DECLINED,
       refund_amount: readable
@@ -133,7 +133,7 @@ export class PayTrPosResponseDataMapper extends AbstractResponseDataMapper {
       error_code: approved ? null : ownReasonCode(raw, 'err_no'),
       error_message: approved ? null : payTrPlainText(raw, 'err_msg'),
       all: raw,
-    } as unknown as PosResponse
+    }) as unknown as PosResponse
   }
 
   mapCancelResponse(_rawResponseData: Raw): PosResponse {

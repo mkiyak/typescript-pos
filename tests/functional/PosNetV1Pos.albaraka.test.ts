@@ -6,11 +6,14 @@ import { PosFactory } from '../../src/factory/PosFactory.js'
 import { CARD_TYPE, CURRENCY, MODEL, TX_TYPE } from '../../src/PosInterface.js'
 import type { PosOrder, PosResponse } from '../../src/types.js'
 
-// Runs against the Albaraka PosNetV1 test environment. Skipped unless FUNCTIONAL_TESTS=1 and POSNET_V1_MERCHANT_ID is
-// set; never run in CI. All credentials come from the environment:
+// Runs against the Albaraka PosNetV1 test environment. Skipped unless FUNCTIONAL_TESTS=1 and POSNET_V1_MERCHANT_ID,
+// POSNET_V1_TERMINAL_ID and POSNET_V1_POS_ID are set; never run in CI. All credentials come from the environment:
 // POSNET_V1_MERCHANT_ID, POSNET_V1_TERMINAL_ID, POSNET_V1_POS_ID, POSNET_V1_ENC_KEY (optional).
 
-const RUN = process.env.FUNCTIONAL_TESTS === '1' && Boolean(process.env.POSNET_V1_MERCHANT_ID)
+// Every credential the account needs gates the run, so a half-set environment skips instead of failing on empty values.
+const RUN =
+  process.env.FUNCTIONAL_TESTS === '1' &&
+  ['MERCHANT_ID', 'TERMINAL_ID', 'POS_ID'].every((name) => Boolean(process.env[`POSNET_V1_${name}`]))
 
 const env = (name: string): string => process.env[name] ?? ''
 

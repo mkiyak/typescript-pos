@@ -147,6 +147,21 @@ export abstract class AbstractResponseDataMapper implements ResponseDataMapperIn
     }
   }
 
+  /**
+   * Every result of a payment, status, cancel, refund or order-history call carries the keys `order_id`,
+   * `proc_return_code`, `error_code` and `error_message` (next to `status` and `all`), so merchant code reads them
+   * without knowing the gateway. A result that a mapper built without one of them gets it as `null`, after the keys it
+   * already has; keys the mapper set are left alone.
+   */
+  protected withBaseKeys<T extends Record<string, unknown>>(result: T): T {
+    const completed: Record<string, unknown> = { ...result }
+    for (const key of ['order_id', 'proc_return_code', 'error_code', 'error_message']) {
+      if (!Object.hasOwn(completed, key)) completed[key] = null
+    }
+
+    return completed as T
+  }
+
   protected getDefaultOrderHistoryTxResponse(): Record<string, unknown> {
     return {
       auth_code: null,

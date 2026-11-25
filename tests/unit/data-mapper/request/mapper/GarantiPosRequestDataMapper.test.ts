@@ -387,11 +387,17 @@ describe('GarantiPosRequestDataMapper', () => {
     })
 
     // addition: callback data that the request is built from must be present
-    it('rejects callback data without the client ip', () => {
-      const { customeripaddress: _c, ...noIp } = responseData
-      expect(() => mapper.create3DPaymentRequestData(account, order, TX_TYPE.PAY_AUTH, noIp)).toThrow(PosError)
-      expect(crypt.createHash).not.toHaveBeenCalled()
-    })
+    it.each(['customeripaddress', 'orderid', 'txnamount', 'txncurrencycode', 'txntype'])(
+      'rejects callback data without %s',
+      (field) => {
+        const incomplete: Record<string, unknown> = { ...responseData }
+        delete incomplete[field]
+        const act = () => mapper.create3DPaymentRequestData(account, order, TX_TYPE.PAY_AUTH, incomplete)
+        expect(act).toThrow(PosError)
+        expect(act).toThrow(field)
+        expect(crypt.createHash).not.toHaveBeenCalled()
+      },
+    )
   })
 
   describe('create3DFormData', () => {
@@ -585,7 +591,7 @@ describe('GarantiPosRequestDataMapper', () => {
     ])('%s', (_name, txType) => {
       expectHash(expected)
       const actual = mapper.createRefundRequestData(account, order, txType)
-      expect(actual).toStrictEqual(expected)
+      expectSame(actual, expected)
       expectHashedData(expected)
     })
 

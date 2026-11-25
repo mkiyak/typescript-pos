@@ -17,6 +17,7 @@ import {
   threeDHostCases,
   threeDPayCases,
 } from './PayTrPosResponseDataMapper.data.js'
+import { withBaseKeys } from './withBaseKeys.js'
 
 // biome-ignore lint/suspicious/noExplicitAny: fixtures of heterogeneous shape
 type Data = Record<string, any>
@@ -142,7 +143,8 @@ describe('PayTrPosResponseDataMapper', () => {
     const actual = mapper.mapRefundResponse(c.responseData) as Data
     expect(actual).toHaveProperty('all')
     delete actual.all
-    expect(sorted(actual)).toStrictEqual(sorted(c.expectedData))
+    // deviation: L5 the refund result carries `proc_return_code` (null) like every other result
+    expect(sorted(actual)).toStrictEqual(sorted(withBaseKeys(c.expectedData)))
   })
 
   describe('approval guards', () => {

@@ -156,7 +156,7 @@ describe('PosNetPosRequestDataMapper', () => {
   })
 
   describe('3D payment (tran)', () => {
-    it('maps the packets and signs with the mapped order', () => {
+    it('maps the tran packets and signs with the mapped order', () => {
       const expected = {
         mid: '6706598320',
         tid: '67005551',
@@ -225,7 +225,7 @@ describe('PosNetPosRequestDataMapper', () => {
   })
 
   describe('3D resolve merchant data', () => {
-    it('maps the packets and signs with the mapped order', () => {
+    it('maps the resolve packets and signs with the mapped order', () => {
       crypt.createHash.mockReturnValue(MAC)
       const order = { id: '2020110828BC', amount: 100.01, installment: '0' as never, currency: CURRENCY.TRY }
       const expected = {
@@ -318,7 +318,7 @@ describe('PosNetPosRequestDataMapper', () => {
   describe('refund', () => {
     const sorted = (value: Record<string, unknown>) => {
       const inner = Object.fromEntries(
-        Object.entries(value.return as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
+        Object.entries(value.return as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
       )
       return { ...value, return: inner }
     }

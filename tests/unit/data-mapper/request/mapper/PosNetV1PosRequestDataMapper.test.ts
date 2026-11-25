@@ -294,6 +294,30 @@ describe('PosNetV1PosRequestDataMapper', () => {
     })
   })
 
+  // addition: 6.3 no request builder rewrites the order the caller passed in (cancel, refund and post-auth included)
+  it('does not mutate the input order', () => {
+    const order: PosOrder = {
+      id: '000000002020110828BC',
+      amount: 12.3,
+      installment: 0,
+      currency: CURRENCY.TRY,
+      payment_model: MODEL.THREE_D_SECURE,
+      transaction_type: TX_TYPE.PAY_AUTH,
+      ref_ret_num: '159044932490000231',
+    }
+    const copy = structuredClone(order)
+    crypt.hashFromParams.mockReturnValue('mac')
+
+    mapper.createCancelRequestData(account, order)
+    expect(order).toStrictEqual(copy)
+    mapper.createRefundRequestData(account, order, TX_TYPE.REFUND)
+    expect(order).toStrictEqual(copy)
+    mapper.createNonSecurePostAuthPaymentRequestData(account, order)
+    expect(order).toStrictEqual(copy)
+    mapper.createStatusRequestData(account, order)
+    expect(order).toStrictEqual(copy)
+  })
+
   describe('status', () => {
     it('maps the lookup of a 3D order', () => {
       const want = {

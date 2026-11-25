@@ -1180,8 +1180,11 @@ describe('PosNetV1Pos (end to end) other transactions', () => {
       CreditCardFactory.create('5555444433332222', '21', '12', '122', 'ahmet'),
     )
     await pay3D(gateway, SUCCESS_ORDER, SUCCESS_CALLBACK)
-    await pay3D(gateway, SUCCESS_ORDER, VP4_CALLBACK).catch(() => undefined)
-    await pay3D(gateway, AUTH_FAIL_ORDER, { ...AUTH_FAIL_CALLBACK, Mac: 'x' }).catch(() => undefined)
+    // both refused callbacks are logged too; the refusal itself is pinned so a swallowed error cannot hide a regression
+    await expect(pay3D(gateway, SUCCESS_ORDER, VP4_CALLBACK)).rejects.toThrow(HashMismatchError)
+    await expect(pay3D(gateway, AUTH_FAIL_ORDER, { ...AUTH_FAIL_CALLBACK, Mac: 'x' })).rejects.toThrow(
+      '3D callback hash mismatch',
+    )
     await gateway.payment(
       MODEL.NON_SECURE,
       { id: '2020110828BE', amount: 1.75 },

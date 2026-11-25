@@ -187,7 +187,7 @@ export class PosNetPosResponseDataMapper extends AbstractResponseDataMapper {
       results.date = text(transaction, 'tranDate')
     }
 
-    return results as PosResponse
+    return this.withBaseKeys(results) as PosResponse
   }
 
   mapStatusResponse(rawResponseData: Raw): PosResponse {

@@ -1362,6 +1362,15 @@ describe('PosNetPos (end to end) callback checks before any request', () => {
     expect(posted).toHaveLength(0)
   })
 
+  // addition: 6.9 a nested value hidden in a non-enumerable property is as refused as a visible one
+  it('rejects a callback with a nested value in a non-enumerable property (PosError, nothing sent)', async () => {
+    const callback: Data = { ...callbackC }
+    Object.defineProperty(callback, 'Hidden', { value: { a: 'A1' }, enumerable: false })
+    const { posted, fetchImpl } = fakeBank()
+    await expectRejection(pay3D(realGateway(fetchImpl), orderO, callback as GatewayResponseData), PosError)
+    expect(posted).toHaveLength(0)
+  })
+
   it.each([
     ['order without amount', { id: '2020110828BC', currency: CURRENCY.TRY }],
     ['order without id', { amount: 100.01, currency: CURRENCY.TRY }],
@@ -1562,7 +1571,7 @@ describe('PosNetPos (end to end) other transactions', () => {
       formCard,
     )
     await pay3D(gateway, orderO, callbackC)
-    await pay3D(gateway, orderO, callbackC).catch(() => undefined)
+    await pay3D(gateway, orderO, callbackC)
     await gateway.payment(MODEL.NON_SECURE, { id: '2020110828BE', amount: 1.75 }, TX_TYPE.PAY_AUTH, formCard)
 
     const logged = JSON.stringify(records)

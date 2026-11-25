@@ -10,7 +10,7 @@ import { AssecoPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-qu
 import type { QueryRequestDataMapperInterface } from '../../../src/data-mapper/pos-query/request/QueryRequestDataMapperInterface.js'
 import { AssecoPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/AssecoPosRequestValueFormatter.js'
 import { AssecoPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/AssecoPosRequestValueMapper.js'
-import { PosError, PosHttpError, UnsupportedTransactionTypeError } from '../../../src/errors.js'
+import { PosHttpError, UnsupportedTransactionTypeError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import { noopLogger, type PosLogger } from '../../../src/logger.js'
@@ -155,15 +155,17 @@ describe('AssecoPosQuery end to end', () => {
     expect((err as PosHttpError).status).toBe(500)
   })
 
-  it('rejects a 200 HTML page with a PosError and never resolves', async () => {
+  it('rejects a 200 HTML page with a PosHttpError and never resolves', async () => {
     const { q } = e2e(() => new Response('<html><body>Request Rejected</body></html>', { status: 200 }))
-    await expect(q.customQuery({ Type: 'Query' })).rejects.toBeInstanceOf(PosError)
+    const err = await q.customQuery({ Type: 'Query' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect((err as PosHttpError).message).toBe('Bank returned an HTML page instead of XML')
   })
 
   it('never logs the password, also when a hook changes the request', async () => {
     const calls: unknown[] = []
     const record = (...a: unknown[]) => void calls.push(a)
-    const logger: PosLogger = { debug: record, info: record, warning: record, error: record } as unknown as PosLogger
+    const logger: PosLogger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
     const f = fakeFetch(
       () =>
         new Response(

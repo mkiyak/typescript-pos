@@ -14,6 +14,7 @@ import {
   statusTestDataProvider,
   threeDPaymentDataProvider,
 } from './PosNetPosResponseDataMapper.data.js'
+import { withBaseKeys } from './withBaseKeys.js'
 
 type Mocked<T> = { [K in keyof T]: ReturnType<typeof vi.fn> }
 // biome-ignore lint/suspicious/noExplicitAny: fixtures of heterogeneous shape
@@ -179,8 +180,10 @@ describe('PosNetPosResponseDataMapper', () => {
     const actual: Data = mapper.mapRefundResponse(responseData)
 
     takeNonEmpty(actual, 'all')
-    expect(actual).toStrictEqual(expectedData)
-    expect(Object.keys(actual)).toStrictEqual(Object.keys(expectedData))
+    // deviation: L5 the non-payment result carries `order_id` (null) like every other result
+    const expected = withBaseKeys(expectedData)
+    expect(actual).toStrictEqual(expected)
+    expect(Object.keys(actual)).toStrictEqual(Object.keys(expected))
   })
 
   // deviation: P28 NotImplementedError is the PosError subclass for unsupported operations

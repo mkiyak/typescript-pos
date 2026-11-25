@@ -176,7 +176,7 @@ describe('PayFlexCPV4PosHttpClient query support', () => {
 describe('PayFlexCPV4PosHttpClient custom_query', () => {
   it('builds the GetVposTransaction URL under a trailing-slash base', () => {
     const c = createClient(fakeFetch([], ''), 'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment/')
-    expect((c as unknown as { getApiUrl(t: string, m: string): string }).getApiUrl('custom_query', 'regular')).toBe(
+    expect(c.getApiUrl(QUERY_TYPE.CUSTOM_QUERY, MODEL.NON_SECURE)).toBe(
       'https://inbound.apigatewaytest.vakifbank.com.tr:8443/commonPayment/GetVposTransaction',
     )
   })

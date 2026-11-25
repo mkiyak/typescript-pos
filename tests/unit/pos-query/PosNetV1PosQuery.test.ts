@@ -19,7 +19,8 @@ class StubClient extends AbstractHttpClient {
 
 const config: GatewayConfig = posTestConfig.banks.albaraka
 const account = AccountFactory.createPosNetPosAccount('albaraka', '6700950031', '67005551', '27426', 'k')
-const MAPPED = { bin: '415956', mid: '6700950031' }
+// deviation: 6.11 the stubbed mapper answer uses this gateway's JSON key `MerchantNo`; the XML gateway's fixture calls it `mid`
+const MAPPED = { bin: '415956', MerchantNo: '6700950031' }
 
 function setup(opts: { config?: GatewayConfig; hooks?: PosHooks } = {}) {
   const mapper = {

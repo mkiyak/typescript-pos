@@ -169,6 +169,19 @@ describe('PosNetPosCrypt', () => {
       expect(crypt.check3DHash(account, data)).toBe(false)
     })
 
+    // addition: 6.5 a signed field that only exists on the prototype is not part of the data; the MAC does not match
+    it.each(['mdStatus', 'xid', 'amount', 'currency'])('ignores %s when it is only inherited', (field) => {
+      const own: Record<string, unknown> = { ...e1() }
+      const inherited = own[field]
+      delete own[field]
+      const data = Object.assign(Object.create({ [field]: inherited }) as GatewayResponseData, own)
+      expect(data[field]).toBe(inherited)
+      expect(Object.hasOwn(data, field)).toBe(false)
+
+      expect(crypt.check3DHash(account, e1())).toBe(true)
+      expect(crypt.check3DHash(account, data)).toBe(false)
+    })
+
     it('logs only the order id on failure, never the generated MAC, the first hash or the key', () => {
       const data = { ...e1(), mac: 'AAAA' }
       const generated = h(`1;000000002020110828BC;10001;TL;6706598320;${firstHash}`)

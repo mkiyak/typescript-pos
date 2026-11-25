@@ -283,7 +283,7 @@ export class AssecoPosResponseDataMapper extends AbstractResponseDataMapper {
         status = TX_APPROVED
       }
 
-      return { order_id: field(raw, 'RECORDID'), status, all: raw } as PosResponse
+      return this.withBaseKeys({ order_id: field(raw, 'RECORDID'), status, all: raw }) as PosResponse
     }
 
     const extra = field(raw, 'Extra')
@@ -375,7 +375,7 @@ export class AssecoPosResponseDataMapper extends AbstractResponseDataMapper {
       recurringOrderResponse.recurringOrders = recurringOrders
     }
 
-    return recurringOrderResponse as PosResponse
+    return this.withBaseKeys(recurringOrderResponse) as PosResponse
   }
 
   mapOrderHistoryResponse(rawResponseData: Raw): PosResponse {
@@ -401,7 +401,7 @@ export class AssecoPosResponseDataMapper extends AbstractResponseDataMapper {
       all: raw,
     }
 
-    return result as PosResponse
+    return this.withBaseKeys(result) as PosResponse
   }
 
   is3dAuthSuccess(mdStatus: string | null): boolean {

@@ -19,6 +19,7 @@ import {
   threeDPayPaymentDataProvider,
   tr,
 } from './AssecoPosResponseDataMapper.data.js'
+import { withBaseKeys } from './withBaseKeys.js'
 
 type Mocked<T> = { [K in keyof T]: ReturnType<typeof vi.fn> }
 type Data = Record<string, unknown>
@@ -327,7 +328,8 @@ describe('AssecoPosResponseDataMapper', () => {
     'mapStatusResponse recurring order %s',
     (_name, { responseData, expectedData }) => {
       const actual: Data = integrationMapper().mapStatusResponse(responseData)
-      const expected: Data = structuredClone(expectedData)
+      // deviation: L5 the recurring status result carries the shared base keys as null
+      const expected: Data = withBaseKeys(structuredClone(expectedData))
 
       const actualOrders = actual.recurringOrders as Data[]
       const expectedOrders = expected.recurringOrders as Data[]
@@ -357,12 +359,14 @@ describe('AssecoPosResponseDataMapper', () => {
     const actual: Data = mapper.mapCancelResponse(responseData)
 
     takeNonEmpty(actual, 'all')
-    expectSame(actual, expectedData)
+    // deviation: L5 the recurring-order cancel result carries the shared base keys as null
+    expectSame(actual, withBaseKeys(expectedData))
   })
 
   it.each(orderHistoryTestDataProvider)('mapOrderHistoryResponse %s', (_name, { responseData, expectedData }) => {
     const actual: Data = integrationMapper().mapOrderHistoryResponse(responseData)
-    const expected: Data = structuredClone(expectedData)
+    // deviation: L5 the order-history result carries `error_code` (null) like every other result
+    const expected: Data = withBaseKeys(structuredClone(expectedData))
 
     if (Object.keys(responseData.Extra).length > 0) {
       const transactions = actual.transactions as Data[]

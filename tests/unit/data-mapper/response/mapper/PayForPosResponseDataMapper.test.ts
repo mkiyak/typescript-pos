@@ -5,6 +5,7 @@ import { BasicResponseValueFormatter } from '../../../../../src/data-mapper/resp
 import type { ResponseValueFormatterInterface } from '../../../../../src/data-mapper/response/value-formatter/ResponseValueFormatterInterface.js'
 import { PayForPosResponseValueMapper } from '../../../../../src/data-mapper/response/value-mapper/PayForPosResponseValueMapper.js'
 import type { ResponseValueMapperInterface } from '../../../../../src/data-mapper/response/value-mapper/ResponseValueMapperInterface.js'
+import { PosError } from '../../../../../src/errors.js'
 import type { PosLogger } from '../../../../../src/logger.js'
 import { TX_TYPE } from '../../../../../src/PosInterface.js'
 import type { PosOrder } from '../../../../../src/types.js'
@@ -606,6 +607,13 @@ describe('PayForPosResponseDataMapper', () => {
       const actual: Data = realMapper().mapStatusResponse(raw)
 
       expect(actual.cancel_time).toStrictEqual(new Date('2024-01-19T01:34:05+03:00'))
+    })
+
+    // addition: 7.4 a VoidTime that is no clock time never becomes a date
+    it.each(['abc', '1234567', '246199', '-1'])('mapStatusResponse rejects a malformed VoidTime %j', (voidTime) => {
+      const raw = { ...statusCancelled.responseData, VoidTime: voidTime }
+
+      expect(() => realMapper().mapStatusResponse(raw)).toThrow(PosError)
     })
 
     // addition: the status answer of the real fixtures with real conversions

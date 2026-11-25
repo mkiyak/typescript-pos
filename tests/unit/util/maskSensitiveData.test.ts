@@ -128,6 +128,10 @@ describe('maskSensitiveData', () => {
     for (const leak of ['5555444433332222', '=122', '=12&', '=2021', '=x']) {
       expect(out).not.toContain(leak)
     }
+    // the masked values stand in place, so a missing mask cannot hide behind a dropped pair
+    expect(out).toContain('ExpireMonth=***')
+    expect(out).toContain('ExpireYear=***')
+    expect(out).toContain('CVV=***')
   })
 
   // addition: JSON-encoded secrets inside strings

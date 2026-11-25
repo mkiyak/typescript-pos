@@ -97,5 +97,9 @@ describe('prepareRequestDataWithHooks', () => {
     const p = prepareRequestDataWithHooks<Ev>([() => {}], { f: () => 1 }, build, 'x')
     await expect(p).rejects.toBeInstanceOf(PosError)
     await expect(p).rejects.toThrow(/^Request data cannot be cloned for x hooks:/)
+    // the clone failure stays reachable as the cause of the PosError
+    const error = (await p.catch((e: unknown) => e)) as PosError
+    expect(error.cause).toBeInstanceOf(Error)
+    expect((error.cause as Error).name).toBe('DataCloneError')
   })
 })

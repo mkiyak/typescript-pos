@@ -9,7 +9,7 @@ import { PayFlexV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos
 import type { QueryRequestDataMapperInterface } from '../../../src/data-mapper/pos-query/request/QueryRequestDataMapperInterface.js'
 import { PayFlexV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
-import { PosError, PosHttpError } from '../../../src/errors.js'
+import { PosHttpError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import type { GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
 import { noopLogger, type PosLogger } from '../../../src/logger.js'
@@ -145,15 +145,17 @@ describe('PayFlexV4PosQuery end to end', () => {
     expect((err as PosHttpError).status).toBe(500)
   })
 
-  it('rejects a 200 HTML page with a PosError and never resolves', async () => {
+  it('rejects a 200 HTML page with a PosHttpError and never resolves', async () => {
     const { q } = e2e(() => new Response('<html><body>Request Rejected</body></html>', { status: 200 }))
-    await expect(q.customQuery({ OrderId: 'O1' })).rejects.toBeInstanceOf(PosError)
+    const err = await q.customQuery({ OrderId: 'O1' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+    expect((err as PosHttpError).message).toBe('Bank returned an HTML page instead of XML')
   })
 
   it('never logs the password, also when a hook changes the request', async () => {
     const calls: unknown[] = []
     const record = (...a: unknown[]) => void calls.push(a)
-    const logger: PosLogger = { debug: record, info: record, warning: record, error: record } as unknown as PosLogger
+    const logger: PosLogger = { debug: record, info: record, warn: record, error: record } as unknown as PosLogger
     const f = fakeFetch(
       () => new Response('<VposResponse><ResultCode>0000</ResultCode></VposResponse>', { status: 200 }),
     )

@@ -131,7 +131,7 @@ export class PosNetV1PosResponseDataMapper extends AbstractResponseDataMapper {
     const procReturnCode = this.getProcReturnCode(raw)
     const approved = procReturnCode === PosNetV1PosResponseDataMapper.PROCEDURE_SUCCESS_CODE
 
-    return {
+    return this.withBaseKeys({
       auth_code: null,
       transaction_id: null,
       ref_ret_num: null,
@@ -142,7 +142,7 @@ export class PosNetV1PosResponseDataMapper extends AbstractResponseDataMapper {
       error_code: approved ? null : procReturnCode,
       error_message: approved ? null : this.getResponseDescription(raw),
       all: raw,
-    } as unknown as PosResponse
+    }) as unknown as PosResponse
   }
 
   mapStatusResponse(rawResponseData: Raw): PosResponse {

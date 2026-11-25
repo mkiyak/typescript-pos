@@ -85,7 +85,6 @@ describe('AkbankPosQueryRequestDataMapper', () => {
     expect(String(actual.requestDateTime)).toHaveLength(23)
     if (name === 'link_creation_request') {
       expect(String(actual.requestDateTime)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000$/)
-      actual.requestDateTime = undefined
       delete actual.requestDateTime
     }
     expect(sorted(actual)).toEqual(sorted(expected))

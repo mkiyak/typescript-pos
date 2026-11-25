@@ -17,6 +17,7 @@ import {
   statusTestDataProvider,
   threeDPaymentDataProvider,
 } from './PosNetV1PosResponseDataMapper.data.js'
+import { withBaseKeys } from './withBaseKeys.js'
 
 type Mocked<T> = { [K in keyof T]: ReturnType<typeof vi.fn> }
 // biome-ignore lint/suspicious/noExplicitAny: fixtures of heterogeneous shape
@@ -207,16 +208,20 @@ describe('PosNetV1PosResponseDataMapper', () => {
     const actual: Data = mapper.mapCancelResponse(responseData)
 
     takeNonEmpty(actual, 'all')
-    expect(actual).toStrictEqual(expectedData)
-    expect(Object.keys(actual)).toStrictEqual(Object.keys(expectedData))
+    // deviation: L5 the non-payment result carries `order_id` (null) like every other result
+    const expected = withBaseKeys(expectedData)
+    expect(actual).toStrictEqual(expected)
+    expect(Object.keys(actual)).toStrictEqual(Object.keys(expected))
   })
 
   it.each(refundTestDataProvider)('mapRefundResponse %s', (_name, { responseData, expectedData }) => {
     const actual: Data = mapper.mapRefundResponse(responseData)
 
     takeNonEmpty(actual, 'all')
-    expect(actual).toStrictEqual(expectedData)
-    expect(Object.keys(actual)).toStrictEqual(Object.keys(expectedData))
+    // deviation: L5 the non-payment result carries `order_id` (null) like every other result
+    const expected = withBaseKeys(expectedData)
+    expect(actual).toStrictEqual(expected)
+    expect(Object.keys(actual)).toStrictEqual(Object.keys(expected))
   })
 
   // deviation: P28 NotImplementedError is the PosError subclass for unsupported operations
@@ -314,6 +319,22 @@ describe('PosNetV1PosResponseDataMapper', () => {
       expect((first.transaction_time as Date).toISOString()).toBe('2019-11-08T10:58:37.909Z')
       expect((first.refund_time as Date).toISOString()).toBe('2019-11-08T10:58:37.909Z')
       expect(first.cancel_time).toBeNull()
+    })
+
+    // addition: 6.7 the bank names a cancelled transaction `Reverse`; the status fixture row `success_cancel` keeps the
+    // type `Cancel` of the ported vector (which the stubbed value mapper accepts), so the real mapper is pinned here
+    it('mapStatusResponse maps a Reverse transaction to a cancellation', () => {
+      const cancelRow = statusTestDataProvider.find(([name]) => name === 'success_cancel')?.[1].responseData as Data
+      const transactions = cancelRow.TransactionData as Data[]
+      const actual: Data = realMapper().mapStatusResponse({
+        ...cancelRow,
+        TransactionData: [{ ...transactions[0], TransactionType: 'Reverse' }],
+      })
+
+      expect(actual.status).toBe('approved')
+      expect(actual.transaction_type).toBe('cancel')
+      expect(actual.order_status).toBe('CANCELED')
+      expect((actual.cancel_time as Date).toISOString()).toBe('2019-11-08T10:58:37.909Z')
     })
 
     // addition: TransactionData that is not a list is never an approved status

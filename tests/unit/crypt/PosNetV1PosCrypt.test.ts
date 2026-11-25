@@ -272,7 +272,7 @@ describe('PosNetV1PosCrypt', () => {
       expect(logger.error.mock.calls[0]?.[1]).toEqual({ order_id: '123' })
     })
 
-    it('a missing secret is a configuration error', () => {
+    it('check3DHash: a missing secret is a configuration error', () => {
       const noSecret = AccountFactory.createPosNetPosAccount('albaraka', '6700950031', '67540050', '1010272261352072')
       expect(() => crypt.check3DHash(noSecret, success1())).toThrow(MissingAccountInfoError)
     })
@@ -317,7 +317,7 @@ describe('PosNetV1PosCrypt', () => {
       expect(() => crypt.create3DHash(account, inputs)).toThrow(PosError)
     })
 
-    it('a missing secret is a configuration error', () => {
+    it('create3DHash: a missing secret is a configuration error', () => {
       const noSecret = AccountFactory.createPosNetPosAccount('albaraka', '6700950031', '67540050', '1010272261352072')
       expect(() => crypt.create3DHash(noSecret, { MerchantNo: '1', TerminalNo: '2', Amount: '3' })).toThrow(
         MissingAccountInfoError,
@@ -356,7 +356,7 @@ describe('PosNetV1PosCrypt', () => {
       ).toThrow(PosError)
     })
 
-    it('a missing secret is a configuration error', () => {
+    it('createHash: a missing secret is a configuration error', () => {
       const noSecret = AccountFactory.createPosNetPosAccount('albaraka', '6700950031', '67540050', '1010272261352072')
       expect(() =>
         crypt.createHash(noSecret, request({ SecureTransactionId: '1', CavvData: '', Eci: '07', MdStatus: 1 })),
