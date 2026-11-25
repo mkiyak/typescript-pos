@@ -168,6 +168,7 @@ Rules:
 
 ## Next
 
+- [`examples/after-payment.ts`](https://github.com/mkiyak/typescript-pos/blob/main/examples/after-payment.ts): `cancelPayment`, `refundPayment` and `checkStatus` for any gateway, with the unknown-outcome rule
 - [Pre-authorization and capture](./pre-auth-and-capture.md)
 - [Payment models](./payment-models.md)
 - [Queries](./queries.md), for history and reports that are not tied to one order

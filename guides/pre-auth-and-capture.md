@@ -7,6 +7,8 @@ less where the bank allows it. Typical uses are goods that are shipped after the
 The library names them `TX_TYPE.PAY_PRE_AUTH` (`'pre'`) and `TX_TYPE.PAY_POST_AUTH` (`'post'`). Everything else works
 as in [Payment models](./payment-models.md): only the transaction type changes.
 
+[`examples/pre-auth-capture.ts`](https://github.com/mkiyak/typescript-pos/blob/main/examples/pre-auth-capture.ts) shows a reservation, a capture and a release on one gateway.
+
 ## Reserve the amount
 
 The pre-authorization uses the same calls as a payment, with the pre-authorization type. Which models a gateway offers

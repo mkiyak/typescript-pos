@@ -4,7 +4,7 @@ Task-oriented guides for `typescript-pos`. Start with [Payment models](./payment
 collected, then read the guide of your bank, then the operation and security guides before you go live.
 
 The [package README](../README.md) has the install steps, the quick start and the list of supported gateways.
-Compile-checked code for the flows lives in [`examples/`](../examples).
+Compile-checked code for the flows lives in [`examples/`](../examples), including the hosted Param page, the operations after a payment and pre-authorization with capture.
 
 ## Integration
 

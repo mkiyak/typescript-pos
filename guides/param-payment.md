@@ -111,6 +111,8 @@ const form = await pos.get3DFormData(order, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH
 const response = await pos.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, null, callbackBody)
 ```
 
+A complete flow, with the lookups below: [`examples/param-3d-host.ts`](https://github.com/mkiyak/typescript-pos/blob/main/examples/param-3d-host.ts).
+
 - **The order is bound by a derived id.** The registration carries no order id and the bank assigns its own. The library
   derives the transaction id of the request from your order id, amount and currency with a key stretched from the API
   password, and checks it in the bank's record. Use a strong API password, reuse the account object (the first
