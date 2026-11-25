@@ -56,7 +56,7 @@ export class AssecoPosCrypt extends AbstractCrypt<AssecoPosAccount> {
     }
 
     // The generated hash is deliberately not logged: for the logged data it would be a valid forged callback hash.
-    this.logger.error('hash check failed', { data, expected_hash: data.HASH })
+    this.logger.error('hash check failed', { data })
     return false
   }
 

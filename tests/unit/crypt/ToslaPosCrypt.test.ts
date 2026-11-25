@@ -198,7 +198,11 @@ describe('ToslaPosCrypt', () => {
         Hash: CV1,
       }
       expect(check(nested)).toBe(false)
-      const inherited = Object.create({ ...callback('202312034E91', '1', '00', '', '1') }) as Cb
+      // only one signed value is inherited; the hash fields are own and genuine
+      const genuine = callback('202312034E91', '1', '00', '', '1')
+      const { OrderId, ...rest } = genuine
+      const inherited = Object.assign(Object.create({ OrderId }) as Cb, rest)
+      expect(check(genuine)).toBe(true)
       expect(check(inherited)).toBe(false)
     })
 

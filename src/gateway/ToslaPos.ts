@@ -171,9 +171,10 @@ function normalizedInstallment(count: number): number {
  *   and the record's references when one status request shows the bank holds that payment of the order, otherwise
  *   plainly declined (a callback alone does not raise alerts).
  * - After a sale or a post-authorization, an answer without an integer result code (empty, 204, text only), or with
- *   result code `0` but no bank response code text, is a `PosHttpError` naming the request URL: it does not tell whether money moved, so it is never a decline a merchant
- *   could retry. An approved answer with another result code or for another order id is an `OrderMismatchError`
- *   with the result attached. Cancel, refund, status and history answers are mapped as they come.
+ *   result code `0` but no bank response code text (or one that is `00` only after trimming), is a `PosHttpError`
+ *   naming the request URL: it does not tell whether money moved, so it is never a decline a merchant could retry.
+ *   An approved answer with another result code or for another order id is an `OrderMismatchError` with the result
+ *   attached. Cancel, refund, status and history answers are mapped as they come.
  */
 export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
   static readonly NAME = 'ToslaPos'
@@ -559,6 +560,14 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
     if (code === 0 && (typeof responseCode !== 'string' || responseCode === '')) {
       this.logger.error('bank answer carries no bank response code', { order_id: echo(orderId), tx_type: txType })
       throw new PosHttpError('Bank answer carries no bank response code; the payment outcome is unknown', {
+        url: this.moneyRequestUrl(client, txType),
+      })
+    }
+
+    // A code that is `00` only once blanks are trimmed may be a mangled approval: it is neither approved nor declined.
+    if (code === 0 && typeof responseCode === 'string' && responseCode !== '00' && responseCode.trim() === '00') {
+      this.logger.error('bank answer carries a padded bank response code', { order_id: echo(orderId), tx_type: txType })
+      throw new PosHttpError('Bank response code is not exact; the payment outcome is unknown', {
         url: this.moneyRequestUrl(client, txType),
       })
     }

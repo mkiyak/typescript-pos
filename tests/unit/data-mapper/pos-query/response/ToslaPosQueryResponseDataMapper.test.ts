@@ -190,6 +190,8 @@ describe('ToslaPosQueryResponseDataMapper', () => {
         T6: { Rate: Number.NaN },
         T7: { Rate: Number.POSITIVE_INFINITY },
         T8: { Rate: '1e2' },
+        T16: { Rate: 1_000_000 },
+        T17: { Constant: -1_234_567.5 },
         T9: { Rate: ' 1' },
         T10: { Rate: [1] },
         T11: { Constant: true },
@@ -252,6 +254,8 @@ describe('ToslaPosQueryResponseDataMapper', () => {
       ['BankCode X', { BankCode: 'X' }, 'bank_code', null],
       ['BankCode 5 digits', { BankCode: '01111' }, 'bank_code', null],
       ['BankCode number', { BankCode: 111 }, 'bank_code', 111],
+      ['BankCode 5 digit number', { BankCode: 11111 }, 'bank_code', null],
+      ['BankCode 4 digit number', { BankCode: 9999 }, 'bank_code', 9999],
       ['BankCode negative', { BankCode: -1 }, 'bank_code', null],
       ['BankCode fraction', { BankCode: 1.5 }, 'bank_code', null],
       ['BankCode object', { BankCode: {} }, 'bank_code', null],
@@ -361,6 +365,25 @@ describe('ToslaPosQueryResponseDataMapper', () => {
         { installment: 2, installment_price: 1, total_price: 2 },
         { installment: 2, installment_price: 1.01, total_price: 2.02 },
         { installment: 6, installment_price: 1, total_price: 6 },
+      ])
+    })
+
+    // addition: a total that does not divide evenly is rounded up to the next kuruş
+    it('rounds 10001 kuruş over 3 installments to 33.34', () => {
+      const actual = mapper.mapInstallmentPricesResponse(pricesAnswer([{ Installment: 3, Amount: 10001 }]))
+      expect(installmentPrices(actual)).toEqual([{ installment: 3, installment_price: 33.34, total_price: 100.01 }])
+    })
+
+    // addition: the largest kuruş value the mapper accepts, and one more
+    it('accepts the maximum kuruş value and drops the next one', () => {
+      const actual = mapper.mapInstallmentPricesResponse(
+        pricesAnswer([
+          { Installment: 1, Amount: 999_999_999_999_999 },
+          { Installment: 2, Amount: 1_000_000_000_000_000 },
+        ]),
+      )
+      expect(installmentPrices(actual)).toEqual([
+        { installment: 1, installment_price: 9_999_999_999_999.99, total_price: 9_999_999_999_999.99 },
       ])
     })
 

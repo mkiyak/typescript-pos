@@ -248,6 +248,9 @@ describe('ToslaPosHttpClient', () => {
       const logged = lines.join('\n')
       expect(logged).not.toContain(secrets[0] as string)
       if (!body.startsWith('<')) for (const secret of secrets) expect(logged).not.toContain(secret)
+      // the masked forms show the masking ran, rather than the lines being empty
+      if (status === 400) expect(logged).toContain('***')
+      if (body.startsWith('<')) expect(logged).toContain('454671****7894')
     }
   })
 })

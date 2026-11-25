@@ -16,7 +16,10 @@ const TEXT_LIMIT = 256
 const MAX_KURUS = 999_999_999_999_999
 /** `T2` … `T99`: the bank names a rate by the installment count. */
 const RATE_KEY = /^T([1-9]\d?)$/
+/** Rates and constants have at most six integer digits, like their text form. */
+const MAX_RATE_MAGNITUDE = 1_000_000
 const STRICT_DECIMAL = /^-?\d{1,6}(?:\.\d{1,6})?$/
+const MAX_BANK_CODE = 9999
 const BANK_CODE_TEXT = /^\d{1,4}$/
 const CARD_PREFIX_TEXT = /^\d{6,8}$/
 const BANK_INTEGER_TEXT = /^(?:0|[1-9]\d{0,14})$/
@@ -53,7 +56,8 @@ function bankInteger(value: unknown): number | null {
 function rateValue(record: Raw, key: string): number | null {
   const value = ownValue(record, key)
   if (value === undefined || value === null) return 0
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  // a number is held to the text path's limit: at most six integer digits
+  if (typeof value === 'number') return Number.isFinite(value) && Math.abs(value) < MAX_RATE_MAGNITUDE ? value : null
   if (typeof value === 'string' && STRICT_DECIMAL.test(value)) return Number(value)
   return null
 }
@@ -137,7 +141,9 @@ export class ToslaPosQueryResponseDataMapper extends AbstractQueryResponseDataMa
 
   private bankCode(value: unknown): number | null {
     if (typeof value === 'string') return BANK_CODE_TEXT.test(value) ? Number(value) : null
-    return bankInteger(value)
+    const code = bankInteger(value)
+    // four digits at most, like the text form
+    return code !== null && code <= MAX_BANK_CODE ? code : null
   }
 
   private cardPrefix(value: unknown): string | null {

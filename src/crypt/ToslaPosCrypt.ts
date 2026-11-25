@@ -39,8 +39,8 @@ function signable(data: Record<string, unknown>, name: string): string {
  *
  * The bank signs these callback fields: the order id, the 3D status, the bank response code and message and the
  * request status, together with the account's client id, API user and password. Everything else in the callback
- * (the callback's own client id, the 3D session id, the transaction id) is not covered, and the callback carries no
- * amount, currency, installment or transaction id at all: the signature proves only that the bank reports this
+ * (the callback's own client id, the 3D session id) is not covered, and the callback carries no amount, currency or
+ * installment at all: the signature proves only that the bank reports this
  * outcome for this order id.
  */
 export class ToslaPosCrypt extends AbstractCrypt<ToslaPosAccount> {

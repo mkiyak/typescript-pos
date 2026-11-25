@@ -39,7 +39,8 @@ export class ToslaPosQueryRequestDataMapper extends AbstractQueryRequestDataMapp
     requestData: Record<string, unknown>,
   ): Record<string, unknown> {
     const merged = this.mergeAccountData(requestData, this.createAccountData(account))
-    if (Object.hasOwn(merged, 'hash')) {
+    // an explicit undefined or null hash counts as absent
+    if (merged.hash !== undefined && merged.hash !== null) {
       return merged
     }
     // the crypt gets a snapshot, so it sees exactly what is sent and cannot alter it

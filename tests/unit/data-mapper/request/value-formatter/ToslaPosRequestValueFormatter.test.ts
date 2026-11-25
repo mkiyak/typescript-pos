@@ -84,4 +84,13 @@ describe('ToslaPosRequestValueFormatter', () => {
       expect(() => formatter.formatDateTime(value, 'timeSpan')).toThrow(PosError)
     },
   )
+
+  // addition: a year that does not fit four digits would shift the fixed-width text
+  it.each([new Date('+010000-01-01T00:00:00Z'), new Date('-000001-06-01T00:00:00Z')])(
+    'formatDateTime rejects the year of %j',
+    (value) => {
+      expect(() => formatter.formatDateTime(value, 'timeSpan')).toThrow(PosError)
+      expect(() => formatter.formatDateTime(value, 'transactionDate')).toThrow(PosError)
+    },
+  )
 })

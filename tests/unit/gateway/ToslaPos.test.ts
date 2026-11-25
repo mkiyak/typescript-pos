@@ -1834,13 +1834,40 @@ describe('ToslaPos (end to end) money requests', () => {
     },
   )
 
-  // addition: T16 a present but padded bank response code is the bank's word: the mapper reads it as a decline
-  it("a sale answered with Code 0 and BankResponseCode '00 ' is declined", async () => {
-    const { fetchImpl } = bankFetch({ sale: () => ({ Code: 0, BankResponseCode: '00 ', OrderId: 'S1' }) })
-    const { pos } = realGateway(fetchImpl)
-    const res = await pos.payment(MODEL.NON_SECURE, { id: 'S1', amount: 1.01 }, TX_TYPE.PAY_AUTH, saleCard())
-    expect(res.status).toBe('declined')
-    expect(res.proc_return_code).toBe('00 ')
+  // addition: a padded approval code may be an approval the bank wrote with stray blanks: the outcome is unknown
+  it.each([' 00', '00 ', ' 00 ', '00\n'])(
+    'a sale or post-authorization answered with Code 0 and BankResponseCode %j is PosHttpError, never declined',
+    async (code) => {
+      for (const [txType, path] of [
+        [TX_TYPE.PAY_AUTH, 'Payment'],
+        [TX_TYPE.PAY_POST_AUTH, 'postAuth'],
+      ] as const) {
+        const { sent, fetchImpl } = bankFetch({ sale: () => ({ Code: 0, BankResponseCode: code, OrderId: 'S1' }) })
+        const { pos } = realGateway(fetchImpl)
+        const order = { id: 'S1', amount: 1.01 }
+        const err = await (txType === TX_TYPE.PAY_AUTH
+          ? pos.payment(MODEL.NON_SECURE, order, txType, saleCard())
+          : pos.payment(MODEL.NON_SECURE, order, txType)
+        ).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect((err as PosHttpError).url).toBe(`${PAYMENT_API}/${path}`)
+        expect(sent).toHaveLength(1)
+      }
+    },
+  )
+
+  // addition: another clean code with result code 0 is the bank's decline
+  it("a sale or post-authorization answered with Code 0 and BankResponseCode '05' is declined", async () => {
+    const order = { id: 'S1', amount: 1.01 }
+    for (const txType of [TX_TYPE.PAY_AUTH, TX_TYPE.PAY_POST_AUTH]) {
+      const { fetchImpl } = bankFetch({ sale: () => ({ Code: 0, BankResponseCode: '05', OrderId: 'S1' }) })
+      const { pos } = realGateway(fetchImpl)
+      const res = await (txType === TX_TYPE.PAY_AUTH
+        ? pos.payment(MODEL.NON_SECURE, order, txType, saleCard())
+        : pos.payment(MODEL.NON_SECURE, order, txType))
+      expect(res.status).toBe('declined')
+      expect(res.proc_return_code).toBe('05')
+    }
   })
 
   // addition: T16 a declined sale with a result code stays a decline

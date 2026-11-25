@@ -164,6 +164,12 @@ describe('ToslaPosQueryRequestDataMapper', () => {
       expect(body.hash).toBe(requestHash(String(body.rnd), String(body.timeSpan)))
     })
 
+    // addition: an explicit null hash is computed like an absent one
+    it('computes the hash when the caller gave null', () => {
+      const body = real().createCustomQueryRequestData(account, { bin: 415956, hash: null })
+      expect(body.hash).toBe(requestHash(String(body.rnd), String(body.timeSpan)))
+    })
+
     // addition: a caller hash is kept as given, caller order comes first
     it('keeps the caller hash and key order', () => {
       const body = real().createCustomQueryRequestData(account, { z: 1, hash: 'mine', a: 2 })

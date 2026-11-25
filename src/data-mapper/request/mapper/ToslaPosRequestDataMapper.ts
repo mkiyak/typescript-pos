@@ -106,7 +106,7 @@ export class ToslaPosRequestDataMapper extends AbstractRequestDataMapper<ToslaPo
       installmentCount,
       rnd: this.crypt.generateRandomString(),
       timeSpan,
-      cardHolderName: creditCard.getHolderName(),
+      cardHolderName: creditCard.getHolderName() ?? '',
       cardNo: creditCard.getNumber(),
       expireDate: this.valueFormatter.formatCardExpDate(creditCard, 'expireDate'),
       cvv: creditCard.getCvv(),

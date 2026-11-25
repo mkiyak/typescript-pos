@@ -25,9 +25,8 @@ import type { PosOrder } from '../../../../../src/types.js'
 const TA = AccountFactory.createToslaPosAccount('tosla', '1000000494', 'POS_ENT_Test_001', 'POS_ENT_Test_001!*!*')
 const card = CreditCardFactory.create('5555444433332222', '22', '01', '123', 'ahmet', CARD_TYPE.VISA)
 
-const RV1 = '+XGO1qv+6W7nXZwSsYMaRrWXhi+99jffLvExGsFDodYyNadOG7OQKsygzly5ESDoNIS19oD2U+hSkVeT6UTAFA=='
+const RV3 = '+XGO1qv+6W7nXZwSsYMaRrWXhi+99jffLvExGsFDodYyNadOG7OQKsygzly5ESDoNIS19oD2U+hSkVeT6UTAFA=='
 const RV2 = 'jcgZOAf/m/E1uwYXmOPrdgqXRuEmVuG3Q14yri0okhULvRDbAicyAU8hflUP634yRRSZkOnIOeLZNqXfLhzz7g=='
-const RV3 = RV1
 const RV4 = 'bLp8WNYiaKrnW+EfwHuUZ1ovao0laSeuU/DqUMhjI40QNWdcHJWRKpkoE+eb1U07GGDgsIKKvx9nh84s6K1+pQ=='
 const RV5 = 'csrJh00U/nYGim8jPp9uddRdRvEWZf8pYu9Elss5RtA9JQt6DRkXxrTTY4iYQt5iABp5bj+/RYhlnTflyD9eBw=='
 
@@ -108,7 +107,7 @@ const nonSecureExpected = {
   cardNo: '5555444433332222',
   expireDate: '0122',
   cvv: '123',
-  hash: RV1,
+  hash: RV3,
 }
 
 const idOrder = { id: 'id-12', time_span: new Date('2023-12-09T21:53:55+03:00') }
@@ -294,7 +293,7 @@ describe('ToslaPosRequestDataMapper', () => {
 
     // addition: the fixture hashes are the real request hashes of their rnd/timeSpan
     it.each([
-      ['RV1 (non-secure, register)', RV1, 'rand', '20231209214708'],
+      ['RV3 (non-secure, register)', RV3, 'rand', '20231209214708'],
       ['RV2 (status, cancel, refund)', RV2, 'rand-212s', '20231209215355'],
       ['RV4 (post-auth)', RV4, 'raranra', '20231209213944'],
       ['RV5 (history)', RV5, 'rand-123', '20231209215355'],
@@ -378,6 +377,11 @@ describe('ToslaPosRequestDataMapper', () => {
         expect(() => run(mapper, { ...registerOrder(), currency: 'XXX' as never })).toThrow(PosError)
       })
 
+      // addition: the currency is a code name, never the numeric bank code
+      it('rejects a numeric currency', () => {
+        expect(() => run(mapper, { ...registerOrder(), currency: 949 as never })).toThrow(PosError)
+      })
+
       it('maps installment 1 to none and 3 to 3', () => {
         crypt.generateRandomString.mockReturnValue('r')
         crypt.createHash.mockReturnValue('h')
@@ -419,6 +423,7 @@ describe('ToslaPosRequestDataMapper', () => {
       ]
 
       describe.each(runs)('%s', (_name, run) => {
+        // deviation: the order id must start with a letter or a digit (stricter than a plain character class)
         it.each([
           'sipariş1',
           'a b',
@@ -588,6 +593,13 @@ describe('ToslaPosRequestDataMapper', () => {
         const noName = CreditCardFactory.create('5555444433332222', '22', '01', '123')
         const actual = await form({ ThreeDSessionId: SESSION_PAY }, MODEL.THREE_D_PAY, noName)
         expect(actual.inputs.CardHolderName).toBe('')
+      })
+
+      // addition: a card without a holder name is sent with an empty text, never as an undefined value
+      it('the non-secure request uses an empty holder name when the card has none', () => {
+        const noName = CreditCardFactory.create('5555444433332222', '22', '01', '123')
+        const request = mapper.createNonSecurePaymentRequestData(TA, registerOrder(), TX_TYPE.PAY_AUTH, noName)
+        expect(request.cardHolderName).toBe('')
       })
 
       it('the 3D Host form never carries the card', async () => {

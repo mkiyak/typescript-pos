@@ -214,6 +214,7 @@ describe('AssecoPosCrypt', () => {
       expect(logged).not.toContain('s3cret')
       expect(logged).not.toContain(turkishHash)
       expect(logged).toContain('hash check failed')
+      expect(logged).not.toContain('expected_hash')
     })
   })
 })

@@ -188,6 +188,14 @@ describe('maskSensitiveData', () => {
   })
 
   // addition: F6 a string body echoing the request header
+  // addition: only the exact quoted name `hash` is masked in JSON text
+  it('keeps similarly named JSON text fields readable', () => {
+    const out = maskSensitiveData('{"hashed":"x","hash_params":"y","hash":"z"}') as string
+    expect(out).toContain('"hashed":"x"')
+    expect(out).toContain('"hash_params":"y"')
+    expect(out).toContain('"hash":"***"')
+  })
+
   it('masks an auth-hash value inside a string body', () => {
     const body = maskSensitiveData('{"auth-hash":"c2VjcmV0U2lnbmF0dXJl","other":"x"}')
     expect(body).toContain('"auth-hash":"***"')

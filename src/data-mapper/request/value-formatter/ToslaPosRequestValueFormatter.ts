@@ -49,6 +49,9 @@ export class ToslaPosRequestValueFormatter implements RequestValueFormatterInter
       throw new PosError('Invalid date')
     }
     const local = new Date(dateTime.getTime() + BANK_TIMEZONE_OFFSET_MINUTES * 60_000)
+    if (local.getUTCFullYear() < 0 || local.getUTCFullYear() > 9999) {
+      throw new PosError('Date year is out of range')
+    }
     const day = `${pad(local.getUTCFullYear(), 4)}${pad(local.getUTCMonth() + 1, 2)}${pad(local.getUTCDate(), 2)}`
     if (fieldName === 'transactionDate') {
       return day
