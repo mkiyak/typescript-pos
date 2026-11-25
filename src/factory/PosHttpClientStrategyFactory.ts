@@ -4,6 +4,8 @@ import { GarantiPosHttpClient } from '../client/GarantiPosHttpClient.js'
 import { HttpClientStrategy } from '../client/HttpClientStrategy.js'
 import type { HttpTransport } from '../client/HttpTransport.js'
 import { InterPosHttpClient } from '../client/InterPosHttpClient.js'
+import { IyzicoPosHttpClient } from '../client/IyzicoPosHttpClient.js'
+import { IyzicoPosQueryApiHttpClient } from '../client/IyzicoPosQueryApiHttpClient.js'
 import { KuveytPosHttpClient } from '../client/KuveytPosHttpClient.js'
 import { KuveytPosSoapApiHttpClient } from '../client/KuveytPosSoapApiHttpClient.js'
 import { ParamPosHttpClient } from '../client/ParamPosHttpClient.js'
@@ -20,6 +22,7 @@ import { ToslaPosHttpClient } from '../client/ToslaPosHttpClient.js'
 import { VakifKatilimPosHttpClient } from '../client/VakifKatilimPosHttpClient.js'
 import { AkbankPosCrypt } from '../crypt/AkbankPosCrypt.js'
 import type { CryptInterface } from '../crypt/CryptInterface.js'
+import { IyzicoPosCrypt } from '../crypt/IyzicoPosCrypt.js'
 import { KuveytPosRequestValueMapper } from '../data-mapper/request/value-mapper/KuveytPosRequestValueMapper.js'
 import { PosNetV1PosRequestValueMapper } from '../data-mapper/request/value-mapper/PosNetV1PosRequestValueMapper.js'
 import { GatewayClassNotConfiguredError, PosError } from '../errors.js'
@@ -27,6 +30,7 @@ import type { GatewayConfig } from '../gateway/AbstractGateway.js'
 import type { PosLogger } from '../logger.js'
 import type { AbstractPosAccount } from '../model/account/AbstractPosAccount.js'
 import { AkbankPosAccount } from '../model/account/AkbankPosAccount.js'
+import { IyzicoPosAccount } from '../model/account/IyzicoPosAccount.js'
 import { PayTrPosAccount } from '../model/account/PayTrPosAccount.js'
 
 /** What a client needs to sign its requests itself; gateways whose clients do not sign ignore it. */
@@ -163,6 +167,18 @@ export const PosHttpClientStrategyFactory = {
         const secrets = [account.getPassword(), account.getSecretKey()]
         return new HttpClientStrategy([
           new PayTrPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger, secrets),
+        ])
+      }
+      case 'IyzicoPos': {
+        // Every request is signed by the client itself, from the exact URL path and body it sends.
+        const account = signing?.account
+        const crypt = signing?.crypt
+        if (!(account instanceof IyzicoPosAccount) || !(crypt instanceof IyzicoPosCrypt)) {
+          throw new PosError('IyzicoPos needs its account and crypt to sign requests.')
+        }
+        return new HttpClientStrategy([
+          new IyzicoPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger, crypt, account),
+          new IyzicoPosQueryApiHttpClient(requiredEndpoint(config, 'query_api'), transport, logger, crypt, account),
         ])
       }
       default:

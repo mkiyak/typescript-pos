@@ -5,6 +5,8 @@ import { AssecoPosHttpClient } from '../../../src/client/AssecoPosHttpClient.js'
 import { GarantiPosHttpClient } from '../../../src/client/GarantiPosHttpClient.js'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { InterPosHttpClient } from '../../../src/client/InterPosHttpClient.js'
+import { IyzicoPosHttpClient } from '../../../src/client/IyzicoPosHttpClient.js'
+import { IyzicoPosQueryApiHttpClient } from '../../../src/client/IyzicoPosQueryApiHttpClient.js'
 import { KuveytPosHttpClient } from '../../../src/client/KuveytPosHttpClient.js'
 import { KuveytPosSoapApiHttpClient } from '../../../src/client/KuveytPosSoapApiHttpClient.js'
 import { ParamPosHttpClient } from '../../../src/client/ParamPosHttpClient.js'
@@ -22,6 +24,7 @@ import { VakifKatilimPosHttpClient } from '../../../src/client/VakifKatilimPosHt
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { AkbankPosCrypt } from '../../../src/crypt/AkbankPosCrypt.js'
 import { AssecoPosCrypt } from '../../../src/crypt/AssecoPosCrypt.js'
+import { IyzicoPosCrypt } from '../../../src/crypt/IyzicoPosCrypt.js'
 import { GatewayClassNotConfiguredError, PosError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import {
@@ -170,6 +173,62 @@ describe('PosHttpClientStrategyFactory', () => {
     expect(clients).toHaveLength(1)
     expect(clients[0]).toBeInstanceOf(AkbankPosHttpClient)
     expect(AkbankPosHttpClient.supports('AkbankPos', 'payment_api')).toBe(true)
+  })
+
+  const iyzicoConfig: GatewayConfig = {
+    name: 'iyzico',
+    class: 'IyzicoPos',
+    gateway_endpoints: {
+      payment_api: 'https://sandbox-api.iyzipay.com',
+      query_api: 'https://sandbox-api.iyzipay.com/v2/reporting/payment',
+    },
+  }
+  const iyzicoAccount = AccountFactory.createIyzicoPosAccount('iyzico', 'sandbox-apiKey', 'sandbox-secretKey')
+
+  it('wires IyzicoPos with its signing payment and reporting clients', () => {
+    const strategy = PosHttpClientStrategyFactory.createForGateway('IyzicoPos', iyzicoConfig, transport, noopLogger, {
+      account: iyzicoAccount,
+      crypt: new IyzicoPosCrypt(),
+    })
+    const clients = strategy.getAllClients()
+    expect(clients.map((c) => c.constructor)).toStrictEqual([IyzicoPosHttpClient, IyzicoPosQueryApiHttpClient])
+    expect(IyzicoPosHttpClient.supports('IyzicoPos', 'payment_api')).toBe(true)
+    expect(IyzicoPosQueryApiHttpClient.supports('IyzicoPos', 'query_api')).toBe(true)
+    expect(strategy.getClient('pay', '3d')).toBeInstanceOf(IyzicoPosHttpClient)
+    expect(strategy.getClient('order_history', 'regular')).toBeInstanceOf(IyzicoPosQueryApiHttpClient)
+    // addition: no secret key in a dump of the strategy
+    expect(JSON.stringify(strategy)).not.toContain('sandbox-secretKey')
+    expect(inspect(strategy, { depth: 8, showHidden: true })).not.toContain('sandbox-secretKey')
+  })
+
+  it('rejects IyzicoPos without its account and crypt', () => {
+    const cases = [
+      undefined,
+      { account: akbankAccount, crypt: new IyzicoPosCrypt() },
+      { account: iyzicoAccount, crypt: new AkbankPosCrypt() },
+    ]
+    for (const signing of cases) {
+      expect(() =>
+        PosHttpClientStrategyFactory.createForGateway('IyzicoPos', iyzicoConfig, transport, noopLogger, signing),
+      ).toThrow(new PosError('IyzicoPos needs its account and crypt to sign requests.'))
+    }
+  })
+
+  // addition: both endpoints are required
+  it('requires the payment_api and query_api endpoints of IyzicoPos', () => {
+    for (const key of ['payment_api', 'query_api'] as const) {
+      const endpoints = { ...iyzicoConfig.gateway_endpoints }
+      delete (endpoints as Record<string, unknown>)[key]
+      expect(() =>
+        PosHttpClientStrategyFactory.createForGateway(
+          'IyzicoPos',
+          { ...iyzicoConfig, gateway_endpoints: endpoints },
+          transport,
+          noopLogger,
+          { account: iyzicoAccount, crypt: new IyzicoPosCrypt() },
+        ),
+      ).toThrow(PosError)
+    }
   })
 
   // addition: an AkbankPos client cannot be built without what it needs to sign requests
