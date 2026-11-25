@@ -27,7 +27,7 @@ toplayan TypeScript kütüphanesi. Node.js 22 veya üzeri gerekir; ESM ve Common
 | `VakifKatilimPos` | Vakıf Katılım | Birim testli; istek ve callback hash'leri ile kuruş tutarı dönüşümü PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
 | `ToslaPos` | Tosla | Birim testli; istek ve callback hash'leri PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
 | `ParamPos` | Param (TURK Elektronik Para) | Birim testli; istek ve callback hash'leri PHP'ye karşı diferansiyel test edildi (her biri için 1.000 rastgele kümede 0 uyuşmazlık). |
-| `Param3DHostPos` | Param ortak ödeme sayfası | Birim testli; istek hash'leri PHP'ye karşı diferansiyel test edildi (1.000 rastgele kümede 0 uyuşmazlık); işlem kimliği PHP'nin PBKDF2/HMAC'ine karşı test edildi (1.000 kümede 0 uyuşmazlık). |
+| `Param3DHostPos` | Param ortak ödeme sayfası | Birim testli; callback hash'leri PHP'ye karşı diferansiyel test edildi (1.000 rastgele kümede 0 uyuşmazlık); işlem kimliği PHP'nin PBKDF2/HMAC'ine karşı test edildi (1.000 kümede 0 uyuşmazlık). |
 
 ## Kurulum
 

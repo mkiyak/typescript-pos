@@ -113,7 +113,8 @@ const OTHER_TRANSACTION = 'Use ParamPos for this transaction'
  *   bank's currencies): then a record registered at another amount or currency is reported as an `amount` or
  *   `currency` mismatch. A record of another order raises no alert, so a callback anyone could forge, naming a real
  *   payment of another order, flags nothing. Errors of the status request propagate (the payment may have
- *   completed: look it up with `ParamPos.status` before retrying). The `onRequestDataPrepared` hook of the status
+ *   completed: look it up with `ParamPos.status` before retrying, on a gateway built from the `param-pos` entry and
+ *   given the bank's order id as `id`). The `onRequestDataPrepared` hook of the status
  *   request sees the merchant's order; the bank's order id is only in the request body.
  * - If the TurkPos service does not list hosted payments, or lists them under another order id or transaction id,
  *   no approval can be confirmed: every hosted approval then fails closed with an `OrderMismatchError` (and no

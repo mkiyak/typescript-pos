@@ -73,8 +73,9 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
   signed fields are checked for their exact formats. A callback must be a flat form of strings.
 - **3D Secure.** The signed order id and, when sent, the amount must be your order's before anything is sent. The
   provision is built from your order and sent only when the 3D result is a success; its answer must name your order and
-  is then confirmed with the status request. An approved provision after a failed 3D check is returned as `declined`
-  with `requires_manual_review: true`.
+  is then confirmed with the status request. Nothing is provisioned after a failed 3D result. A provision answer that
+  names another order, or a bank record that does not match your order after a provision, is an `OrderMismatchError`
+  flagged for manual review when the bank's own answer shows a payment.
 - **Mismatches.** `OrderMismatchError` means the callback, the provision answer or the bank's record does not belong to
   your order. `paymentMayHaveCompleted: true` is set only when the bank's own answer shows a payment: alert, check
   `pos.status(order)`, then cancel or refund. Without it the bank shows no matching payment. `error.response` carries
@@ -83,7 +84,7 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
   order. The echoed GUID is removed from every returned result.
 - **Unknown outcomes.** An empty or unreadable answer after a money request, a provision answer with a result code but
   no receipt, or a failed status request after a charge throws `PosHttpError`. Keep the order pending, re-check with
-  `pos.status(order)` and never retry blindly.
+  `pos.status(order)` and never retry blindly. For a hosted payment, re-check as described in the hosted page section.
 - **Complete each order once.** Mark it paid in an idempotent update.
 
 ## Order ids, amounts and hooks
@@ -92,7 +93,8 @@ const response = await pos.payment(MODEL.THREE_D_SECURE, order, TX_TYPE.PAY_AUTH
   (zero-padded or UUID-based): the signed values have no separators.
 - Amounts go to the bank as `1000,25` for payments and `1000.25` for cancel and refund, rounded like PHP
   `number_format`.
-- A hook that changes a signed field of a registration (amount, order id, URLs, installment or account) invalidates its
+- A hook that changes a signed field of a registration (amount, order id, the URLs where they are signed, installment
+  or account) invalidates its
   `Islem_Hash`, and the bank rejects it.
 
 ## Param3DHostPos: the hosted page
@@ -118,8 +120,12 @@ const response = await pos.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, 
   account must be able to query hosted-page payments there. A payment alert (`paymentMayHaveCompleted`, manual review)
   is raised only for a bank record that carries evidence of this order, and a record of another payment raises none.
   The callback's order id only names the record to look up.
-- Status, cancel and refund of hosted payments go through a `ParamPos` gateway built with the `param-pos` entry and the
-  same credentials. The rules for unknown outcomes above apply as well.
+- Status, cancel and refund of a hosted payment go through a `ParamPos` gateway built from the `param-pos` entry with
+  the same credentials, and its order `id` is the bank's order id `TURKPOS_RETVAL_Siparis_ID` (from the callback body
+  or `response.all`), never your own order id. Cancel also needs the `amount`. The rules for unknown outcomes above
+  apply as well.
+- A bank record of this order at another amount or currency is reported as an `amount` or `currency` mismatch and
+  flagged for manual review.
 
 ## Queries
 

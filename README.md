@@ -26,7 +26,7 @@ ESM and CommonJS, two runtime dependencies (`fast-xml-parser`, `iconv-lite`).
 | `VakifKatilimPos` | Vakıf Katılım | Unit-tested; request and callback hashes and the kuruş amount conversion differential-tested against PHP (0 mismatches in 1,000 random sets each). |
 | `ToslaPos` | Tosla | Unit-tested; request and callback hashes differential-tested against PHP (0 mismatches in 1,000 random sets each). |
 | `ParamPos` | Param (TURK Elektronik Para) | Unit-tested; request and callback hashes differential-tested against PHP (0 mismatches in 1,000 random sets each). |
-| `Param3DHostPos` | Param hosted payment page | Unit-tested; request hashes differential-tested against PHP (0 mismatches in 1,000 random sets); the transaction id against PHP's PBKDF2/HMAC (0 mismatches in 1,000 sets). |
+| `Param3DHostPos` | Param hosted payment page | Unit-tested; callback hashes differential-tested against PHP (0 mismatches in 1,000 random sets); the transaction id against PHP's PBKDF2/HMAC (0 mismatches in 1,000 sets). |
 
 ## Install
 
