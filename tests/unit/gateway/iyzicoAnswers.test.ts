@@ -26,6 +26,7 @@ import {
   iyzicoPlainText,
   requireSignedAnswer,
   reviewFlags,
+  type SignedIyzicoAnswer,
   signedCallbackApproves,
   trustedDecline,
   unsignedCallbackReadsAsApproval,
@@ -48,13 +49,18 @@ const KURUS = 10000
 const HX = (msg: string, key: string = SECRET): string => createHmac('sha256', key).update(msg, 'utf8').digest('hex')
 
 /** Signs an answer over the field list of its kind, prices written as the signature writes them. */
-function signed(answer: Record<string, unknown>, kind: IyzicoSignedAnswer = 'payment'): Record<string, unknown> {
+function signed(answer: Record<string, unknown>, kind: IyzicoSignedAnswer = 'payment'): SignedIyzicoAnswer {
   const parts = IYZICO_SIGNED_FIELDS[kind].map((name) => {
     const value = answer[name]
     if (name === 'price' || name === 'paidPrice') return iyzicoSignaturePrice(value) ?? 'x'
     return String(value)
   })
-  return { ...answer, signature: HX(parts.join(':')) }
+  return asSigned({ ...answer, signature: HX(parts.join(':')) })
+}
+
+/** Marks an edited signed fixture as verified for the compiler (the code under test still reads it as given). */
+function asSigned(answer: Record<string, unknown>): SignedIyzicoAnswer {
+  return answer as SignedIyzicoAnswer
 }
 
 /** P4: the 3D Secure authorization answer of order-001, payment 1001, 100 TRY. */
@@ -130,7 +136,7 @@ beforeEach(() => {
   )
 })
 
-function approvedResult(answer: Record<string, unknown> = P4): PosResponse {
+function approvedResult(answer: SignedIyzicoAnswer = P4): PosResponse {
   return approvedFromAnswer(mapper.mapPaymentResponse(answer, 'pay', ORDER), ORDER, answer, '3d', 'pay')
 }
 
@@ -238,12 +244,24 @@ describe('assertFlatIyzicoCallback', () => {
     expect(() => assertFlatIyzicoCallback(body)).toThrow(PosError)
   })
 
-  it('ignores inherited fields: they are never read', () => {
-    const body = Object.create({ status: ['success'], mdStatus: '1' }) as Record<string, unknown>
+  it('accepts a record without a prototype', () => {
+    const body = Object.create(null) as Record<string, unknown>
     body.conversationId = 'order-001'
-    const flat = assertFlatIyzicoCallback(body)
-    expect(flat).toEqual({ conversationId: 'order-001' })
-    expect(unsignedCallbackReadsAsApproval(flat)).toBe(false)
+    expect(assertFlatIyzicoCallback(body)).toEqual({ conversationId: 'order-001' })
+  })
+
+  class Body {
+    conversationId = 'order-001'
+  }
+
+  it.each<[string, unknown]>([
+    ['an object with another prototype', Object.create({ status: 'success', mdStatus: '1' })],
+    ['URLSearchParams', new URLSearchParams('status=success&mdStatus=1')],
+    ['a Map', new Map([['status', 'success']])],
+    ['a class instance', new Body()],
+    ['a Date', new Date()],
+  ])('refuses %s: only plain records are callback bodies', (_name, body) => {
+    expect(() => assertFlatIyzicoCallback(body)).toThrow(new PosError('3D callback data must be a record'))
   })
 
   it('keeps an own __proto__ string as data', () => {
@@ -275,6 +293,7 @@ describe('unsignedCallbackReadsAsApproval', () => {
     [{ status: 'Success\n' }],
     [{ mdStatus: '1' }],
     [{ mdStatus: ' 1' }],
+    // deviation: T2 the plan reads only a trimmed '1'; leading zeros count too (only more unsigned bodies refused)
     [{ mdStatus: '01' }],
     [{ status: 'failure', mdStatus: '1' }],
     [{ status: 'success', mdStatus: '0' }],
@@ -340,8 +359,8 @@ describe('signedCallbackApproves', () => {
 
 describe('assertCallbackApprovalPins', () => {
   it('returns the signed payment id of an approval', () => {
-    expect(assertCallbackApprovalPins(CB3)).toBe('1001')
-    expect(assertCallbackApprovalPins({ ...CB3, paymentId: '9'.repeat(20) })).toBe('9'.repeat(20))
+    expect(assertCallbackApprovalPins(CB3, 'order-001')).toBe('1001')
+    expect(assertCallbackApprovalPins({ ...CB3, paymentId: '9'.repeat(20) }, 'order-001')).toBe('9'.repeat(20))
   })
 
   it.each<[string, Record<string, string>]>([
@@ -357,8 +376,11 @@ describe('assertCallbackApprovalPins', () => {
     ['a 3D status other than 1', { ...CB3, mdStatus: '0' }],
     ['a conversation id with a colon', { ...CB3, conversationId: 'order-001:1' }],
     ['no conversation id', { mdStatus: '1', paymentId: '1001', status: 'success' }],
+    ['the conversation id of another order', { ...CB3, conversationId: 'order-002' }],
   ])('refuses %s', (_name, body) => {
-    expect(() => assertCallbackApprovalPins(body)).toThrow(new HashMismatchError('3D callback fields are malformed'))
+    expect(() => assertCallbackApprovalPins(body, 'order-001')).toThrow(
+      new HashMismatchError('3D callback fields are malformed'),
+    )
   })
 })
 
@@ -517,7 +539,7 @@ describe('bindPaymentAnswer', () => {
   ])('%s → mismatch with the approved result attached', (_name, change, field, expected, actual) => {
     const answer = { ...P4, ...change }
     const approved = approvedResult()
-    const error = catchError(() => bindPaymentAnswer(answer, EXPECT_3DS, approved)) as OrderMismatchError
+    const error = catchError(() => bindPaymentAnswer(asSigned(answer), EXPECT_3DS, approved)) as OrderMismatchError
     expect(error).toBeInstanceOf(OrderMismatchError)
     expect(error.field).toBe(field)
     expect(error.expected).toBe(expected)
@@ -532,29 +554,31 @@ describe('bindPaymentAnswer', () => {
 
   it('echoes at most 64 characters', () => {
     const error = catchError(() =>
-      bindPaymentAnswer({ ...P4, conversationId: 'y'.repeat(500) }, EXPECT_3DS, approvedResult()),
+      bindPaymentAnswer(asSigned({ ...P4, conversationId: 'y'.repeat(500) }), EXPECT_3DS, approvedResult()),
     ) as OrderMismatchError
     expect(error.actual).toBe('y'.repeat(64))
   })
 
   it('ignores inherited fields', () => {
     const answer = Object.create(P4) as Record<string, unknown>
-    expect(() => bindPaymentAnswer(answer, EXPECT_3DS, approvedResult())).toThrow(OrderMismatchError)
+    expect(() => bindPaymentAnswer(asSigned(answer), EXPECT_3DS, approvedResult())).toThrow(OrderMismatchError)
   })
 
   it('rounds the answer amount to eight decimals before taking the kuruş', () => {
     const order = { ...ORDER, amount: 10.21 }
     const answer = { ...P4, price: 10.21, paidPrice: 10.209999999999999 }
-    expect(() => bindPaymentAnswer(answer, { ...EXPECT_3DS, kurus: 1021 }, approvedResult())).not.toThrow()
-    expect(approvedFromAnswer(mapper.mapPaymentResponse(answer, 'pay', order), order, answer, '3d', 'pay').amount).toBe(
-      10.21,
-    )
+    expect(() => bindPaymentAnswer(asSigned(answer), { ...EXPECT_3DS, kurus: 1021 }, approvedResult())).not.toThrow()
+    expect(
+      approvedFromAnswer(mapper.mapPaymentResponse(answer, 'pay', order), order, asSigned(answer), '3d', 'pay').amount,
+    ).toBe(10.21)
   })
 
   it('binds amounts above 2^26 exactly', () => {
     const answer = { ...P4, price: 91184819.71, paidPrice: 91184819.71 }
-    expect(() => bindPaymentAnswer(answer, { ...EXPECT_3DS, kurus: 9118481971 }, approvedResult())).not.toThrow()
-    expect(() => bindPaymentAnswer(answer, { ...EXPECT_3DS, kurus: 9118481970 }, approvedResult())).toThrow(
+    expect(() =>
+      bindPaymentAnswer(asSigned(answer), { ...EXPECT_3DS, kurus: 9118481971 }, approvedResult()),
+    ).not.toThrow()
+    expect(() => bindPaymentAnswer(asSigned(answer), { ...EXPECT_3DS, kurus: 9118481970 }, approvedResult())).toThrow(
       OrderMismatchError,
     )
     expect(
@@ -571,11 +595,17 @@ describe('bindPaymentAnswer', () => {
 
   it('a paid price above the basket passes only when the payer may pay more', () => {
     const answer = { ...P4, paidPrice: 110 }
-    expect(() => bindPaymentAnswer(answer, { ...EXPECT_3DS, paidPriceRule: 'atLeast' }, approvedResult())).not.toThrow()
-    expect(() => bindPaymentAnswer(answer, EXPECT_3DS, approvedResult())).toThrow(OrderMismatchError)
+    expect(() =>
+      bindPaymentAnswer(asSigned(answer), { ...EXPECT_3DS, paidPriceRule: 'atLeast' }, approvedResult()),
+    ).not.toThrow()
+    expect(() => bindPaymentAnswer(asSigned(answer), EXPECT_3DS, approvedResult())).toThrow(OrderMismatchError)
     for (const change of [{ paidPrice: 99 }, { paidPrice: 99.99 }, { price: 99 }, { price: 110 }]) {
       const error = catchError(() =>
-        bindPaymentAnswer({ ...answer, ...change }, { ...EXPECT_3DS, paidPriceRule: 'atLeast' }, approvedResult()),
+        bindPaymentAnswer(
+          asSigned({ ...answer, ...change }),
+          { ...EXPECT_3DS, paidPriceRule: 'atLeast' },
+          approvedResult(),
+        ),
       ) as OrderMismatchError
       expect(error.field).toBe('amount')
     }
@@ -584,18 +614,18 @@ describe('bindPaymentAnswer', () => {
   it('a capture binds the paid price only', () => {
     const expected: IyzicoPaymentExpectation = { ...EXPECT_3DS, paidPriceRule: 'ignorePrice', phase: 'POST_AUTH' }
     const answer = { ...P4, phase: 'POST_AUTH', price: 120 }
-    expect(() => bindPaymentAnswer(answer, expected, approvedResult())).not.toThrow()
+    expect(() => bindPaymentAnswer(asSigned(answer), expected, approvedResult())).not.toThrow()
     expect(
       (
         catchError(() =>
-          bindPaymentAnswer({ ...answer, paidPrice: 99 }, expected, approvedResult()),
+          bindPaymentAnswer(asSigned({ ...answer, paidPrice: 99 }), expected, approvedResult()),
         ) as OrderMismatchError
       ).field,
     ).toBe('amount')
     expect(
       (
         catchError(() =>
-          bindPaymentAnswer({ ...answer, phase: 'AUTH' }, expected, approvedResult()),
+          bindPaymentAnswer(asSigned({ ...answer, phase: 'AUTH' }), expected, approvedResult()),
         ) as OrderMismatchError
       ).field,
     ).toBe('transaction_type')
@@ -603,20 +633,42 @@ describe('bindPaymentAnswer', () => {
 
   it('a pre-authorization must answer PRE_AUTH', () => {
     const expected: IyzicoPaymentExpectation = { ...EXPECT_3DS, phase: 'PRE_AUTH' }
-    expect(() => bindPaymentAnswer({ ...P4, phase: 'PRE_AUTH' }, expected, approvedResult())).not.toThrow()
+    expect(() => bindPaymentAnswer(asSigned({ ...P4, phase: 'PRE_AUTH' }), expected, approvedResult())).not.toThrow()
     expect(() => bindPaymentAnswer(P4, expected, approvedResult())).toThrow(OrderMismatchError)
   })
 
   it('without an expected payment id any iyzico payment id passes, nothing else', () => {
     const expected: IyzicoPaymentExpectation = { ...EXPECT_3DS, paymentId: undefined }
-    expect(() => bindPaymentAnswer({ ...P4, paymentId: '35790626' }, expected, approvedResult())).not.toThrow()
-    expect(() => bindPaymentAnswer({ ...P4, paymentId: 35790626 }, expected, approvedResult())).not.toThrow()
+    expect(() =>
+      bindPaymentAnswer(asSigned({ ...P4, paymentId: '35790626' }), expected, approvedResult()),
+    ).not.toThrow()
+    expect(() => bindPaymentAnswer(asSigned({ ...P4, paymentId: 35790626 }), expected, approvedResult())).not.toThrow()
     for (const paymentId of ['pay-1', '0', '', undefined, 1.5, -1, ['1001']]) {
       const error = catchError(() =>
-        bindPaymentAnswer({ ...P4, paymentId }, expected, approvedResult()),
+        bindPaymentAnswer(asSigned({ ...P4, paymentId }), expected, approvedResult()),
       ) as OrderMismatchError
       expect(error.field).toBe('transaction_id')
+      expect(error.expected).toBe('an iyzico payment id')
     }
+  })
+})
+
+describe('signed answers only', () => {
+  it('an answer reaches the binding only after its signature was verified (checked by the compiler)', () => {
+    const plain: Record<string, unknown> = { ...P4_UNSIGNED, basketId: 'order-002' }
+    // @ts-expect-error a plain record has not been verified
+    expect(() => bindPaymentAnswer(plain, EXPECT_3DS, approvedResult())).toThrow(OrderMismatchError)
+    // @ts-expect-error a plain record has not been verified
+    reviewFlags(plain)
+    // @ts-expect-error a plain record has not been verified
+    checkoutPaymentCompleted(plain)
+    // @ts-expect-error a plain record has not been verified
+    expect(() => bindCheckoutRecord(plain, { orderId: 'order-001', token: 'tok-123' })).toThrow(OrderMismatchError)
+    const answer: Record<string, unknown> = { ...P4 }
+    requireSignedAnswer(crypt, IA, answer, 'payment', URL_AUTH)
+    // narrowed by the assertion: no cast needed
+    expect(() => bindPaymentAnswer(answer, EXPECT_3DS, approvedResult(answer))).not.toThrow()
+    expect(reviewFlags(answer)).toEqual({ manualReview: false })
   })
 })
 
@@ -626,8 +678,8 @@ describe('bindRefundAnswer', () => {
   const approved = (): PosResponse => ({ ...mapper.mapRefundResponse(refund), order_id: 'order-001' })
 
   it('passes the refund of the order', () => {
-    expect(() => bindRefundAnswer(refund, expected, approved())).not.toThrow()
-    expect(() => bindRefundAnswer({ ...refund, price: '40.00' }, expected, approved())).not.toThrow()
+    expect(() => bindRefundAnswer(asSigned(refund), expected, approved())).not.toThrow()
+    expect(() => bindRefundAnswer(asSigned({ ...refund, price: '40.00' }), expected, approved())).not.toThrow()
   })
 
   it.each<[Record<string, unknown>, string]>([
@@ -639,7 +691,7 @@ describe('bindRefundAnswer', () => {
     [{ price: undefined }, 'amount'],
   ])('%j → %s', (change, field) => {
     const error = catchError(() =>
-      bindRefundAnswer({ ...refund, ...change }, expected, approved()),
+      bindRefundAnswer(asSigned({ ...refund, ...change }), expected, approved()),
     ) as OrderMismatchError
     expect(error.field).toBe(field)
     expect(error.paymentMayHaveCompleted).toBe(true)
@@ -688,7 +740,7 @@ describe('bindCheckoutRecord', () => {
     ['numeric basket id', { basketId: 1 }],
   ])('a record of another %s is no evidence for this order (no response)', (_name, change) => {
     const error = catchError(() =>
-      bindCheckoutRecord({ ...CF2, ...change }, { orderId: 'order-001', token: 'tok-123' }),
+      bindCheckoutRecord(asSigned({ ...CF2, ...change }), { orderId: 'order-001', token: 'tok-123' }),
     ) as OrderMismatchError
     expect(error).toBeInstanceOf(OrderMismatchError)
     expect(error.field).toBe('order_id')
@@ -708,25 +760,25 @@ describe('checkoutPaymentCompleted', () => {
     [undefined, false],
     [['SUCCESS'], false],
   ])('%j → %s', (paymentStatus, expected) => {
-    expect(checkoutPaymentCompleted({ ...CF2, paymentStatus })).toBe(expected)
+    expect(checkoutPaymentCompleted(asSigned({ ...CF2, paymentStatus }))).toBe(expected)
   })
 })
 
 describe('reviewFlags', () => {
   it.each<[unknown]>([[1], ['1']])('fraudStatus %j needs no review', (fraudStatus) => {
-    expect(reviewFlags({ ...P4, fraudStatus })).toEqual({ manualReview: false })
+    expect(reviewFlags(asSigned({ ...P4, fraudStatus }))).toEqual({ manualReview: false })
   })
 
   it.each<[unknown]>([[0], ['0'], [-1], ['-1'], ['x'], [' 1'], [true], [null], [undefined], [1.0000001]])(
     'fraudStatus %j needs review',
     (fraudStatus) => {
-      expect(reviewFlags({ ...P4, fraudStatus })).toEqual({ manualReview: true })
+      expect(reviewFlags(asSigned({ ...P4, fraudStatus }))).toEqual({ manualReview: true })
     },
   )
 
   it('an inherited fraud status needs review', () => {
     const answer = Object.create({ fraudStatus: 1 }) as Record<string, unknown>
-    expect(reviewFlags(answer, false)).toEqual({ manualReview: true })
+    expect(reviewFlags(asSigned(answer), false)).toEqual({ manualReview: true })
   })
 
   it.each<[unknown, boolean]>([
@@ -742,11 +794,11 @@ describe('reviewFlags', () => {
   ])('mdStatus %j → review %s', (mdStatus, review) => {
     const answer: Record<string, unknown> = { ...P4, mdStatus }
     if (mdStatus === undefined) delete answer.mdStatus
-    expect(reviewFlags(answer)).toEqual({ manualReview: review })
+    expect(reviewFlags(asSigned(answer))).toEqual({ manualReview: review })
   })
 
   it('the 3D status is not read for a payment without 3D Secure', () => {
-    expect(reviewFlags({ ...P4, mdStatus: 0 }, false)).toEqual({ manualReview: false })
+    expect(reviewFlags(asSigned({ ...P4, mdStatus: 0 }), false)).toEqual({ manualReview: false })
   })
 })
 
@@ -820,7 +872,13 @@ describe('declinedFromAnswer', () => {
 describe('approvedFromAnswer', () => {
   it('is built from the order and the signed values', () => {
     const answer = { ...P4, conversationId: 'echo', currency: 'USD', phase: 'PRE_AUTH' }
-    const result = approvedFromAnswer(mapper.mapPaymentResponse(answer, 'pay', ORDER), ORDER, answer, '3d', 'pay')
+    const result = approvedFromAnswer(
+      mapper.mapPaymentResponse(answer, 'pay', ORDER),
+      ORDER,
+      asSigned(answer),
+      '3d',
+      'pay',
+    )
     expect(result.status).toBe('approved')
     expect(result.order_id).toBe('order-001')
     expect(result.currency).toBe('TRY')
@@ -842,9 +900,9 @@ describe('approvedFromAnswer', () => {
     [undefined, null],
   ])('the amount is the signed paid price %j → %j', (paidPrice, amount) => {
     const answer = { ...P4, paidPrice }
-    expect(approvedFromAnswer(mapper.mapPaymentResponse(answer, 'pay', ORDER), ORDER, answer, '3d', 'pay').amount).toBe(
-      amount,
-    )
+    expect(
+      approvedFromAnswer(mapper.mapPaymentResponse(answer, 'pay', ORDER), ORDER, asSigned(answer), '3d', 'pay').amount,
+    ).toBe(amount)
   })
 
   it.each<[unknown, string | null]>([
@@ -856,7 +914,8 @@ describe('approvedFromAnswer', () => {
   ])('the transaction id is the payment id text %j → %j', (paymentId, expected) => {
     const answer = { ...P4, paymentId }
     expect(
-      approvedFromAnswer(mapper.mapPaymentResponse(answer, 'pay', ORDER), ORDER, answer, '3d', 'pay').transaction_id,
+      approvedFromAnswer(mapper.mapPaymentResponse(answer, 'pay', ORDER), ORDER, asSigned(answer), '3d', 'pay')
+        .transaction_id,
     ).toBe(expected)
   })
 
@@ -874,7 +933,7 @@ describe('approvedFromAnswer', () => {
   it('refuses a declined input', () => {
     const failure = { status: 'failure', errorCode: '1' }
     expect(() =>
-      approvedFromAnswer(mapper.mapPaymentResponse(failure, 'pay', ORDER), ORDER, failure, '3d', 'pay'),
+      approvedFromAnswer(mapper.mapPaymentResponse(failure, 'pay', ORDER), ORDER, asSigned(failure), '3d', 'pay'),
     ).toThrow(PosError)
   })
 })
@@ -910,7 +969,7 @@ describe('colon regroupings', () => {
     }
     if (!signedCallbackApproves(body)) return 'decline'
     try {
-      return `approve:${assertCallbackApprovalPins(body)}`
+      return `approve:${assertCallbackApprovalPins(body, 'order-001')}`
     } catch (error) {
       if (error instanceof HashMismatchError) return 'malformed'
       throw error

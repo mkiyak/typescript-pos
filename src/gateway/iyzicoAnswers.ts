@@ -82,6 +82,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+/** A plain record: an object literal or a record without a prototype (never a list, map, URLSearchParams or class). */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false
+  const prototype: unknown = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+declare const SIGNED: unique symbol
+
+/**
+ * A bank answer whose signature {@link requireSignedAnswer} verified. Only such an answer can be bound to an order,
+ * turned into an approved result or raise a review flag, so an unverified answer cannot approve anything by mistake:
+ * the compiler refuses it.
+ */
+export type SignedIyzicoAnswer = Record<string, unknown> & { readonly [SIGNED]: true }
+
 /** An own value; inherited members read as absent. */
 function own(data: Record<string, unknown>, key: string): unknown {
   return Object.hasOwn(data, key) ? data[key] : undefined
@@ -139,15 +155,15 @@ export function iyzicoCode(value: unknown): string | null {
 }
 
 /**
- * The callback as it must arrive: a record whose own fields are all plain string values. A list or record (form
+ * The callback as it must arrive: a plain record whose own fields are all plain string values. A list or record (form
  * parsers with nested keys), a number, null, a function or a getter could be read differently by the signature check
- * and the decision, so it is refused before anything is read. Returns a copy without a prototype; inherited fields
- * are never read.
+ * and the decision, so it is refused before anything is read; so is any object other than a plain record (a map,
+ * `URLSearchParams`, a class instance), whose fields would be read differently. Returns a copy without a prototype.
  *
  * @throws PosError
  */
 export function assertFlatIyzicoCallback(body: unknown): Record<string, string> {
-  if (!isRecord(body)) {
+  if (!isPlainRecord(body)) {
     throw new PosError('3D callback data must be a record')
   }
   const flat: Record<string, string> = Object.create(null) as Record<string, string>
@@ -204,19 +220,19 @@ export function signedCallbackApproves(body: Record<string, string>): boolean {
 }
 
 /**
- * The payment id of a signed approval, after pinning the signed fields that decide it. The signature joins its fields
+ * The payment id of a signed approval of the order, after pinning the signed fields that decide it. The signature joins its fields
  * with colons and any text verifies, so a signed text with extra colons can be read with other field boundaries;
  * with the status, 3D status, conversation id and payment id all colon-free, only the reading that puts every extra
  * colon into the conversation data can pass, and that is the bank's own reading.
  *
  * @throws HashMismatchError when any pinned field is not in its exact form
  */
-export function assertCallbackApprovalPins(body: Record<string, string>): string {
+export function assertCallbackApprovalPins(body: Record<string, string>, orderId: string): string {
   const conversationId = ownString(body, 'conversationId')
   const paymentId = ownString(body, 'paymentId')
   if (
     !signedCallbackApproves(body) ||
-    conversationId === undefined ||
+    conversationId !== orderId ||
     !ORDER_ID.test(conversationId) ||
     paymentId === undefined ||
     !PAYMENT_ID.test(paymentId)
@@ -294,7 +310,7 @@ export function requireSignedAnswer(
   kind: IyzicoSignedAnswer,
   url: string,
   readOnly = false,
-): void {
+): asserts answer is SignedIyzicoAnswer {
   if (isRecord(answer) && crypt.checkResponseSignature(account, answer, kind)) return
   if (readOnly) throw new HashMismatchError('Bank answer signature mismatch')
 
@@ -364,7 +380,7 @@ function bindIds(
   }
   const answered = ownPaymentId(answer)
   if (answered === null || (paymentId !== undefined && answered !== paymentId)) {
-    mismatch('transaction_id', paymentId ?? '', own(answer, 'paymentId'), approvedResult)
+    mismatch('transaction_id', paymentId ?? 'an iyzico payment id', own(answer, 'paymentId'), approvedResult)
   }
 }
 
@@ -399,7 +415,7 @@ function bindAmount(
  * @throws OrderMismatchError
  */
 export function bindPaymentAnswer(
-  answer: Record<string, unknown>,
+  answer: SignedIyzicoAnswer,
   expected: IyzicoPaymentExpectation,
   approvedResult: PosResponse,
 ): void {
@@ -419,7 +435,7 @@ export function bindPaymentAnswer(
  * @throws OrderMismatchError
  */
 export function bindRefundAnswer(
-  answer: Record<string, unknown>,
+  answer: SignedIyzicoAnswer,
   expected: { orderId: string; paymentId: string; kurus: number; currency: string },
   approvedResult: PosResponse,
 ): void {
@@ -455,10 +471,7 @@ export function bindCancelAnswer(
  *
  * @throws OrderMismatchError
  */
-export function bindCheckoutRecord(
-  answer: Record<string, unknown>,
-  expected: { orderId: string; token: string },
-): void {
+export function bindCheckoutRecord(answer: SignedIyzicoAnswer, expected: { orderId: string; token: string }): void {
   const token = own(answer, 'token')
   if (token !== expected.token) mismatch('order_id', expected.token, token)
   for (const key of ['basketId', 'conversationId']) {
@@ -468,7 +481,7 @@ export function bindCheckoutRecord(
 }
 
 /** Whether a checkout form record shows a completed payment (`paymentStatus` exactly `SUCCESS`). */
-export function checkoutPaymentCompleted(answer: Record<string, unknown>): boolean {
+export function checkoutPaymentCompleted(answer: SignedIyzicoAnswer): boolean {
   return own(answer, 'paymentStatus') === CHECKOUT_SUCCESS
 }
 
@@ -478,7 +491,7 @@ export function checkoutPaymentCompleted(answer: Record<string, unknown>): boole
  * charged or held while the payment is not cleared. When `checkMdStatus` is set, a 3D status that is present and not
  * `1` contradicts the approval (the bank charged although 3D Secure did not succeed); an absent one does not.
  */
-export function reviewFlags(answer: Record<string, unknown>, checkMdStatus = true): { manualReview: boolean } {
+export function reviewFlags(answer: SignedIyzicoAnswer, checkMdStatus = true): { manualReview: boolean } {
   const fraudStatus = own(answer, 'fraudStatus')
   let manualReview = fraudStatus !== 1 && fraudStatus !== '1'
   if (checkMdStatus) {
@@ -513,7 +526,7 @@ export function heldForReview(approved: PosResponse): PosResponse {
 export function approvedFromAnswer(
   mapped: PosResponse,
   order: PosOrder,
-  answer: Record<string, unknown>,
+  answer: SignedIyzicoAnswer,
   paymentModel: PaymentModel,
   txType: TxType,
 ): PosResponse {
