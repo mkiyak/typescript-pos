@@ -16,6 +16,7 @@ import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
 import { PosNetPos } from '../../../src/gateway/PosNetPos.js'
 import { PosNetV1Pos } from '../../../src/gateway/PosNetV1Pos.js'
+import { ToslaPos } from '../../../src/gateway/ToslaPos.js'
 import { VakifKatilimPos } from '../../../src/gateway/VakifKatilimPos.js'
 import { CURRENCY, LANG, MODEL, TX_TYPE } from '../../../src/PosInterface.js'
 import type { PosHooks, PosOrder } from '../../../src/types.js'
@@ -269,6 +270,53 @@ describe('PosFactory.createPosGateway', () => {
     expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
       'Bank [vakif-katilim] is configured for VakifKatilimPos and needs a BoaPosAccount.',
     )
+  })
+
+  it('creates the tosla ToslaPos gateway from the shipped test config', () => {
+    const account = AccountFactory.createToslaPosAccount(
+      'tosla',
+      '1000000494',
+      'POS_ENT_Test_001',
+      'POS_ENT_Test_001!*!*',
+    )
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(ToslaPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(gateway.getCardTypeMapping()).toStrictEqual({})
+    expect(gateway.getCurrencies()).toHaveLength(6)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-Tosla account for a ToslaPos bank', () => {
+    const wrong = AccountFactory.createAkbankPosAccount('tosla', 'm', 't', 'k')
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
+      'Bank [tosla] is configured for ToslaPos and needs a ToslaPosAccount.',
+    )
+  })
+
+  // addition: T18 status goes to the Tosla inquiry path, with a request hash and without the API password
+  it('sends a ToslaPos status to inquiry', async () => {
+    const calls: { url: string; body: string }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), body: Buffer.from(init?.body as Uint8Array).toString('utf8') })
+      return new Response(JSON.stringify({ Code: 1, Message: 'x' }), { status: 200 })
+    }) as unknown as typeof fetch
+    const account = AccountFactory.createToslaPosAccount(
+      'tosla',
+      '1000000494',
+      'POS_ENT_Test_001',
+      'POS_ENT_Test_001!*!*',
+    )
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    const result = await gateway.status({ id: '202401199AAA' } as never)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(`${posTestConfig.banks.tosla.gateway_endpoints.payment_api}/inquiry`)
+    const body = JSON.parse(calls[0]?.body ?? '{}')
+    expect(body.orderId).toBe('202401199AAA')
+    expect(body.hash).toMatch(/^[A-Za-z0-9+/]{86}==$/)
+    expect(calls[0]?.body).not.toContain('POS_ENT_Test_001!*!*')
+    expect(result.status).toBe('declined')
   })
 
   // addition: V6 status goes to the Vakıf Katılım gateway path, signed with the account's hashed password
@@ -547,6 +595,7 @@ describe('PosFactory.createPosGateway', () => {
       InterPos: (bank: string) => AccountFactory.createInterPosAccount(bank, 's', 'u', 'p', 'k'),
       KuveytPos: (bank: string) => AccountFactory.createBoaPosAccount(bank, '1', 'u', '2', 'p'),
       VakifKatilimPos: (bank: string) => AccountFactory.createBoaPosAccount(bank, '1', 'u', '2', 'p'),
+      ToslaPos: (bank: string) => AccountFactory.createToslaPosAccount(bank, '1', 'u', 'p'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

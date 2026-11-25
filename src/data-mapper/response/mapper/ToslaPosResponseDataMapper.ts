@@ -1,5 +1,5 @@
 import { NotImplementedError } from '../../../errors.js'
-import { MODEL, PAYMENT_STATUS, TX_TYPE, type TxType } from '../../../PosInterface.js'
+import { MODEL, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import { QUERY_TYPE } from '../../../pos-query/PosQueryInterface.js'
 import type { PosOrder, PosResponse } from '../../../types.js'
 import { AbstractResponseDataMapper } from './AbstractResponseDataMapper.js'
@@ -15,6 +15,9 @@ import {
   type Raw,
 } from './toslaResponseFields.js'
 
+/** The request status of a completed payment as the bank writes it in a 3D callback. */
+const COMPLETED_REQUEST_STATUS = '1'
+
 /**
  * Response mapper of the Tosla gateway.
  *
@@ -27,7 +30,7 @@ import {
  * by 100. A caller binds a payment to its order with its own order data and the bank's integer fields, never with
  * `amount`, `first_amount`, `capture_amount`, `refund_amount`, `currency` or `installment_count` of a mapped result.
  * The order id, 3D result and request status of a 3D callback are the browser's word until the bank confirms the
- * order; the text of a padded bank code is reported trimmed, the decision is taken on the text as sent.
+ * order; the bank code of a 3D callback is reported and decided on exactly as sent (a padded code stays padded).
  */
 export class ToslaPosResponseDataMapper extends AbstractResponseDataMapper {
   static override readonly PROCEDURE_SUCCESS_CODE = '00'
@@ -81,12 +84,15 @@ export class ToslaPosResponseDataMapper extends AbstractResponseDataMapper {
     const requestStatus = ownScalar(raw, 'RequestStatus')
     const transactionStatus = requestStatus === null ? null : this.valueMapper.mapOrderStatus(requestStatus)
 
-    // All three results are read exactly as the bank sent them.
+    // All three results are read exactly as the bank sent them, as own text: the request status must be the text
+    // '1' itself, because the value mapper passes unknown words (such as 'PAYMENT_COMPLETED') through unchanged and
+    // reads the number 1 like the text.
     const approved =
       exactCode === AbstractResponseDataMapper.PROCEDURE_SUCCESS_CODE &&
-      transactionStatus === PAYMENT_STATUS.PAYMENT_COMPLETED &&
+      ownString(raw, 'RequestStatus') === COMPLETED_REQUEST_STATUS &&
       this.is3dAuthSuccess(mdStatus)
-    const procReturnCode = ownTrimmed(raw, 'BankResponseCode')
+    // The code is reported exactly as sent: a padded code never reads like the approval text.
+    const procReturnCode = exactCode
 
     const response: Raw = {
       order_id: ownText(raw, 'OrderId'),

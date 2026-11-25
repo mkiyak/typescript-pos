@@ -14,6 +14,7 @@ import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
 import { PosNetPos } from '../../../src/gateway/PosNetPos.js'
 import { PosNetV1Pos } from '../../../src/gateway/PosNetV1Pos.js'
+import { ToslaPos } from '../../../src/gateway/ToslaPos.js'
 import { VakifKatilimPos } from '../../../src/gateway/VakifKatilimPos.js'
 
 const accountFor = (gatewayClass: string, key: string) => {
@@ -23,6 +24,7 @@ const accountFor = (gatewayClass: string, key: string) => {
   if (gatewayClass === 'InterPos') return AccountFactory.createInterPosAccount(key, 's', 'u', 'p', 'k')
   if (gatewayClass === 'KuveytPos' || gatewayClass === 'VakifKatilimPos')
     return AccountFactory.createBoaPosAccount(key, 'm', 'u', 'c', 'k')
+  if (gatewayClass === 'ToslaPos') return AccountFactory.createToslaPosAccount(key, '1', 'u', 'p')
   if (gatewayClass === 'PayForPos') return AccountFactory.createPayForPosAccount(key, 'm', 'u', 'p', 'k')
   if (gatewayClass === 'PosNetPos' || gatewayClass === 'PosNetV1Pos')
     return AccountFactory.createPosNetPosAccount(key, 'm', 't', 'p', 'k')
@@ -34,7 +36,7 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos and VakifKatilimPos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos and ToslaPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
       expect([
@@ -49,6 +51,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         'InterPos',
         'KuveytPos',
         'VakifKatilimPos',
+        'ToslaPos',
       ]).toContain(bank.class)
     }
   })
@@ -68,6 +71,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
       InterPos,
       KuveytPos,
       VakifKatilimPos,
+      ToslaPos,
     }[
       bank.class as
         | 'AssecoPos'
@@ -81,6 +85,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         | 'InterPos'
         | 'KuveytPos'
         | 'VakifKatilimPos'
+        | 'ToslaPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -446,6 +451,35 @@ describe('VakifKatilimPos endpoints', () => {
       expect(entry).not.toHaveProperty('test_mode')
       expect(entry).not.toHaveProperty('require_3d_hash')
       expect(entry.gateway_endpoints).not.toHaveProperty('gateway_3d')
+    }
+  })
+})
+
+// addition: T22 shipped ToslaPos entries (no lang, test_mode or hash-check switch)
+describe('ToslaPos endpoints', () => {
+  const entry = (host: string) => ({
+    name: 'Tosla',
+    class: 'ToslaPos',
+    gateway_endpoints: {
+      payment_api: `https://${host}/api/Payment`,
+      gateway_3d: `https://${host}/api/Payment/ProcessCardForm`,
+      gateway_3d_host: `https://${host}/api/Payment/threeDSecure`,
+    },
+  })
+
+  it('production and test entries', () => {
+    expect(posProductionConfig.banks.tosla).toStrictEqual(entry('entegrasyon.tosla.com'))
+    expect(posTestConfig.banks.tosla).toStrictEqual(entry('prepentegrasyon.tosla.com'))
+  })
+
+  it('both entries are deeply frozen and carry no lang, test_mode or hash-check switch', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      const tosla = cfg.banks.tosla
+      expect(Object.isFrozen(tosla)).toBe(true)
+      expect(Object.isFrozen(tosla.gateway_endpoints)).toBe(true)
+      expect(tosla).not.toHaveProperty('lang')
+      expect(tosla).not.toHaveProperty('test_mode')
+      expect(tosla).not.toHaveProperty('require_3d_hash')
     }
   })
 })

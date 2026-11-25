@@ -65,6 +65,7 @@ describe('public index', () => {
         'InterPosAccount',
         'KuveytPos',
         'VakifKatilimPos',
+        'ToslaPos',
         'BoaPosAccount',
         'ToslaPosAccount',
         'CARD_FAMILY',
@@ -156,6 +157,12 @@ describe('public index', () => {
     const account = mod.AccountFactory.createBoaPosAccount('kuveytpos', '496', 'apiuser1', '400235', 'Api123')
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.KuveytPos)
     expect(account).toBeInstanceOf(mod.BoaPosAccount)
+  })
+
+  // addition: the ToslaPos gateway is reachable from the public entry point
+  it('PosFactory creates the ToslaPos gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createToslaPosAccount('tosla', '1000000494', 'POS_ENT_Test_001', 'secret')
+    expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.ToslaPos)
   })
 
   // addition: the VakifKatilimPos gateway is reachable from the public entry point

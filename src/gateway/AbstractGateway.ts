@@ -84,6 +84,12 @@ export type GatewayConfig = {
    * unsigned callback with response code `00` is always rejected. A present `HashData` is always verified. A signed
    * 3D Host approval still proves nothing by itself (the browser receives the hashed password with the form), so it
    * is always confirmed with the bank's status record.
+   *
+   * ToslaPos: reject any 3D Pay or 3D Host callback that carries no `Hash` (`HashMismatchError`), declines included.
+   * Default false: without it an unsigned callback is accepted only as a decline whose result carries the order's id
+   * and bounded decline reasons (nothing is confirmed or flagged for review); an unsigned callback whose response
+   * code, 3D result or request status reads as an approval is always rejected. A present `Hash` is always verified,
+   * and every signed approval is still confirmed with the bank's status record, since the signature covers no amount.
    */
   require_3d_hash?: boolean
 }

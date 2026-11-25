@@ -355,13 +355,13 @@ describe('ToslaPosResponseDataMapper', () => {
       expect(actual.order_id).toBe('20231209C3AE')
     })
 
-    // addition: the callback text is trimmed when it is reported; the decision is taken on the text as sent, which is
-    // why the gateway pins the exact text before it trusts an approval
-    it('reports a padded bank code trimmed but does not approve on it', () => {
-      const callback = { ...(fixture(threeDPayCases, 'success1').responseData as Data), BankResponseCode: ' 00 ' }
+    // addition: a padded bank code is reported exactly as sent (never as the approval text '00') and does not approve
+    it.each([' 00 ', '00 ', '\t00'])('reports the padded bank code %j as sent and does not approve on it', (code) => {
+      const callback = { ...(fixture(threeDPayCases, 'success1').responseData as Data), BankResponseCode: code }
       const actual = real.map3DPayResponseData(callback, TX_TYPE.PAY_AUTH, ORDER)
 
-      expect(actual.proc_return_code).toBe('00')
+      expect(actual.proc_return_code).toBe(code)
+      expect(actual.error_code).toBe(code)
       expect(actual.status).toBe('declined')
     })
 
@@ -406,6 +406,24 @@ describe('ToslaPosResponseDataMapper', () => {
       // addition: the request status is read exactly as sent
       it.each([' 1 ', '1 ', '01', '2', '5', '', null])('RequestStatus %j is not an approval', (rs) => {
         expect(map({ ...genuine(), RequestStatus: rs }).status).toBe('declined')
+      })
+
+      // addition: the approval reads the request status as the bank's own text '1'; a status word the value mapper
+      // passes through unchanged, or the number 1, is not the callback's request status
+      it.each([['PAYMENT_COMPLETED'], [1], [true]])('RequestStatus %j (not the text 1) is not an approval', (rs) => {
+        expect(map({ ...genuine(), RequestStatus: rs }).status).toBe('declined')
+      })
+
+      // addition: the same with a value mapper that reads every request status as completed
+      it('the decision does not depend on the value mapper reading of the request status', () => {
+        const completing = new ToslaPosResponseValueMapper()
+        vi.spyOn(completing, 'mapOrderStatus').mockReturnValue('PAYMENT_COMPLETED')
+        const m = new ToslaPosResponseDataMapper(new ToslaPosResponseValueFormatter(), completing)
+
+        expect(m.map3DPayResponseData({ ...genuine(), RequestStatus: '0' }, TX_TYPE.PAY_AUTH, ORDER).status).toBe(
+          'declined',
+        )
+        expect(m.map3DPayResponseData(genuine(), TX_TYPE.PAY_AUTH, ORDER).status).toBe('approved')
       })
 
       // addition: values that are not text never read as text
