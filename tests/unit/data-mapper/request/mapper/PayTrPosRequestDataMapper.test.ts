@@ -484,6 +484,20 @@ describe('PayTrPosRequestDataMapper', () => {
       expect(actual.inputs).toEqual({})
     })
 
+    // addition: a gateway address that ends in a slash does not double it before the token
+    it('3D Host: the token follows the gateway address with a single slash', async () => {
+      const actual = await makeMapper(stubCrypt()).create3DFormData(
+        PM,
+        {},
+        MODEL.THREE_D_HOST,
+        TX_TYPE.PAY_AUTH,
+        `${HOST_GATEWAY}/`,
+        null,
+        { token: 'abc123' },
+      )
+      expect(actual.gateway).toBe('https://www.paytr.com/odeme/guvenli/abc123')
+    })
+
     // deviation: R4/R6 (every input is a string; the Direct API basket is plain JSON)
     it('3D Pay: a POST form with the card', async () => {
       const crypt = stubCrypt()
@@ -534,8 +548,7 @@ describe('PayTrPosRequestDataMapper', () => {
       }
     })
 
-    // deviation: R6 (the reference refuses a form without a card with a missing-buyer error; here the order is
-    // incomplete: it lacks the buyer e-mail; a card-less form is allowed)
+    // deviation: R6 (a card-less form is allowed; this order is incomplete, it lacks the buyer e-mail, so it still throws)
     it('3D Pay without a card and with an incomplete order still throws', async () => {
       await expect(
         makeMapper(stubCrypt()).create3DFormData(
@@ -736,11 +749,8 @@ describe('PayTrPosRequestDataMapper', () => {
 
     it('each formula gives a different token for the same order', async () => {
       const tokens = await Promise.all(operations.map(async ([, build]) => (await build()).paytr_token))
-      // iFrame (2), direct (4), status, refund (2): distinct per formula family
-      expect(new Set(tokens.slice(0, 1)).size).toBe(1)
-      expect(tokens[0]).not.toBe(tokens[2])
-      expect(tokens[2]).not.toBe(tokens[6])
-      expect(tokens[6]).not.toBe(tokens[7])
+      // one token per formula family: iFrame (0), direct (2), status (6), refund (7)
+      expect(new Set([0, 2, 6, 7].map((i) => tokens[i])).size).toBe(4)
     })
   })
 

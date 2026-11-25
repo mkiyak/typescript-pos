@@ -22,8 +22,9 @@ type ResponseMapperClass = {
 /**
  * Gateways whose queries need a normalized answer (history, installments, BIN list) register their response mapper
  * here (Akbank, Garanti, Param, PayFor, PayTR and Vakıf Katılım answer history queries, Param, PayTR and Tosla the
- * installment queries, Garanti, Param and PayTR the BIN list). AssecoPos, InterPos, PayFlexV4Pos, PayFlexCPV4Pos and the PosNet gateways answer custom queries only
- * (KuveytPos has no query class), which are returned as the bank sent them, so they have none.
+ * installment queries, Garanti, Param and PayTR the BIN list). AssecoPos, InterPos, PayFlexV4Pos, PayFlexCPV4Pos
+ * and the PosNet gateways answer custom queries only (KuveytPos has no query class), which are returned as the
+ * bank sent them, so they have none.
  */
 const RESPONSE_MAPPERS: readonly ResponseMapperClass[] = [
   AkbankPosQueryResponseDataMapper,

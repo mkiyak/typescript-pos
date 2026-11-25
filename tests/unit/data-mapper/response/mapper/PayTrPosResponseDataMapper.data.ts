@@ -205,6 +205,7 @@ export const threeDPayCases: Record<string, Case> = {
   },
 }
 
+// deviation: bank times are Türkiye time
 const D = (iso: string): Date => new Date(`${iso}+03:00`)
 
 const statusBase = {

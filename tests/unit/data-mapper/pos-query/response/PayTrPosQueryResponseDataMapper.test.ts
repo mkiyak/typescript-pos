@@ -146,6 +146,7 @@ describe('PayTrPosQueryResponseDataMapper', () => {
       expect(out.installment_rates).toEqual([])
     })
 
+    // deviation: a family without a readable rate is skipped, so the list holds only families that have rates
     it('skips non-record families and families without a readable rate', () => {
       const out = mapper().mapInstallmentRatesResponse(
         ratesAnswer({ world: 'x', axess: [1], paraf: null, bonus: { taksit_2: 'x' }, cardfinans: { taksit_2: 3 } }),
@@ -222,6 +223,18 @@ describe('PayTrPosQueryResponseDataMapper', () => {
       expect(out.status).toBe('approved')
       expect(out.error_code).toBeNull()
       expect(out.all).toBe(raw)
+    })
+
+    // addition: a card number that is 13 to 19 consecutive digits is never kept
+    it.each([
+      ['4111111111111111', null],
+      ['4111111111111', null],
+      ['4111111111111111111', null],
+      ['411111******1111', '411111******1111'],
+      ['41111111111', '41111111111'],
+    ])('history row card number %j reads as %j', (card, expected) => {
+      const out = mapper().mapHistoryResponse({ status: 'success', list: [{ siparis_no: 'O1', kart_no: card }] })
+      expect((out.transactions as Array<Record<string, unknown>>)[0]?.masked_number ?? null).toBe(expected)
     })
 
     // addition: the documented transaction type letters and a Türkiye-time date

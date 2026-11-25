@@ -61,6 +61,15 @@ describe('PayTrPosQueryRequestDataMapper', () => {
     expect(actual).toEqual({ custom_field: 'value', merchant_id: '123456', paytr_token: 'mock-token' })
   })
 
+  // addition: an empty token counts as absent, so the token is computed
+  it('an empty paytr_token is replaced by the computed token', () => {
+    const crypt = stubCrypt()
+    const actual = create(crypt).createCustomQueryRequestData(account, { custom_field: 'value', paytr_token: '' })
+
+    expect(crypt.createHash).toHaveBeenCalledTimes(1)
+    expect(actual.paytr_token).toBe('mock-token')
+  })
+
   it('testCreateCustomQueryRequestDataWithExistingToken', () => {
     const crypt = stubCrypt()
     const input = { merchant_id: 'override', paytr_token: 'existing-token' }

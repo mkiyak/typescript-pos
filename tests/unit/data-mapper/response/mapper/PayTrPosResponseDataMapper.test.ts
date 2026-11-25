@@ -82,7 +82,7 @@ describe('PayTrPosResponseDataMapper', () => {
     expect(mapper.extractMdStatus(data as Data)).toBe(expected)
   })
 
-  /** Runs the approval time-range assertion the way the reference test does, then drops the time. */
+  /** Checks that the approval time is within the test window, then drops it. */
   function checkTime(actual: Data, expected: Data, before: number, after: number): void {
     if (actual.transaction_time instanceof Date) {
       expect(actual.transaction_time.getTime()).toBeGreaterThanOrEqual(before)
@@ -119,7 +119,7 @@ describe('PayTrPosResponseDataMapper', () => {
     expect(actual).toHaveProperty('all')
     delete actual.all
     const expected = { ...c.expectedData }
-    // The approval time is "now"; the range assertion of the reference is dropped here.
+    // The approval time is "now", so it is dropped before the comparison.
     if (actual.transaction_time instanceof Date) {
       delete actual.transaction_time
       delete expected.transaction_time
@@ -239,6 +239,17 @@ describe('PayTrPosResponseDataMapper', () => {
       expect(
         mapper.map3DPayResponseData({ fail_message: { a: 1 } }, TX_TYPE.PAY_AUTH, {} as PosOrder).md_error_message,
       ).toBeNull()
+    })
+
+    // addition: line separators and bidi controls are removed, and a cut never splits a surrogate pair
+    it('fail_message loses line separators and bidi controls and is cut on character boundaries', () => {
+      const map = (fail_message: string) =>
+        mapper.map3DPayResponseData({ fail_message }, TX_TYPE.PAY_AUTH, {} as PosOrder).md_error_message
+      expect(map('a\u2028b\u2029c\u202Ad\u202Ee\u2066f\u2069g')).toBe('abcdefg')
+      const cut = map(`${'x'.repeat(255)}\u{1F600}tail`) as string
+      expect(cut).toBe('x'.repeat(255))
+      expect(map(`${'x'.repeat(254)}\u{1F600}tail`)).toBe(`${'x'.repeat(254)}\u{1F600}`)
+      expect(cut).not.toMatch(/[\uD800-\uDFFF]/)
     })
 
     // addition: an approved body without installment_count/currency maps both to null
@@ -370,7 +381,7 @@ describe('PayTrPosResponseDataMapper', () => {
       expect(r.order_status).toBe(PAYMENT_STATUS.PAYMENT_COMPLETED)
     })
 
-    it('the reference key refund_amount of a return is not read', () => {
+    it('the refund_amount key of a return is not read', () => {
       const r = mapper.mapStatusResponse({
         status: 'success',
         payment_total: '10.00',

@@ -42,7 +42,7 @@ export class PayTrPosQueryRequestDataMapper extends AbstractQueryRequestDataMapp
 
   /**
    * The caller's fields come first and are kept; `merchant_id` is added when the caller left it out. The token is
-   * computed over the merged data (with the formula the keys select) unless the caller supplied one.
+   * computed over the merged data (with the formula the keys select) unless the caller supplied a non-empty one.
    */
   override createCustomQueryRequestData(
     account: PayTrPosAccount,
@@ -52,7 +52,8 @@ export class PayTrPosQueryRequestDataMapper extends AbstractQueryRequestDataMapp
     // a null merchant id counts as absent
     if (merged.merchant_id === null) merged.merchant_id = account.getMerchantId()
     const given = ownValue(merged, 'paytr_token')
-    if (given !== undefined && given !== null) return merged
+    // a caller token that is empty counts as absent, like a missing one
+    if (given !== undefined && given !== null && given !== '') return merged
 
     return this.signed(account, merged)
   }

@@ -515,7 +515,7 @@ describe('account credential leakage', () => {
     ['BOA', () => AccountFactory.createBoaPosAccount('vakif-katilim', 'mid', 'APIUSER', '11111', 'kdsnsksl', 'SUB1')],
     // addition: T1
     ['Tosla', () => AccountFactory.createToslaPosAccount('tosla', 'mid', 'api-user', 'api-pass')],
-    // addition: P1
+    // addition: C1
     ['PayTR', () => AccountFactory.createPayTrPosAccount('paytr', 'mid', 'paytr-salt-x', 'paytr-key-x')],
     // addition: C2
     [

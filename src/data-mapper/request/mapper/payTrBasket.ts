@@ -1,5 +1,6 @@
 import { PosError } from '../../../errors.js'
 import type { PosOrder } from '../../../types.js'
+import { numberFormat2 } from '../../../util/numberFormat2.js'
 import { ownValue } from '../../../util/ownValue.js'
 
 const MAX_ITEMS = 100
@@ -32,8 +33,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function basketPrice(value: unknown, index: number): number | string {
   if (typeof value === 'number') {
-    // A price that JavaScript writes in exponent form would be written differently by other encoders.
-    if (Number.isFinite(value) && value > 0 && value < 1e13 && !String(value).includes('e')) {
+    // A price with more than two decimals, or one that JavaScript writes in exponent form (below 1e-6 or from 1e21),
+    // would be written differently by other encoders; the range check keeps it far from both.
+    if (Number.isFinite(value) && value > 0 && value < 1e13 && Number(numberFormat2(value)) === value) {
       return value
     }
   } else if (typeof value === 'string' && PRICE_TEXT.test(value) && Number(value) > 0) {

@@ -65,6 +65,9 @@ describe('payTrBasketJson', () => {
     ['negative price', [{ name: 'A', price: -1, item_count: 1 }]],
     ['price 1e13', [{ name: 'A', price: 1e13, item_count: 1 }]],
     ['exponent price', [{ name: 'A', price: 1e-7, item_count: 1 }]],
+    // addition: a numeric price has at most two decimals
+    ['three decimal price', [{ name: 'A', price: 1.005, item_count: 1 }]],
+    ['long fraction price', [{ name: 'A', price: 0.1234, item_count: 1 }]],
     ['NaN price', [{ name: 'A', price: Number.NaN, item_count: 1 }]],
     ['comma price', [{ name: 'A', price: '1,5', item_count: 1 }]],
     ['zero text price', [{ name: 'A', price: '0.00', item_count: 1 }]],

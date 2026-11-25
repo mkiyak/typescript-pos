@@ -31,6 +31,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
+import { ownValue } from '../util/ownValue.js'
 import { toKurus } from '../util/toKurus.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
 import {
@@ -418,8 +419,10 @@ export class PayTrPos extends AbstractGateway<PayTrPosAccount> {
       throw e
     }
 
-    if (!this.isTestMode() && ownText(body, 'test_mode') === '1') {
-      this.fail('test_mode', '0', '1', expected.orderId)
+    // On a live gateway only an absent, empty or "0" flag is accepted: any other spelling of a test flag is refused.
+    const testFlag = ownValue(body, 'test_mode')
+    if (!this.isTestMode() && testFlag !== undefined && testFlag !== '' && testFlag !== '0') {
+      this.fail('test_mode', '0', typeof testFlag === 'string' ? testFlag : '[unreadable]', expected.orderId)
     }
 
     const response = approvedNotificationResult(

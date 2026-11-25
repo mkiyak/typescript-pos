@@ -32,12 +32,12 @@ describe('PayTrPosResponseValueMapper', () => {
   })
 
   it('mapSecureType is not supported', () => {
-    // deviation: C6 — the library error type replaces the PHP logic exception
+    // deviation: C6 — an unsupported mapping throws the library error type
     expect(() => mapper.mapSecureType('3D')).toThrow(NotImplementedError)
   })
 
   it('mapOrderStatus is not supported', () => {
-    // deviation: C6 — the library error type replaces the PHP logic exception
+    // deviation: C6 — an unsupported mapping throws the library error type
     expect(() => mapper.mapOrderStatus('1')).toThrow(NotImplementedError)
   })
 

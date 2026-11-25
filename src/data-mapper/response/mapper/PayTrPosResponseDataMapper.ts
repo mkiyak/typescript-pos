@@ -13,7 +13,7 @@ const REASON_CODE = /^[A-Za-z0-9_-]{1,16}$/
 // word such as "now" or a value with an offset never turns into a date.
 const BANK_DATE = /^(?:\d{2}\.\d{2}\.\d{4}(?: \d{2}:\d{2}:\d{2})?|\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})$/
 // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are exactly what is removed
-const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/g
+const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\u2028\u2029\u202A-\u202E\u2066-\u2069]/g
 
 /**
  * A decimal amount in lira as the gateway prints it (`10.50`, `10,5`, or a number) as an integer number of kuruş.
@@ -31,11 +31,13 @@ export function payTrDecimalKurus(value: unknown): number | null {
   return Number(match[1]) * 100 + Number(fraction.slice(0, 2))
 }
 
-/** Own text without control characters and cut to `max` characters; other kinds, inherited members and empty text are null. */
+/** Own text without control, line-separator and bidi characters and cut to `max` UTF-16 units (never inside a surrogate pair); other kinds, inherited members and empty text are null. */
 export function payTrPlainText(data: unknown, key: string, max = 256): string | null {
   const text = ownString(data, key)
   if (text === null) return null
-  const plain = text.replace(CONTROL_CHARACTERS, '').slice(0, max)
+  let plain = text.replace(CONTROL_CHARACTERS, '').slice(0, max)
+  // a cut right after the first half of a surrogate pair would leave a lone surrogate
+  if (/[\uD800-\uDBFF]$/.test(plain)) plain = plain.slice(0, -1)
 
   return plain === '' ? null : plain
 }

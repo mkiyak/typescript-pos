@@ -328,7 +328,7 @@ export class PayTrPosRequestDataMapper extends AbstractRequestDataMapper<PayTrPo
       if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) {
         throw new PosError('3D form could not be created: invalid token')
       }
-      return { gateway: `${gatewayURL}/${token}`, method: 'GET', inputs: {} }
+      return { gateway: `${gatewayURL.replace(/\/+$/, '')}/${token}`, method: 'GET', inputs: {} }
     }
 
     if (order === null || order === undefined) {

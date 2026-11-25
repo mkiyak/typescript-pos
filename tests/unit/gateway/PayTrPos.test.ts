@@ -1058,6 +1058,18 @@ describe('PayTrPos (end to end) notification forgery and binding', () => {
     expect(res.status).toBe('approved')
   })
 
+  // addition: only an absent, empty or '0' flag counts as live
+  it.each([[' 1'], ['01'], ['true'], ['2'], ['1 ']])(
+    'NV6 with test_mode %j on a live gateway is a mismatch',
+    async (flag) => {
+      const { sent, promise } = notify(nv6({ test_mode: flag }), hostedOrder('ORDER42', 10.5))
+      const err = await mismatch(promise)
+      expect(err.field).toBe('test_mode')
+      expect(err.response).toBeUndefined()
+      expect(sent).toHaveLength(0)
+    },
+  )
+
   it.each([['0'], ['']])('NV6 with test_mode %j is accepted on a live gateway', async (flag) => {
     const res = (await notify(nv6({ test_mode: flag }), hostedOrder('ORDER42', 10.5)).promise) as Data
     expect(res.status).toBe('approved')

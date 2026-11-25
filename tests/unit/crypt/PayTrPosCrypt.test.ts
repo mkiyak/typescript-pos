@@ -176,7 +176,7 @@ describe('PayTrPosCrypt', () => {
       expect(logged).not.toContain(NV0.hash)
       expect(logged).not.toContain(SALT)
       expect(logged).not.toContain(KEY)
-      expect(logged).not.toContain(H(`${NV0.merchant_oid}${SALT}successs1001`, KEY))
+      expect(logged).not.toContain(H(`${NV0.merchant_oid}${SALT}success1001`, KEY))
     })
 
     // addition: a long or non-string order id never reaches the log

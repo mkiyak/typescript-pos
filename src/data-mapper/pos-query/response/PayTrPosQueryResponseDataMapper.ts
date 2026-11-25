@@ -75,6 +75,10 @@ export class PayTrPosQueryResponseDataMapper extends AbstractQueryResponseDataMa
     return result
   }
 
+  /**
+   * The `transactions` rows are report lines only: a row's status never confirms a payment, whatever the answer
+   * says. Card numbers are kept only when masked.
+   */
   override mapHistoryResponse(raw: Raw): PosQueryHistoryResponse {
     const approved = this.isSuccess(raw)
     const procReturnCode = this.wordOf(raw)
@@ -105,6 +109,7 @@ export class PayTrPosQueryResponseDataMapper extends AbstractQueryResponseDataMa
     const oranlar = ownValue(isRecord(raw) ? raw : {}, 'oranlar')
     if (!isRecord(oranlar)) return result
 
+    // A card family without a single readable rate is left out of the result instead of being listed empty.
     for (const family of Object.keys(oranlar)) {
       const row: unknown = ownValue(oranlar, family)
       if (!isRecord(row)) continue
@@ -196,10 +201,15 @@ export class PayTrPosQueryResponseDataMapper extends AbstractQueryResponseDataMa
       first_amount: this.amount(ownScalar(row, 'islem_tutari'), 'islem_tutari'),
       capture_amount: this.amount(ownScalar(row, 'odeme_tutari'), 'odeme_tutari'),
       currency: typeof currency === 'string' ? this.valueMapper.mapCurrency(currency, QUERY_TYPE.HISTORY) : null,
-      masked_number: itemText(row, 'kart_no'),
+      masked_number: this.maskedNumber(itemText(row, 'kart_no')),
       installment_count: installment,
       status: 'approved',
     })
+  }
+
+  /** A card number that is a whole run of 13 to 19 digits is a clear PAN, never a masked one: it is not kept. */
+  private maskedNumber(text: string | null): string | null {
+    return text !== null && /^\d{13,19}$/.test(text) ? null : text
   }
 
   /** A transaction type letter the table does not know is no transaction type, never an error. */
