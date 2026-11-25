@@ -157,7 +157,10 @@ export const PosHttpClientStrategyFactory = {
       case 'PayTrPos': {
         // The merchant key and salt are not sent in a body, but a bank text may echo them: the client masks them.
         const account = signing?.account
-        const secrets = account instanceof PayTrPosAccount ? [account.getPassword(), account.getSecretKey()] : []
+        if (!(account instanceof PayTrPosAccount)) {
+          throw new PosError('PayTrPos needs its account to mask the merchant key and salt.')
+        }
+        const secrets = [account.getPassword(), account.getSecretKey()]
         return new HttpClientStrategy([
           new PayTrPosHttpClient(requiredEndpoint(config, 'payment_api'), transport, logger, secrets),
         ])

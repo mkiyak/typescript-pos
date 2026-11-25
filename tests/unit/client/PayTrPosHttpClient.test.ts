@@ -1,3 +1,4 @@
+import { inspect } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import type { ClientTxType } from '../../../src/client/AbstractHttpClient.js'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
@@ -301,4 +302,36 @@ describe('PayTrPosHttpClient', () => {
       expect(logged).not.toContain(secret)
     }
   })
+
+  // addition: the credentials are not part of any dump of the client
+  it('does not expose the account secrets in a JSON or inspect dump', () => {
+    const c = createClient(fakeFetch([], '{}'), noopLogger, ['SALT-VALUE-12345', 'KEY-VALUE-123456'])
+
+    for (const dump of [JSON.stringify(c), inspect(c, { depth: 5, showHidden: true })]) {
+      expect(dump).not.toContain('SALT-VALUE-12345')
+      expect(dump).not.toContain('KEY-VALUE-123456')
+    }
+  })
+
+  // addition: a thrown error carries no secret either, in the message, the url or the body snippet
+  it.each([
+    ['an HTML page with 200', 200, (k: string, s: string) => `<html>bad ${k} and ${s}</html>`],
+    ['an HTML page with 500', 500, (k: string, s: string) => `<html>bad ${k} and ${s}</html>`],
+    ['a JSON echo with 500', 500, (k: string, s: string) => `{"reason":"key ${k} salt ${s}"}`],
+    ['a card-shaped salt echoed masked', 500, () => '<html>454671****7894 555544****2222</html>'],
+  ] as Array<[string, number, (k: string, s: string) => string]>)(
+    'the error of %s hides the account secrets',
+    async (_name, status, echo) => {
+      const key = '4546711234567894'
+      const salt = '5555444433332222'
+      const c = createClient(fakeFetch([], echo(key, salt), status), noopLogger, [salt, key])
+
+      const error = await c.request(TX_TYPE.PAY_AUTH, MODEL.NON_SECURE, { a: 1 }, ORDER).catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(PosHttpError)
+      const text = `${JSON.stringify(error)} ${(error as PosHttpError).bodySnippet} ${(error as PosHttpError).message}`
+      for (const secret of [key, salt, '454671****7894', '555544****2222']) expect(text).not.toContain(secret)
+      expect((error as PosHttpError).url).toBe(`${BASE}/odeme`)
+    },
+  )
 })

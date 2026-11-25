@@ -1,3 +1,4 @@
+import { inspect } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { AkbankPosHttpClient } from '../../../src/client/AkbankPosHttpClient.js'
 import { AssecoPosHttpClient } from '../../../src/client/AssecoPosHttpClient.js'
@@ -351,10 +352,32 @@ describe('PosHttpClientStrategyFactory', () => {
       gateway_endpoints: { payment_api: 'https://www.paytr.com' },
     }
 
+    const payTrSigning = {
+      account: AccountFactory.createPayTrPosAccount('paytr', '123456', 'SALT-VALUE-12345', 'KEY-VALUE-123456'),
+      crypt: new AssecoPosCrypt(),
+    }
+
+    // addition: without the account the secrets could not be masked, so no client is built
+    it('needs a PayTR account', () => {
+      expect(() => classesOf('PayTrPos', payTrConfig)).toThrow(PosError)
+      expect(() =>
+        PosHttpClientStrategyFactory.createForGateway('PayTrPos', payTrConfig, transport, noopLogger, {
+          account: AccountFactory.createAssecoPosAccount('x', '1', 'u', 'p', 's'),
+          crypt: new AssecoPosCrypt(),
+        }),
+      ).toThrow(/needs its account/)
+    })
+
     // addition: one client serves every transaction and query
     it('holds one client', () => {
-      expect(classesOf('PayTrPos', payTrConfig)).toEqual([PayTrPosHttpClient])
-      const strategy = PosHttpClientStrategyFactory.createForGateway('PayTrPos', payTrConfig, transport, noopLogger)
+      const strategy = PosHttpClientStrategyFactory.createForGateway(
+        'PayTrPos',
+        payTrConfig,
+        transport,
+        noopLogger,
+        payTrSigning,
+      )
+      expect(strategy.getAllClients().map((c) => c.constructor)).toEqual([PayTrPosHttpClient])
       expect(strategy.getClient('3d_form_build', '3d_host')).toBeInstanceOf(PayTrPosHttpClient)
       expect(strategy.getClient('refund', 'regular')).toBeInstanceOf(PayTrPosHttpClient)
     })
@@ -379,6 +402,8 @@ describe('PosHttpClientStrategyFactory', () => {
         { account, crypt: new AssecoPosCrypt() },
       )
 
+      expect(JSON.stringify(strategy)).not.toMatch(/SALT-VALUE-12345|KEY-VALUE-123456/)
+      expect(inspect(strategy, { depth: 8 })).not.toMatch(/SALT-VALUE-12345|KEY-VALUE-123456/)
       await expect(
         strategy.getClient('pay', 'regular').request('pay', 'regular', { a: 1 }, { id: 'o' } as never),
       ).rejects.toThrow()
@@ -387,9 +412,15 @@ describe('PosHttpClientStrategyFactory', () => {
 
     // addition: a missing endpoint is a PosError, never a request to "undefined"
     it('requires the payment_api endpoint', () => {
-      expect(() => classesOf('PayTrPos', { ...payTrConfig, gateway_endpoints: {} as never })).toThrow(
-        /Endpoint \[payment_api\] is required for/,
-      )
+      expect(() =>
+        PosHttpClientStrategyFactory.createForGateway(
+          'PayTrPos',
+          { ...payTrConfig, gateway_endpoints: {} as never },
+          transport,
+          noopLogger,
+          payTrSigning,
+        ),
+      ).toThrow(/Endpoint \[payment_api\] is required for/)
     })
   })
 

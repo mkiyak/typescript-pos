@@ -59,7 +59,32 @@ export abstract class AbstractHttpClient {
 
   abstract supportsTx(txType: ClientTxType, paymentModel: PaymentModel): boolean
 
+  /**
+   * An error carrying a bank text (message, url or body snippet) is rethrown with this request's secrets masked, so a
+   * page that echoes them never leaves through the thrown error either. The original error is not chained.
+   */
   async request(
+    txType: ClientTxType,
+    paymentModel: PaymentModel,
+    requestData: Record<string, unknown>,
+    order: PosOrder,
+    url?: string | null,
+  ): Promise<Record<string, unknown>> {
+    try {
+      return await this.send(txType, paymentModel, requestData, order, url)
+    } catch (e) {
+      if (!(e instanceof PosHttpError)) throw e
+      const secrets = this.logSecrets(requestData)
+      if (secrets.length === 0) throw e
+      throw new PosHttpError(hideSecrets(e.message, secrets), {
+        url: hideSecrets(e.url, secrets),
+        ...(e.status !== undefined ? { status: e.status } : {}),
+        ...(e.bodySnippet !== undefined ? { body: hideSecrets(e.bodySnippet, secrets) } : {}),
+      })
+    }
+  }
+
+  private async send(
     txType: ClientTxType,
     paymentModel: PaymentModel,
     requestData: Record<string, unknown>,

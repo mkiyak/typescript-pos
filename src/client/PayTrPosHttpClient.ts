@@ -32,22 +32,24 @@ export class PayTrPosHttpClient extends AbstractHttpClient {
   static readonly API_NAME_PAYMENT_API = 'payment_api'
 
   /**
+   * deviation: the account secrets are an extra argument (request bodies carry none of them).
    * @param accountSecrets the account's merchant key and salt. They are never part of a request body, but a bank
    *   text may echo them, and they are masked (also in card-masked form) in every log line and error snippet.
    */
-  constructor(
-    endpoint: string,
-    transport: HttpTransport,
-    logger: PosLogger,
-    private readonly accountSecrets: readonly string[] = [],
-  ) {
+  // A true private field: it is not enumerable, so a JSON or inspect dump of the client (or of a gateway holding it)
+  // never shows the credentials.
+  readonly #accountSecrets: readonly string[]
+
+  constructor(endpoint: string, transport: HttpTransport, logger: PosLogger, accountSecrets: readonly string[] = []) {
     super(endpoint, transport, logger)
+    this.#accountSecrets = [...accountSecrets]
   }
 
   static supports(gatewayClass: string, apiName: string): boolean {
     return gatewayClass === 'PayTrPos' && apiName === PayTrPosHttpClient.API_NAME_PAYMENT_API
   }
 
+  // deviation: the payment model does not take part in routing, so it is optional
   supportsTx(txType: ClientTxType, _paymentModel?: PaymentModel): boolean {
     return PATHS.has(txType)
   }
@@ -69,7 +71,7 @@ export class PayTrPosHttpClient extends AbstractHttpClient {
   protected override logSecrets(requestData: Record<string, unknown>): readonly string[] {
     const token = Object.hasOwn(requestData, 'paytr_token') ? requestData.paytr_token : undefined
 
-    return [...this.accountSecrets, ...(typeof token === 'string' && token !== '' ? [token] : [])]
+    return [...this.#accountSecrets, ...(typeof token === 'string' && token !== '' ? [token] : [])]
   }
 
   protected override encode(
