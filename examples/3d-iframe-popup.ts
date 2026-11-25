@@ -49,9 +49,13 @@ const orders = new Map<string, { order: PosOrder; state: OrderState; callbackTok
 
 /**
  * Stores a new payment attempt. The callback URL you issue carries the order id and an unguessable token of this
- * attempt, so the callback finds the order without a cookie and nobody else can post to it.
+ * attempt, so the callback finds the order without a cookie and nobody else can post to it. An id that already exists
+ * is refused: a retry uses a new order id (and so a new token).
  */
 export function createOrder(origin: string, orderId: string, amount: number): PosOrder {
+  if (orders.has(orderId)) {
+    throw new PosError('An order with this id already exists; a retry needs a new order id')
+  }
   const callbackToken = randomBytes(16).toString('base64url') // 128 bits, new for every attempt
   const callback = `${checkedOrigin(origin)}/pay/3d/callback/${encodeURIComponent(orderId)}/${callbackToken}`
   const order: PosOrder = {
@@ -69,7 +73,7 @@ export function createOrder(origin: string, orderId: string, amount: number): Po
 /** `GET /pay/3d/:orderId`: the page the redirect, the iframe `src` or `window.open` points at. */
 export async function formPage(orderId: string): Promise<Page> {
   // Load the order only for the signed-in customer who owns it (check your session here); never for anyone who knows
-  // the id.
+  // the id. The form page reveals the callback URL and its token, so this session check is what keeps the token secret.
   const stored = orders.get(orderId)
   if (stored === undefined || stored.state !== 'pending') {
     throw new PosError('No pending order with this id')

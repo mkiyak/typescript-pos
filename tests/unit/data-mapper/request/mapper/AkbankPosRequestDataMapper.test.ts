@@ -585,6 +585,11 @@ describe('AkbankPosRequestDataMapper', () => {
       const build = requests.find(([n]) => n === name)?.[1] as (recurringId: unknown) => Record<string, unknown>
       expect(() => build(id)).toThrow(PosError)
     })
+
+    // addition: a bad recurring id is reported under its own field name
+    it.each(requests)('%s names the recurring_id field in the error', (_name, build) => {
+      expect(() => build('_a')).toThrow(/^Order field "recurring_id" must be/)
+    })
   })
 
   it('has no status request', () => {

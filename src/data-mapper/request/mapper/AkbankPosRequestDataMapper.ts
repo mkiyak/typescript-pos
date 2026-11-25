@@ -3,7 +3,7 @@ import type { AkbankPosAccount } from '../../../model/account/AkbankPosAccount.j
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
-import { orderIdOf } from '../../../util/orderId.js'
+import { ORDER_ID_PATTERN, orderIdOf } from '../../../util/orderId.js'
 import { isSet, required, requiredString } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
@@ -238,7 +238,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
 
   /** The recurring order's track id follows the same rule as an order id (plain ASCII, at most 64 characters). */
   private trackIdOf(recurringId: unknown): string {
-    return orderIdOf({ id: recurringId } as PosOrder)
+    return orderIdOf({ id: recurringId } as PosOrder, 64, ORDER_ID_PATTERN, 'recurring_id')
   }
 
   private now(): string {

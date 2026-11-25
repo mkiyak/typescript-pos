@@ -93,4 +93,14 @@ describe('orderIdOf', () => {
       'Order field "id" must be 1-20 letters, digits or "-", starting with a letter or digit',
     )
   })
+
+  // addition: callers that read another field name it in the error
+  it('names the given field in the error', () => {
+    expect(() => orderIdOf({ id: '_a' } as PosOrder, 64, ORDER_ID_PATTERN, 'recurring_id')).toThrow(
+      'Order field "recurring_id" must be 1-64 letters, digits, "_" or "-", starting with a letter or digit',
+    )
+    expect(() => orderIdOf({ id: '' } as PosOrder, 64, ORDER_ID_PATTERN, 'recurring_id')).toThrow(
+      'Order field "recurring_id" is required',
+    )
+  })
 })

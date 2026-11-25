@@ -126,7 +126,8 @@ yours and must be treated as untrusted:
 A typical setup has four routes. All of them are on your own origin.
 
 1. **Form route** (`GET /pay/3d/:orderId`): loads the stored order for the signed-in customer (check the session:
-   never render the form for someone who only knows the order id), calls
+   never render the form for someone who only knows the order id: the page reveals the callback URL and its token, so
+   this check is what keeps the token secret), calls
    `get3DFormData`, and answers with `render3DFormHtml(...)` (or the bank's HTML string) and the headers above. Point
    the redirect, the iframe `src` or `window.open` at this route. Do not build the page in the browser with `srcdoc` or
    `document.write`: your route can set the CSP, `no-store` and `frame-ancestors` headers, an `about:srcdoc` frame
@@ -150,7 +151,8 @@ cross-site `POST`, and many browsers block third-party cookies in frames altoget
 
 - Do not need the session on the callback: put the order id **and an unguessable per-attempt token** in the callback
   URL you issue (at least 128 random bits, for example `randomBytes(16).toString('base64url')`, stored with the
-  attempt and new for every attempt). Look the attempt up by the id, compare the token in constant time, and only then
+  attempt and new for every attempt; storing a new attempt refuses an order id that already exists, so a retry uses a new
+  order id). Look the attempt up by the id, compare the token in constant time, and only then
   let `pos.payment(...)` bind the callback to the order (order id, amount, currency, signature). An order id alone is
   not enough: order ids are often guessable, and anyone could post a replayed decline or an empty body to the
   callback URL of someone else's order. The result route, called later from your checkout page, is first-party and has

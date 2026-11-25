@@ -347,7 +347,7 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
    * Full refund, or partial refund when `order.order_amount` is set and `order.amount` is lower.
    *
    * @throws PosHttpError when the bank's answer carries no result: the refund may have gone through, check `status`
-   *   before any retry
+   *   (or the order history where a gateway has no status, such as Akbank) before any retry
    */
   async refund(order: PosOrder): Promise<PosResponse> {
     const paymentModel = MODEL.NON_SECURE
