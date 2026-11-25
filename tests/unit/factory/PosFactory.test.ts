@@ -16,6 +16,7 @@ import { ParamPos } from '../../../src/gateway/ParamPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
+import { PayTrPos } from '../../../src/gateway/PayTrPos.js'
 import { PosNetPos } from '../../../src/gateway/PosNetPos.js'
 import { PosNetV1Pos } from '../../../src/gateway/PosNetV1Pos.js'
 import { ToslaPos } from '../../../src/gateway/ToslaPos.js'
@@ -335,6 +336,53 @@ describe('PosFactory.createPosGateway', () => {
     const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
     await gateway.status({ id: 'o1' })
     expect(urls).toStrictEqual(['https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx'])
+  })
+
+  it('creates the paytr PayTrPos gateway from the shipped test config', () => {
+    const account = AccountFactory.createPayTrPosAccount('paytr', '123456', 'salt', 'key')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(PayTrPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(gateway.getCardTypeMapping()).toStrictEqual({})
+    expect(gateway.getCurrencies()).toStrictEqual(['TRY', 'USD', 'EUR', 'GBP', 'RUB'])
+    expect(gateway.isTestMode()).toBe(true)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-PayTR account for a PayTrPos bank', () => {
+    const wrong = AccountFactory.createToslaPosAccount('paytr', '1', 'u', 'p')
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
+      'Bank [paytr] is configured for PayTrPos and needs a PayTrPosAccount.',
+    )
+  })
+
+  // addition: G7 the shipped test entry selects test transactions: the iFrame token request carries test_mode 1
+  it('sends the PayTrPos token request with test_mode 1 from the shipped test config', async () => {
+    const calls: { url: string; body: string }[] = []
+    const fetchImpl = (async (url: unknown, init?: RequestInit) => {
+      calls.push({ url: String(url), body: String(init?.body ?? '') })
+      return new Response(JSON.stringify({ status: 'success', token: 'tok1' }), { status: 200 })
+    }) as unknown as typeof fetch
+    const account = AccountFactory.createPayTrPosAccount('paytr', '123456', 'salt', 'key')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    const order: PosOrder = {
+      id: 'O1',
+      amount: 1.01,
+      ip: '127.0.0.1',
+      success_url: 'https://example.com/ok',
+      fail_url: 'https://example.com/fail',
+      buyer: { email: 'test@example.com', name: 'John Doe', gsm_number: '05001234567' },
+      billing_address: { address: 'Test Sokak No:1 Istanbul' },
+    }
+    const form = await gateway.get3DFormData(order, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH)
+    expect(form).toStrictEqual({ gateway: 'https://www.paytr.com/odeme/guvenli/tok1', method: 'GET', inputs: {} })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe('https://www.paytr.com/odeme/api/get-token')
+    const sent = new URLSearchParams(calls[0]?.body)
+    expect(sent.get('test_mode')).toBe('1')
+    expect(sent.get('lang')).toBe('tr')
+    expect(calls[0]?.body).not.toContain('salt')
   })
 
   it('creates the param-3d-host-pos Param3DHostPos gateway from the shipped test config', () => {
@@ -709,6 +757,7 @@ describe('PosFactory.createPosGateway', () => {
       ToslaPos: (bank: string) => AccountFactory.createToslaPosAccount(bank, '1', 'u', 'p'),
       ParamPos: (bank: string) => AccountFactory.createParamPosAccount(bank, '1', 'u', 'p', 'g'),
       Param3DHostPos: (bank: string) => AccountFactory.createParamPosAccount(bank, '1', 'u', 'p', 'g', 't'),
+      PayTrPos: (bank: string) => AccountFactory.createPayTrPosAccount(bank, '1', 's', 'k'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

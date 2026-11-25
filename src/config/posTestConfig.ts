@@ -12,6 +12,7 @@ export type PosTestBank =
   | 'tosla'
   | 'param-pos'
   | 'param-3d-host-pos'
+  | 'paytr'
   | 'vakifbank'
   | 'vakifbank-cp'
   | 'yapikredi'
@@ -20,10 +21,11 @@ export type PosTestBank =
   | 'ziraat-vpos'
 
 /**
- * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos and Param3DHostPos banks (the VakifBank test API
+ * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos, Param3DHostPos and PayTrPos banks (the VakifBank test API
  * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it (not AkbankPos: its entry sets neither `test_mode` nor `lang`, the language comes from `order.lang`); for the
  * Asseco and PayFlex gateways the environment is selected by the endpoint URLs. The `garanti` entry sets `test_mode: true`
- * because the Garanti test environment needs `Mode TEST` in every request.
+ * because the Garanti test environment needs `Mode TEST` in every request. The `paytr` entry sets `test_mode: true`
+ * too: PayTR has one host for both environments, and the flag marks every request as a test transaction.
  *
  * Deeply frozen: spread an entry into a new object to change it
  * (`{ ...posTestConfig.banks.vakifbank, require_3d_hash: true }`).
@@ -108,6 +110,18 @@ export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
         gateway_3d_host: 'https://test-pos.param.com.tr/default.aspx',
         // the TurkPos service that confirms every hosted approval from the bank's status record
         query_api: 'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx',
+      },
+    },
+    paytr: {
+      name: 'PayTR',
+      class: 'PayTrPos',
+      // PayTR has one host: the test flag selects test transactions (`test_mode` / `debug_on` 1, history `dummy` 1)
+      test_mode: true,
+      lang: 'tr',
+      gateway_endpoints: {
+        payment_api: 'https://www.paytr.com',
+        gateway_3d: 'https://www.paytr.com/odeme',
+        gateway_3d_host: 'https://www.paytr.com/odeme/guvenli',
       },
     },
     'vakif-katilim': {

@@ -14,6 +14,7 @@ import { ParamPos } from '../../../src/gateway/ParamPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
+import { PayTrPos } from '../../../src/gateway/PayTrPos.js'
 import { PosNetPos } from '../../../src/gateway/PosNetPos.js'
 import { PosNetV1Pos } from '../../../src/gateway/PosNetV1Pos.js'
 import { ToslaPos } from '../../../src/gateway/ToslaPos.js'
@@ -29,6 +30,7 @@ const accountFor = (gatewayClass: string, key: string) => {
   if (gatewayClass === 'ToslaPos') return AccountFactory.createToslaPosAccount(key, '1', 'u', 'p')
   if (gatewayClass === 'ParamPos') return AccountFactory.createParamPosAccount(key, '1', 'u', 'p', 'g')
   if (gatewayClass === 'Param3DHostPos') return AccountFactory.createParamPosAccount(key, '1', 'u', 'p', 'g', 't')
+  if (gatewayClass === 'PayTrPos') return AccountFactory.createPayTrPosAccount(key, '1', 's', 'k')
   if (gatewayClass === 'PayForPos') return AccountFactory.createPayForPosAccount(key, 'm', 'u', 'p', 'k')
   if (gatewayClass === 'PosNetPos' || gatewayClass === 'PosNetV1Pos')
     return AccountFactory.createPosNetPosAccount(key, 'm', 't', 'p', 'k')
@@ -40,7 +42,7 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos and Param3DHostPos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos, Param3DHostPos and PayTrPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
       expect([
@@ -58,6 +60,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         'ToslaPos',
         'ParamPos',
         'Param3DHostPos',
+        'PayTrPos',
       ]).toContain(bank.class)
     }
   })
@@ -80,6 +83,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
       ToslaPos,
       ParamPos,
       Param3DHostPos,
+      PayTrPos,
     }[
       bank.class as
         | 'AssecoPos'
@@ -96,6 +100,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         | 'ToslaPos'
         | 'ParamPos'
         | 'Param3DHostPos'
+        | 'PayTrPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -559,5 +564,40 @@ describe('Param3DHostPos endpoints', () => {
       expect(host).not.toHaveProperty('test_mode')
       expect(host).not.toHaveProperty('require_3d_hash')
     }
+  })
+})
+
+// addition: shipped PayTrPos entries (one host for both environments; the test entry selects test transactions)
+describe('PayTrPos endpoints', () => {
+  const endpoints = {
+    payment_api: 'https://www.paytr.com',
+    gateway_3d: 'https://www.paytr.com/odeme',
+    gateway_3d_host: 'https://www.paytr.com/odeme/guvenli',
+  }
+
+  it('production and test entries', () => {
+    expect(posProductionConfig.banks.paytr).toStrictEqual({
+      name: 'PayTR',
+      class: 'PayTrPos',
+      gateway_endpoints: endpoints,
+    })
+    expect(posTestConfig.banks.paytr).toStrictEqual({
+      name: 'PayTR',
+      class: 'PayTrPos',
+      test_mode: true,
+      lang: 'tr',
+      gateway_endpoints: endpoints,
+    })
+  })
+
+  it('both entries are deeply frozen and carry no hash-check switch', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      const paytr = cfg.banks.paytr
+      expect(Object.isFrozen(paytr)).toBe(true)
+      expect(Object.isFrozen(paytr.gateway_endpoints)).toBe(true)
+      expect(paytr).not.toHaveProperty('require_3d_hash')
+    }
+    expect(posProductionConfig.banks.paytr).not.toHaveProperty('test_mode')
+    expect(posProductionConfig.banks.paytr).not.toHaveProperty('lang')
   })
 })

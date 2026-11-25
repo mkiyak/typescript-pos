@@ -68,6 +68,7 @@ describe('public index', () => {
         'ToslaPos',
         'ParamPos',
         'Param3DHostPos',
+        'PayTrPos',
         'BoaPosAccount',
         'ToslaPosAccount',
         'PayTrPosAccount',
@@ -188,6 +189,12 @@ describe('public index', () => {
       '99001',
     )
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.Param3DHostPos)
+  })
+
+  // addition: the PayTrPos gateway is reachable from the public entry point
+  it('PosFactory creates the PayTrPos gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createPayTrPosAccount('paytr', '123456', 'salt', 'key')
+    expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.PayTrPos)
   })
 
   // addition: the VakifKatilimPos gateway is reachable from the public entry point

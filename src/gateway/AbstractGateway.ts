@@ -106,6 +106,12 @@ export type GatewayConfig = {
    * The callback carries the merchant GUID it is signed with, so a valid signature proves nothing by itself: every
    * approval is confirmed with the bank's status record (TurkPos `query_api`), which must hold the transaction id
    * derived from this order, amount and currency.
+   *
+   * PayTrPos: no effect on the 3D Host / 3D Pay notification that PayTR posts to the notification URL: it always
+   * carries a `hash`, which is always verified. With `true`, a browser return without `hash` (the fail page's
+   * `fail_message`) is rejected too (`HashMismatchError`); without it such a body maps only as a decline whose result
+   * carries the order's id and the failure text. An unsigned body that reads as an approval (a status `success` or a
+   * positive total amount) is always rejected.
    */
   require_3d_hash?: boolean
 }
