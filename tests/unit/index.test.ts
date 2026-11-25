@@ -14,6 +14,7 @@ import type {
   PosTestBank,
   QueryRequestDataMapperInterface,
   RecurringFrequency,
+  Render3DFormOptions,
   RequestDataMapperInterface,
   RequestTxTypeMappings,
   RequestValueFormatterInterface,
@@ -88,6 +89,7 @@ describe('public index', () => {
         'HttpTransport',
         'noopLogger',
         'maskSensitiveData',
+        'render3DFormHtml',
         'VERSION',
         'QUERY_TYPE',
         'PosQueryFactory',
@@ -237,6 +239,8 @@ describe('public index', () => {
     expectTypeOf<RecurringFrequency>().toEqualTypeOf<'DAY' | 'WEEK' | 'MONTH' | 'YEAR'>()
     expectTypeOf<RequestTxTypeMappings>().toMatchTypeOf<object>()
     expectTypeOf<EncodedData['format']>().toEqualTypeOf<'xml' | 'form' | 'json'>()
+    expectTypeOf<Render3DFormOptions>().toEqualTypeOf<{ nonce?: string; autoSubmit?: boolean }>()
+    expectTypeOf(mod.render3DFormHtml).returns.toEqualTypeOf<string>()
     expectTypeOf<typeof mod.posTestConfig>().toEqualTypeOf<ShippedPosConfig<PosTestBank>>()
     expectTypeOf<typeof mod.posTestConfig.banks.asseco>().toMatchTypeOf<GatewayConfig>()
     const gatewayLike: AbstractGatewayLike = mod.PosFactory.createPosGateway(
