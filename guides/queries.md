@@ -39,6 +39,7 @@ replaces the other.
 | `InterPosQuery` | yes | no | no | no | no |
 | `VakifKatilimPosQuery` | yes | yes | no | no | no |
 | `ToslaPosQuery` | yes | no | yes | yes | no |
+| `ParamPosQuery` | yes | yes | yes | no | yes |
 
 A query the bank class does not offer rejects with `UnsupportedTransactionTypeError`; it never throws synchronously.
 Check first when the choice is dynamic:
@@ -67,6 +68,7 @@ the bank's field names back.
 | `InterPos` | `UserCode`, `UserPass`, `ShopCode` (each only when missing) | form-urlencoded; the answer is decoded from the bank's `key=value;;` text | `payment_api` unless `apiUrl` is given |
 | `VakifKatilimPos` | none: the data goes out unchanged, so send a complete signed request | the gateway's XML | none: `apiUrl` is required |
 | `ToslaPos` | `clientId`, `apiUser`, `rnd`, `timeSpan` (each only when missing) and the `hash` over them (when you set no `hash`) | JSON | none: `apiUrl` is required |
+| `ParamPos` | `G` (`CLIENT_CODE`, `CLIENT_USERNAME`, `CLIENT_PASSWORD`) and `GUID` (each only when missing) | SOAP: one action with its fields | `payment_api` unless `apiUrl` is given |
 | `PosNetV1Pos` | `ApiType`, `ApiVersion`, `MerchantNo`, `TerminalNo` (each only when missing) and a `MAC` over the fields listed in `MACParams` (when you set no `MAC`) | JSON | none: `apiUrl` is required |
 
 For a sub-dealer account `MerchantId` is the sub-merchant id, otherwise `'1'`.
@@ -181,6 +183,38 @@ unusable count, rate or amount) are dropped and logged, never returned as guesse
 Tosla has no `history` or `getBinList`: the gateway's `orderHistory` lists the records of one order. Its custom query
 is sent with the account fields and the signature added; because the signature covers `clientId`, `apiUser`, `rnd` and
 `timeSpan`, a hook that edits one of them invalidates it. The query needs an `apiUrl` on the API origin.
+
+## Param: history, installment rates and BIN list
+
+```ts
+const query = PosQueryFactory.createPosQuery(paramAccount, posProductionConfig)
+
+// Records of a window (Date values, Türkiye time); order_status (text) and transaction_type are optional filters
+const list = await query.history({
+  start_date: new Date('2026-11-14T00:00:00+03:00'),
+  end_date: new Date('2026-11-14T23:59:59+03:00'),
+  order_status: 'Başarılı',
+  transaction_type: 'pay', // 'pay' | 'cancel' | 'refund'
+})
+// list.status, list.trans_count, list.transactions[] (newest first): order_id, transaction_type, payment_model, currency,
+// first_amount, refund_amount, transaction_time, proc_return_code, error_message, ...
+
+// The merchant's special rates, one group per card program (no parameters)
+const rates = await query.getInstallmentRates({})
+// rates.installment_rates[]: card_family, rates[]: { installment (2 to 12), rate, constant: 0 }
+
+// The cards of a BIN (6 or 8 digits); without `bin` the whole table is returned
+const bins = await query.getBinList({ bin: '424242' })
+// bins.bin_list[]: bin, bank_code, bank_name, card_type, card_class
+```
+
+A custom query names one SOAP action of the TurkPos service and its fields, for example
+`{ SomeAction: { Field: 'value' } }`; the account's client code, API user, API password and merchant key are added to
+the fields you leave out, and the action's URL is the configured `payment_api` unless you pass an allowed `apiUrl`. An
+answer that echoes one of the credentials is returned with `***` in its place. Param has no installment prices.
+History only reports records: it never confirms a payment, use `pos.status(order)` for that. A declined answer has
+`status: 'declined'`, an empty list and the bank's message in `error_message`; the raw decoded answer is always in `all`.
+See the [Param guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/param-payment.md).
 
 ## Custom URLs are restricted
 
