@@ -1,5 +1,46 @@
 # typescript-pos
 
+## 0.14.0
+
+### Minor Changes
+
+- Payment, status, cancel, refund and order-history results of every gateway now always carry `order_id`, `proc_return_code`, `error_code`, `error_message` and `all` (null when the bank sends none).
+- 50ebe27: Breaking: with `createWithoutCard: true` a card passed to `get3DFormData` is no longer put into the 3D form (Asseco, Garanti, Akbank, Albaraka POSNET, PayFor in both form formats, InterPos, PayTR; Tosla already did this); the payer enters the card on the bank page. Pass `createWithoutCard: false` when you want the library to put the card into the form.
+  
+  Breaking: order ids must be 1-64 letters, digits, `_` or `-`, starting with a letter or digit (Yapı Kredi and Albaraka POSNET: 1-20; VakıfBank Common Payment: no `_`), and a number is accepted only as a safe non-negative integer; any other id now throws `PosError` before a request is sent when a payment starts (3D form, non-secure sale, pre-authorization) on every gateway (Asseco, Garanti, Akbank and PayFlex V4 accepted any value before; PayFor, InterPos, POSNET and VakıfBank Common Payment accepted a leading `_` or `-`). Orders created earlier keep working: their callbacks, 3D provisions, captures, cancels, refunds, status and history requests accept any existing id of text (up to 64 characters, POSNET 20) without control characters, or a safe non-negative integer.
+  
+  Breaking: `IyzicoPos.make3DPayPayment` now rejects with `UnsupportedPaymentModelError` (was `UnsupportedTransactionTypeError`), like every other gateway's payment-model method; `payment()` with the 3D Pay model still throws `UnsupportedTransactionTypeError`.
+- 7519150: Add render3DFormHtml to turn get3DFormData results into an escaped auto-submit page (for redirects, iframes and popups).
+- 0d6d646: Breaking: a payment, pre-/post-authorization, 3D provision or refund whose bank answer is empty or carries no result code now rejects with PosHttpError (outcome unknown) instead of returning a declined response, for every gateway; check status() before retrying. Asseco 3D Secure callbacks must now match the order id, amount and currency before the provision.
+  
+  Breaking: custom response mappers implementing `ResponseDataMapperInterface` must add `readProcReturnCode(raw): string | null`, the bank's result code of a raw answer, or `null` when the answer carries none.
+
+### Patch Changes
+
+- 4cc049d: Amounts that round up to 1e13 (`9999999999999.996`) are refused like 1e13 itself, on every gateway; iyzico answer amounts of 1e13 or more leave the field `null`.
+  
+  `OrderMismatchError` messages now start with `Order <field> mismatch` (they said `Callback`), since the order is also compared with data the bank returned from a query.
+  
+  Order ids of 3D callbacks (Asseco, Yapı Kredi and Albaraka POSNET, VakıfBank Common Payment) and Akbank recurring track ids are read as existing order ids before they are compared or sent; an array, object, unsafe number or text with a control character is a `PosError` instead of the text it prints as.
+  
+  A card passed with a hosted payment model is never written into the browser form, with or without `createWithoutCard`: `3d_host` refuses a card (`PosError`); `3d_pay_hosting` drops it.
+  
+  POSNET `ref_ret_num` and `auth_code` must be non-blank strings, a Garanti history page must be an integer from 1 to 9999 and a BIN 6 to 8 digits, an Akbank history `batch_num` a positive integer; anything else is a `PosError`. Akbank custom queries no longer format the request time when the caller supplies one.
+  
+  VakıfBank Common Payment status requests refuse a `transaction_id` or `payment_token` that is not a string instead of dropping it, and its answer's `TransactionId`, `MaskedPan` and `Rrn` are text or `null`. Garanti answer fields that are objects or arrays are `null` instead of `"[object Object]"`. A custom query without any allowed origin says so in its error.
+- 918ff51: Add operation guides (payment models, after-payment cancel/refund/status/history, pre-authorization and capture), a guide index, and security definitions for `requires_manual_review`, `paymentMayHaveCompleted`, unknown outcomes, card-free forms and order ids.
+  
+  Add examples for the hosted Param page, operations after a payment (cancel, refund, status) and pre-authorization with capture.
+  
+  Update both READMEs: link the guide index and the new guides, summarise the library-wide rules (card-free forms, order ids, unknown outcomes, result keys), mention `render3DFormHtml`, list every test configuration key and add an upgrade note for 0.14.
+- 6e25d04: Credentials a request carries in its body (`Password`, `MerchantPassword`, `UserPass` on the Asseco, PayFlex V4, VakıfBank Common Payment, PayFor and InterPos clients, and the `HashPassword` signing value on the Vakıf Katılım client, as the Param, PayTR and iyzico clients already did) are hidden from thrown errors and every log line, also when a failing bank page echoes them in free text, URL-encoded (an echoed form body), cut at the 500-character snippet edge or in an ISO-8859-9 page; the "parsing bank response failed" log line shows the answer decoded with its own charset.
+  
+  Log masking of JSON text now covers every sensitive key (`StoreKey`, `SecretKey`, `store_key`, `terminalId`, `cardNumber` …) with string or number values, also inside a JSON text that was itself put into a JSON string (`{\"cvv\":\"123\"}`); a card number under such a key is now hidden whole instead of as its first six and last four digits. A masked `Error` keeps its masked `cause`, and `maskSensitiveData(error)` is typed as a plain record.
+  
+  Bank answers above 10 MiB are refused with `PosHttpError('Bank answer is too large')` without reading or keeping the body (`HttpTransport` option `maxResponseBytes`); after a money request this is an unknown outcome like any other transport error.
+  
+  VakıfBank Common Payment: a payment token that contradicts the order is logged by length only, and the `OrderMismatchError` describes the tokens (`expected: 'the payment token of this order'`, `actual: 'another payment token'`) instead of carrying them; a refused non-https payment URL is logged by scheme and host only.
+
 ## 0.13.0
 
 ### Minor Changes

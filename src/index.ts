@@ -130,4 +130,4 @@ export { maskSensitiveData } from './util/maskSensitiveData.js'
 export { type Render3DFormOptions, render3DFormHtml } from './util/render3DFormHtml.js'
 
 /** Library version. Hand-maintained; must equal package.json `version` (enforced by tests/unit/smoke.test.ts). */
-export const VERSION = '0.13.0'
+export const VERSION = '0.14.0'
