@@ -10,6 +10,7 @@ import { InterPosAccount } from '../../../src/model/account/InterPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../../../src/model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../../../src/model/account/PosNetPosAccount.js'
+import { ToslaPosAccount } from '../../../src/model/account/ToslaPosAccount.js'
 import { CARD_CLASS } from '../../../src/PosInterface.js'
 import { maskSensitiveData } from '../../../src/util/maskSensitiveData.js'
 
@@ -369,6 +370,39 @@ describe('AccountFactory BOA account', () => {
   })
 })
 
+describe('AccountFactory Tosla', () => {
+  it('testCreateToslaPosAccount', () => {
+    const a = AccountFactory.createToslaPosAccount('tosla', 'merchant-id', 'api-user', 'api-pass')
+    expect(a).toBeInstanceOf(ToslaPosAccount)
+    expect(a.getBankName()).toBe('tosla')
+    expect(a.getMerchantId()).toBe('merchant-id')
+    expect(a.getUsername()).toBe('api-user')
+    expect(a.getSecretKey()).toBe('api-pass')
+    // addition: T1 there is no account password
+    expect(a.getPassword()).toBe('')
+  })
+
+  // addition: T1
+  it.each([
+    ['clientId', ['', 'u', 'p']],
+    ['clientId', ['  ', 'u', 'p']],
+    ['apiUser', ['c', '', 'p']],
+    ['apiUser', ['c', ' \t', 'p']],
+    ['apiPass', ['c', 'u', '']],
+    ['apiPass', ['c', 'u', '   ']],
+  ] as const)('rejects a blank %s', (_n, [c, u, p]) => {
+    expect(() => AccountFactory.createToslaPosAccount('tosla', c, u, p)).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: T1
+  it.each([null, undefined, 5, {}, ['x']])('rejects a non-string value %j', (value) => {
+    const make = AccountFactory.createToslaPosAccount as unknown as (...a: unknown[]) => unknown
+    expect(() => make('tosla', value, 'u', 'p')).toThrow(MissingAccountInfoError)
+    expect(() => make('tosla', 'c', value, 'p')).toThrow(MissingAccountInfoError)
+    expect(() => make('tosla', 'c', 'u', value)).toThrow(MissingAccountInfoError)
+  })
+})
+
 describe('account credential leakage', () => {
   const accounts = [
     ['Asseco', () => AccountFactory.createAssecoPosAccount('akbank', 'mid', 'USER1', 'PW1', 'SK1')],
@@ -398,6 +432,8 @@ describe('account credential leakage', () => {
     ['InterPos', () => AccountFactory.createInterPosAccount('denizbank', 'mid', 'USER1', 'user-pass', 'merchant-pass')],
     // addition: B1
     ['BOA', () => AccountFactory.createBoaPosAccount('vakif-katilim', 'mid', 'APIUSER', '11111', 'kdsnsksl', 'SUB1')],
+    // addition: T1
+    ['Tosla', () => AccountFactory.createToslaPosAccount('tosla', 'mid', 'api-user', 'api-pass')],
   ] as const
 
   it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
@@ -420,6 +456,8 @@ describe('account credential leakage', () => {
         'merchant-pass',
         '11111',
         'SUB1',
+        'api-user',
+        'api-pass',
       ])
         expect(out).not.toContain(secret)
     }

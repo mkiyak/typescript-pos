@@ -62,6 +62,19 @@ export const CARD_CLASS = {
 } as const
 export type CardClass = (typeof CARD_CLASS)[keyof typeof CARD_CLASS]
 
+/** Card programme (family) names the installment queries report. */
+export const CARD_FAMILY = {
+  WORLD: 'world',
+  AXESS: 'axess',
+  CARDFINANS: 'cardfinans',
+  PARAF: 'paraf',
+  ADVANTAGE: 'advantage',
+  BONUS: 'bonus',
+  MAXIMUM: 'maximum',
+  SAGLAMKART: 'saglamkart',
+} as const
+export type CardFamily = (typeof CARD_FAMILY)[keyof typeof CARD_FAMILY]
+
 export const CARD_TYPE = {
   VISA: 'visa',
   MASTERCARD: 'master',

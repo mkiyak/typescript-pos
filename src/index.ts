@@ -68,11 +68,14 @@ export { InterPosAccount } from './model/account/InterPosAccount.js'
 export { PayFlexPosAccount } from './model/account/PayFlexPosAccount.js'
 export { PayForPosAccount } from './model/account/PayForPosAccount.js'
 export { PosNetPosAccount } from './model/account/PosNetPosAccount.js'
+export { ToslaPosAccount } from './model/account/ToslaPosAccount.js'
 export { type CardExpiration, CreditCard } from './model/card/CreditCard.js'
 export {
   CARD_CLASS,
+  CARD_FAMILY,
   CARD_TYPE,
   type CardClass,
+  type CardFamily,
   type CardType,
   CURRENCY,
   type Currency,

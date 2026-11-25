@@ -66,6 +66,8 @@ describe('public index', () => {
         'KuveytPos',
         'VakifKatilimPos',
         'BoaPosAccount',
+        'ToslaPosAccount',
+        'CARD_FAMILY',
         'PosNetPosAccount',
         'AssecoPosAccount',
         'AkbankPosAccount',
@@ -94,6 +96,20 @@ describe('public index', () => {
         'VakifKatilimPosQuery',
       ]),
     )
+  })
+
+  // addition: T1 the card family names the installment queries report
+  it('CARD_FAMILY holds the eight card programme names', () => {
+    expect(mod.CARD_FAMILY).toStrictEqual({
+      WORLD: 'world',
+      AXESS: 'axess',
+      CARDFINANS: 'cardfinans',
+      PARAF: 'paraf',
+      ADVANTAGE: 'advantage',
+      BONUS: 'bonus',
+      MAXIMUM: 'maximum',
+      SAGLAMKART: 'saglamkart',
+    })
   })
 
   it('PosFactory creates a gateway from the shipped test config', () => {

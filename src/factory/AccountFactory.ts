@@ -7,8 +7,9 @@ import { InterPosAccount } from '../model/account/InterPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
+import { ToslaPosAccount } from '../model/account/ToslaPosAccount.js'
 
-/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor, InterPos and BOA (Kuveyt, Vakif Katilim) gateways. */
+/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor, InterPos, BOA (Kuveyt, Vakif Katilim) and Tosla gateways. */
 export const AccountFactory = {
   createAssecoPosAccount(
     bank: string,
@@ -109,5 +110,9 @@ export const AccountFactory = {
     subMerchantId: string | null = null,
   ): BoaPosAccount {
     return new BoaPosAccount(bank, merchantId, username, customerId, secretKey, subMerchantId)
+  },
+
+  createToslaPosAccount(bank: string, clientId: string, apiUser: string, apiPass: string): ToslaPosAccount {
+    return new ToslaPosAccount(bank, clientId, apiUser, apiPass)
   },
 } as const

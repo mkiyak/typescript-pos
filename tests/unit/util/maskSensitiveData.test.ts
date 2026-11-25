@@ -337,3 +337,32 @@ describe('maskSensitiveData', () => {
     expect(maskSensitiveData('HashData=iZ4Z%3D&OrderId=1')).toBe('HashData=***&OrderId=1')
   })
 })
+
+describe('request hash masking', () => {
+  // addition: T21 the Tosla request hash is a bearer credential for any body it travels with
+  it('masks hash keys in any case', () => {
+    expect(maskSensitiveData({ hash: 'x', Hash: 'y', HASH: 'z' })).toStrictEqual({
+      hash: '***',
+      Hash: '***',
+      HASH: '***',
+    })
+  })
+
+  it('masks a hash nested in request data', () => {
+    expect(maskSensitiveData({ requestData: { hash: 'abc', orderId: 'A1' } })).toStrictEqual({
+      requestData: { hash: '***', orderId: 'A1' },
+    })
+  })
+
+  it('keeps a null or undefined hash visible', () => {
+    expect(maskSensitiveData({ hash: null, Hash: undefined })).toStrictEqual({ hash: null, Hash: undefined })
+  })
+
+  it('does not mask other keys that merely contain the word', () => {
+    expect(maskSensitiveData({ hash_params: 'a', HashParameters: 'b', hashed: 'c' })).toStrictEqual({
+      hash_params: 'a',
+      HashParameters: 'b',
+      hashed: 'c',
+    })
+  })
+})

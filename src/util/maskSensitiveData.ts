@@ -46,6 +46,8 @@ const SENSITIVE_KEYS = new Set([
   'payerauthenticationcode',
   'hashpassword',
   'hashdata',
+  // A request hash signs no body field, so a logged hash plus its body lets a reader send any request.
+  'hash',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
