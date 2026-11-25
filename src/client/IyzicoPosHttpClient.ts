@@ -83,8 +83,8 @@ export class IyzicoPosHttpClient extends AbstractIyzicoPosHttpClient {
       return `${base}${orderTxType === TX_TYPE.PAY_PRE_AUTH ? '/payment/3dsecure/initialize/preauth' : '/payment/3dsecure/initialize'}`
     }
 
-    // deviation from the reference: only the authorization transactions use the 3D completion route, so a status,
-    // cancel or refund asked under the 3D model keeps its own route instead of re-authorizing.
+    // deviation: only the authorization transactions use the 3D completion route, so a status, cancel or refund
+    // asked under the 3D model keeps its own route instead of re-authorizing.
     if (paymentModel === MODEL.THREE_D_SECURE && THREE_D_COMPLETION_TX.has(txType)) {
       return `${base}/payment/v2/3dsecure/auth`
     }

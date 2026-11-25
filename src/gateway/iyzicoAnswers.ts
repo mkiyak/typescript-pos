@@ -251,7 +251,11 @@ export function assertCallbackApprovalPins(body: Record<string, string>, orderId
  *
  * @throws PosError when `base` is not a decline or the order has no valid id
  */
-export function trustedDecline(base: PosResponse, order: PosOrder, body: Record<string, string>): PosResponse {
+export function trustedDecline(
+  base: Pick<PosResponse, 'status'> & { transaction_type?: unknown; payment_model?: unknown },
+  order: PosOrder,
+  body: Record<string, string>,
+): PosResponse {
   if (base.status !== TX_DECLINED) {
     throw new PosError('3D callback without approval was mapped as approved')
   }
@@ -545,4 +549,15 @@ export function approvedFromAnswer(
     payment_model: paymentModel,
     transaction_type: txType,
   }
+}
+
+/**
+ * Binds a payment record read with a status request to the payment id the order named: when the answer names a
+ * payment, it must be that one. The request moves no money, so the error carries no result.
+ *
+ * @throws OrderMismatchError
+ */
+export function bindStatusPaymentId(answer: Record<string, unknown>, paymentId: string): void {
+  if (!Object.hasOwn(answer, 'paymentId')) return
+  if (ownPaymentId(answer) !== paymentId) mismatch('transaction_id', paymentId, own(answer, 'paymentId'))
 }

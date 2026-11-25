@@ -62,6 +62,7 @@ describe('IyzicoPosQueryApiHttpClient', () => {
     [QUERY_TYPE.HISTORY, true],
     [TX_TYPE.PAY_AUTH, false],
     [TX_TYPE.STATUS, false],
+    [TX_TYPE.CANCEL, false],
   ] as Array<[ClientTxType, boolean]>)('supportsTx(%s)', (txType, expected) => {
     expect(client.supportsTx(txType, MODEL.NON_SECURE)).toBe(expected)
   })
@@ -101,6 +102,19 @@ describe('IyzicoPosQueryApiHttpClient', () => {
     expect(sent[0]?.url).toBe(`${BASE_URL}/transactions?transactionDate=2024-01-01&page=1`)
     expect(sent[0]?.headers['content-type']).toBe('application/json')
     expect(sent[0]?.headers.authorization).toBe('IYZWSv2 YXBpS2V5OmtleSZyYW5kb21LZXk6cm5kJnNpZ25hdHVyZTpoYXNo')
+  })
+
+  // addition: the answer of a GET is returned as it is, nested lists included
+  it('request returns the GET answer verbatim', async () => {
+    const c = createClient(fakeFetch([], '{"status":"success","transactions":[]}'))
+    const actual = await c.request(
+      QUERY_TYPE.HISTORY,
+      MODEL.NON_SECURE,
+      { transactionDate: '2024-01-01' },
+      {} as never,
+      `${BASE_URL}/transactions`,
+    )
+    expect(actual).toStrictEqual({ status: 'success', transactions: [] })
   })
 
   it('request handles a 204 answer', async () => {

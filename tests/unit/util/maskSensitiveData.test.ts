@@ -546,7 +546,8 @@ describe('Param credentials', () => {
       '{"paymentCard":{"cardHolderName":"John Doe","cardNumber":"4603450000000000","cvc":"000","expireMonth":"12","expireYear":"2026"}}'
     const out = maskSensitiveData(text)
     for (const leaked of ['John Doe', '4603450000000000', '"000"', '"12"', '"2026"']) expect(out).not.toContain(leaked)
-    // the card number keeps its first six and last four digits, as in every other JSON text
+    // deviation: a card number in a JSON text keeps its first six and last four digits, as in every other JSON text
+    // (the object form above hides it completely)
     expect(out).toContain('460345****0000')
     expect(out).toContain('"cardHolderName":"***"')
   })

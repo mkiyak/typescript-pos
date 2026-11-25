@@ -111,6 +111,10 @@ export class IyzicoPosResponseDataMapper extends AbstractResponseDataMapper {
     throw new NotImplementedError('3D Pay is not supported by this gateway')
   }
 
+  /**
+   * The gateway maps completed checkout records as payments (`mapPaymentResponse`) and uses this method only for
+   * failure answers, which map to a decline with the order id and the code.
+   */
   map3DHostResponseData(raw3DAuthResponseData: Raw, txType: TxType, _order: PosOrder): PosResponse {
     const mdStatus = this.extractMdStatus(raw3DAuthResponseData)
 

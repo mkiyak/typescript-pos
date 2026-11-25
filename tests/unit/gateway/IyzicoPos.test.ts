@@ -1429,7 +1429,7 @@ describe('IyzicoPos (end to end) 3D Secure callback', () => {
   )
 
   // addition: T3 every colon regrouping of a signed text that still verifies either keeps the four pinned fields
-  // (and pays the original payment id) or is not an approval
+  // (and pays the original payment id), or it is rejected or at most a decline
   it.each([
     ['CB3', '', 'order-001', '1', '1001', 'success'],
     ['CB3 with conversationData x:y', 'x:y', 'order-001', '1', '1001', 'success'],
@@ -2628,5 +2628,46 @@ describe('IyzicoPos (end to end) readable failures of client errors', () => {
     const err = await run(pos).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(PosHttpError)
     expect((err as PosHttpError).status).toBe(400)
+  })
+})
+
+describe('IyzicoPos (end to end) read-only hardening', () => {
+  const gateway = (handlers: Record<string, Handler> = {}) => {
+    const { sent, fetchImpl } = bankFetch(handlers)
+    return { sent, pos: realGateway(fetchImpl).pos }
+  }
+
+  // addition: status binds the answered payment id to the order's transaction id
+  it('status with transaction_id 1001 accepts the answer of payment 1001', async () => {
+    const { pos } = gateway()
+    const res = (await pos.status({ id: 'order-001', transaction_id: '1001' })) as Data
+    expect(res.status).toBe('approved')
+    expect(res.transaction_id).toBe('1001')
+  })
+
+  it('status with transaction_id 1002 and the answer of payment 1001 is a transaction_id mismatch without result', async () => {
+    const { pos } = gateway()
+    const err = await mismatch(pos.status({ id: 'order-001', transaction_id: '1002' }))
+    expect(err.field).toBe('transaction_id')
+    expect(err.expected).toBe('1002')
+    expect(err.actual).toBe('1001')
+    expect(err.response).toBeUndefined()
+    expect(err.paymentMayHaveCompleted).toBe(false)
+  })
+
+  // addition: a failed 3D form text never carries the card number or anything shaped like one
+  it('a failed 3D Secure initialize hides the card number and card-shaped digit runs in the bank text', async () => {
+    const { pos } = gateway({
+      '/payment/3dsecure/initialize': () => ({
+        status: 'failure',
+        errorMessage:
+          'Card 4603450000000000 / 4603 4500 0000 0000 / 5555-4444-3333-2222 / 12345678901234567 refused, code 123456',
+      }),
+    })
+    const err = (await pos
+      .get3DFormData(fullOrder(), MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, vectorCard())
+      .catch((e: unknown) => e)) as Error
+    expect(err).toBeInstanceOf(PosError)
+    expect(err.message).toBe('iyzico 3D form could not be created: Card *** / *** / *** / *** refused, code 123456')
   })
 })

@@ -37,6 +37,7 @@ import {
   bindCheckoutRecord,
   bindPaymentAnswer,
   bindRefundAnswer,
+  bindStatusPaymentId,
   callbackHasSignature,
   checkoutPaymentCompleted,
   declinedFromAnswer,
@@ -65,6 +66,8 @@ const HTTPS_PAGE = /^https:\/\/[\x21-\x7E]+$/
 const ANSWER_SUCCESS = 'success'
 
 const FORM_FAILURE = 'iyzico 3D form could not be created'
+/** A run of 12 to 19 digits, which may be grouped by single spaces or dashes: shaped like a card number. */
+const CARD_LIKE_DIGITS = /\d(?:[ -]?\d){11,18}/g
 
 /** The phase a signed payment answer must report for each payment transaction. */
 const PHASES = {
@@ -249,7 +252,13 @@ export class IyzicoPos extends AbstractGateway<IyzicoPosAccount> {
     )
     const { answer } = await this.send(requestTxType, paymentModel, requestData, order, txType)
 
-    this.assertFormAnswer(answer, values.orderId, secure ? 'threeDSInit' : 'checkoutFormInit', txType)
+    this.assertFormAnswer(
+      answer,
+      values.orderId,
+      secure ? 'threeDSInit' : 'checkoutFormInit',
+      txType,
+      secure ? card : null,
+    )
 
     return secure
       ? this.threeDSecurePage(answer, values.orderId)
@@ -578,6 +587,7 @@ export class IyzicoPos extends AbstractGateway<IyzicoPosAccount> {
     const txType = TX_TYPE.STATUS
     const paymentModel = MODEL.NON_SECURE
     const orderId = isSet(ownValue(asOrder(order), 'id')) ? iyzicoOrderId(order) : null
+    const paymentId = isSet(ownValue(asOrder(order), 'transaction_id')) ? this.transactionId(order) : null
 
     const requestData = await this.dispatchRequestDataPrepared(
       this.requestDataMapper.createStatusRequestData(this.account, order),
@@ -598,6 +608,7 @@ export class IyzicoPos extends AbstractGateway<IyzicoPosAccount> {
           iyzicoPlainText(answer.conversationId, MAX_ECHOED_LENGTH) ?? '',
         )
       }
+      if (paymentId !== null) bindStatusPaymentId(answer, paymentId)
     })
 
     return this.responseDataMapper.mapStatusResponse(answer)
@@ -743,8 +754,11 @@ export class IyzicoPos extends AbstractGateway<IyzicoPosAccount> {
 
   /** A signed checkout record of this order whose payment did not complete: a decline with the record's state. */
   private incompleteCheckout(answer: Record<string, unknown>, order: PosOrder, txType: TxType): PosResponse {
-    const base = { status: TX_DECLINED, transaction_type: txType, payment_model: MODEL.THREE_D_HOST }
-    const decline = trustedDecline(base as Partial<PosResponse> as PosResponse, order, {})
+    const decline = trustedDecline(
+      { status: TX_DECLINED, transaction_type: txType, payment_model: MODEL.THREE_D_HOST },
+      order,
+      {},
+    )
 
     return {
       ...decline,
@@ -764,13 +778,18 @@ export class IyzicoPos extends AbstractGateway<IyzicoPosAccount> {
     orderId: string,
     kind: IyzicoSignedAnswer,
     txType: TxType,
+    card: CreditCard | null,
   ): void {
     if (ownValue(answer, 'status') !== ANSWER_SUCCESS) {
       this.logger.error('3D form generation failed', { order_id: orderId, tx_type: txType })
       const text = iyzicoPlainText(ownValue(answer, 'errorMessage'), MAX_TEXT_LENGTH)
-      // A bank text may echo what it was sent; the account secret is masked.
+      // A bank text may echo what it was sent: the account secret, the card's own number and anything shaped like a
+      // card number are masked.
+      const secrets = [this.account.getSecretKey(), ...(card === null ? [] : [card.getNumber()])]
       throw new PosError(
-        text === null ? FORM_FAILURE : `${FORM_FAILURE}: ${hideSecrets(text, [this.account.getSecretKey()])}`,
+        text === null
+          ? FORM_FAILURE
+          : `${FORM_FAILURE}: ${hideSecrets(text, secrets).replace(CARD_LIKE_DIGITS, '***')}`,
       )
     }
     if (Object.hasOwn(answer, 'signature') && !this.iyzicoCrypt().checkResponseSignature(this.account, answer, kind)) {

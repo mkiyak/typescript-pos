@@ -113,6 +113,34 @@ describe('request authorization', () => {
     expect(decoded).toBe(`apiKey:sandbox-apiKey&randomKey:RND123&signature:${HX(`RND123/payment/auth${body}`)}`)
   })
 
+  // addition: the header literals of a POST (H1), a lookup POST (H4) and a signed GET without body (H5), recomputed
+  // with an independent HMAC implementation
+  it.each([
+    [
+      'POST payment',
+      'https://sandbox-api.iyzipay.com/payment/auth',
+      '{"key":"value"}',
+      'abc123',
+      'IYZWSv2 YXBpS2V5OnNhbmRib3gtYXBpS2V5JnJhbmRvbUtleTphYmMxMjMmc2lnbmF0dXJlOmNkZjA2MGQzZGEyYmI4OTkyOGNjOTExMGM1MDU5NGI0NzIzOWRlYjg3OWRhZjBmYjcyYTU1NmZjYjljMGY1NjM=',
+    ],
+    [
+      'POST payment detail',
+      'https://sandbox-api.iyzipay.com/payment/detail',
+      '{"locale":"tr","paymentConversationId":"order-1","conversationId":"order-1"}',
+      'RND123',
+      'IYZWSv2 YXBpS2V5OnNhbmRib3gtYXBpS2V5JnJhbmRvbUtleTpSTkQxMjMmc2lnbmF0dXJlOmMyNzM5OGE0MGIyZmFmZDk3MzEyMGJkYTZkMTI1NzhmOGZkNTlmYzU1ZGQ3OGQ0MTg1YTNmYjk1NTc5Nzk0MzM=',
+    ],
+    [
+      'GET reporting without body',
+      'https://sandbox-api.iyzipay.com/v2/reporting/payment/transactions?page=1',
+      '',
+      'RND123',
+      'IYZWSv2 YXBpS2V5OnNhbmRib3gtYXBpS2V5JnJhbmRvbUtleTpSTkQxMjMmc2lnbmF0dXJlOmIzNGY2OTA2MTkyYzU3YzYwNmY1OWJjOGU5ZmIzNWFlNmJiODE3NjU0OWMwNDAyMTNlODZlMDM1NjIzOTRjNDE=',
+    ],
+  ])('%s has the exact header literal', (_name, url, body, rnd, expected) => {
+    expect(crypt.authorizationHeader(IA, url, body, rnd)).toBe(expected)
+  })
+
   it('signs exactly the bytes it is given (non-ASCII, quotes, slashes, emoji)', () => {
     const body = '{"name":"Şükrü \\"Ö\\" / İ 😀"}'
     const header = crypt.authorizationHeader(IA, 'https://h/v2/payment/refund', body, 'R')
@@ -173,7 +201,8 @@ describe('request authorization', () => {
   it('the secret key never appears in a header or in a log', () => {
     const header = crypt.authorizationHeader(IA, 'https://h/p', '{}', 'R')
     expect(Buffer.from(header.slice(8), 'base64').toString('utf8')).not.toContain(SECRET)
-    expect(JSON.stringify(logger)).not.toContain(SECRET)
+    const calls = [logger.debug, logger.info, logger.warn, logger.error].map((fn) => fn.mock.calls)
+    expect(JSON.stringify(calls)).not.toContain(SECRET)
     expect(JSON.stringify(logger.debug.mock.calls)).toBe('[]')
   })
 })
