@@ -1094,6 +1094,26 @@ describe('ToslaPos (end to end) bank-confirmed hosted payments', () => {
     expect(res.transaction_type).toBe('pre')
   })
 
+  // addition: T8 (ruling) the record's transaction id is a reference: a positive integer or its text, up to 30 digits
+  it.each([
+    ['the text 2000000000032562', '2000000000032562', '2000000000032562'],
+    ['the number 2000000000032562', 2000000000032562, '2000000000032562'],
+    ['30 digits', '1'.repeat(30), '1'.repeat(30)],
+    ['0', 0, null],
+    ["'0'", '0', null],
+    ["'01'", '01', null],
+    ['31 digits', '1'.repeat(31), null],
+    ['1.5', 1.5, null],
+    ["' 12'", ' 12', null],
+  ])('a record TransactionId of %s is reported as %j', async (_name, transactionId, expected) => {
+    const { promise } = complete(cv1(), hostedOrder(), {
+      inquiry: (j) => confirmingRecord(j.orderId, { TransactionId: transactionId }),
+    })
+    const res = (await promise) as Data
+    expect(res.status).toBe('approved')
+    expect(res.transaction_id).toBe(expected)
+  })
+
   // addition: T8 the record's kuruş amount may come as text
   it('an Amount written as the text 101 confirms 1.01', async () => {
     const { promise } = complete(cv1(), hostedOrder(), {
@@ -1275,7 +1295,6 @@ describe('ToslaPos (end to end) callback signature and order binding', () => {
     ["MdStatus '1 '", '00', '1', '1 ', '', CV1_ORDER_ID],
     ["MdStatus '12'", '00', '1', '12', '', CV1_ORDER_ID],
     ["MdStatus ''", '00', '1', '', '', CV1_ORDER_ID],
-    ['BankResponseCode MD:1 with MdStatus 1', 'MD:1', '0', '1', '', CV1_ORDER_ID],
     ["message 'Onay 1'", '00', '1', '1', 'Onay 1', CV1_ORDER_ID],
     ["OrderId '_A1'", '00', '1', '1', '', '_A1'],
     ["OrderId 'A 1'", '00', '1', '1', '', 'A 1'],
@@ -1283,6 +1302,29 @@ describe('ToslaPos (end to end) callback signature and order binding', () => {
   ])('a signed approval with %s is malformed, without a request', async (_name, code, req, md, msg, orderId) => {
     const { sent, promise } = complete(signedCallback(orderId, md, code, msg, req), hostedOrder())
     await expect(promise).rejects.toStrictEqual(MALFORMED)
+    expect(sent).toHaveLength(0)
+  })
+
+  // addition: T6 (ruling) on a signed callback the 3D result alone is no approval signal: a genuine 3D-authenticated
+  // bank decline is mapped declined without a request
+  it.each(HOSTED)('%s: a signed 3D-authenticated bank decline is declined without a request', async (_label, model) => {
+    const callback = signedCallback(CV1_ORDER_ID, '1', '51', 'Yetersiz bakiye', '0')
+    const { sent, promise, check } = complete(callback, hostedOrder(), {}, model)
+    const res = (await promise) as Data
+
+    expect(check).toHaveReturnedWith(true)
+    expect(sent).toHaveLength(0)
+    expect(res.status).toBe('declined')
+    expect(res.proc_return_code).toBe('51')
+    expect(res.error_message).toBe('Yetersiz bakiye')
+    expect(res.md_status).toBe('1')
+    expect(res.requires_manual_review).toBeUndefined()
+  })
+
+  // addition: T6 (ruling) a signed MD:1 code with 3D result 1 is a decline too
+  it('a signed callback with BankResponseCode MD:1, MdStatus 1 and RequestStatus 0 is declined', async () => {
+    const { sent, promise } = complete(signedCallback(CV1_ORDER_ID, '1', 'MD:1', '', '0'))
+    expect(((await promise) as Data).status).toBe('declined')
     expect(sent).toHaveLength(0)
   })
 
@@ -1589,7 +1631,7 @@ describe('ToslaPos (end to end) 3D form', () => {
     })
   })
 
-  // addition: T23 a 3D Pay form without card data carries only the session id
+  // deviation: T23 with createWithoutCard the card is not passed on, so the form carries only the session id
   it('3D Pay without card data returns only the session id', async () => {
     const { fetchImpl } = bankFetch()
     const { pos } = realGateway(fetchImpl)
@@ -1763,6 +1805,43 @@ describe('ToslaPos (end to end) money requests', () => {
       }
     },
   )
+
+  // addition: T16 a result code 0 without a bank response code does not tell whether money moved
+  it.each([
+    ['no BankResponseCode', { Code: 0, OrderId: 'S1' }],
+    ['BankResponseCode null', { Code: 0, BankResponseCode: null, OrderId: 'S1' }],
+    ["BankResponseCode ''", { Code: 0, BankResponseCode: '', OrderId: 'S1' }],
+    ['BankResponseCode 0 (a number)', { Code: 0, BankResponseCode: 0, OrderId: 'S1' }],
+    ["BankResponseCode ['00']", { Code: 0, BankResponseCode: ['00'], OrderId: 'S1' }],
+  ] as Array<[string, Data]>)(
+    'a sale answered with Code 0 and %s is PosHttpError, never declined',
+    async (_name, answer) => {
+      for (const [txType, path] of [
+        [TX_TYPE.PAY_AUTH, 'Payment'],
+        [TX_TYPE.PAY_POST_AUTH, 'postAuth'],
+      ] as const) {
+        const { sent, fetchImpl } = bankFetch({ sale: () => answer })
+        const { pos } = realGateway(fetchImpl)
+        const order = { id: 'S1', amount: 1.01 }
+        const err = await (txType === TX_TYPE.PAY_AUTH
+          ? pos.payment(MODEL.NON_SECURE, order, txType, saleCard())
+          : pos.payment(MODEL.NON_SECURE, order, txType)
+        ).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosHttpError)
+        expect((err as PosHttpError).url).toBe(`${PAYMENT_API}/${path}`)
+        expect(sent).toHaveLength(1)
+      }
+    },
+  )
+
+  // addition: T16 a present but padded bank response code is the bank's word: the mapper reads it as a decline
+  it("a sale answered with Code 0 and BankResponseCode '00 ' is declined", async () => {
+    const { fetchImpl } = bankFetch({ sale: () => ({ Code: 0, BankResponseCode: '00 ', OrderId: 'S1' }) })
+    const { pos } = realGateway(fetchImpl)
+    const res = await pos.payment(MODEL.NON_SECURE, { id: 'S1', amount: 1.01 }, TX_TYPE.PAY_AUTH, saleCard())
+    expect(res.status).toBe('declined')
+    expect(res.proc_return_code).toBe('00 ')
+  })
 
   // addition: T16 a declined sale with a result code stays a decline
   it('a sale declined with Code 5 and BankResponseCode 05 is declined', async () => {

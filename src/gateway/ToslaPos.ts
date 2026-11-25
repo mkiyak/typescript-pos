@@ -1,3 +1,4 @@
+import type { AbstractHttpClient } from '../client/AbstractHttpClient.js'
 import { ToslaPosHttpClient } from '../client/ToslaPosHttpClient.js'
 import { TX_APPROVED, TX_DECLINED } from '../data-mapper/response/mapper/ResponseDataMapperInterface.js'
 import { bankInteger, isRecord } from '../data-mapper/response/mapper/toslaResponseFields.js'
@@ -47,6 +48,9 @@ const NO_DIGITS = /^[^0-9]{0,256}$/
 
 /** The bank's 3D session id becomes a URL path segment and a form value. */
 const SESSION_ID = /^[A-Za-z0-9]{1,128}$/
+
+/** A transaction id as text: a positive whole number of at most 30 digits. */
+const TRANSACTION_ID = /^[1-9]\d{0,29}$/
 
 /** The transaction type the bank's record holds for a sale and for a pre-authorization. */
 const RECORD_SALE = 1
@@ -142,8 +146,9 @@ function normalizedInstallment(count: number): number {
  *   value except bounded decline reasons: the order id is the order's, the payment model and transaction type are the
  *   call's, the response and error codes and messages are plain text of at most 256 characters, and every other field
  *   is null. Only `all` keeps the raw (untrusted) callback. It never confirms or raises a manual review.
- * - A signed callback none of whose results reads as an approval is a decline, mapped as it came (decline texts are
- *   free form), and must map as declined, otherwise `PosError`. A signed decline is not bound to the order: its
+ * - A signed callback whose response code is not `00` and whose request status is not `1` (padding ignored) is a
+ *   decline, also when its 3D authentication succeeded, mapped as it came (decline texts are free form), and must map
+ *   as declined, otherwise `PosError`. A signed decline is not bound to the order: its
  *   order id is the bank's echo and must not be used to find an order.
  * - Any other signed callback is a bank approval. The signed values have no separators, so before anything else
  *   their exact text is pinned: response code `00`, request status `1`, a one-digit 3D result, a message without
@@ -165,8 +170,8 @@ function normalizedInstallment(count: number): number {
  * - A bank approval whose 3D authentication did not fully succeed is `declined`: with `requires_manual_review: true`
  *   and the record's references when one status request shows the bank holds that payment of the order, otherwise
  *   plainly declined (a callback alone does not raise alerts).
- * - After a sale or a post-authorization, an answer without an integer result code (empty, 204, text only) is a
- *   `PosHttpError` naming the request URL: it does not tell whether money moved, so it is never a decline a merchant
+ * - After a sale or a post-authorization, an answer without an integer result code (empty, 204, text only), or with
+ *   result code `0` but no bank response code text, is a `PosHttpError` naming the request URL: it does not tell whether money moved, so it is never a decline a merchant
  *   could retry. An approved answer with another result code or for another order id is an `OrderMismatchError`
  *   with the result attached. Cancel, refund, status and history answers are mapped as they come.
  */
@@ -328,10 +333,9 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
     const expected = this.orderExpectations(order)
 
     const signed = this.verifyPresentHash(callback)
-    const reportsApproval = this.reportsApproval(callback)
 
     if (!signed) {
-      if (reportsApproval || this.config.require_3d_hash === true) {
+      if (this.reportsApproval(callback, true) || this.config.require_3d_hash === true) {
         this.rejectUnsigned(callback)
       }
       const declined = this.mapCallback(callback, txType, order, paymentModel)
@@ -342,7 +346,7 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
       return this.unsignedResult(declined, expected.orderId, txType, paymentModel)
     }
 
-    if (!reportsApproval) {
+    if (!this.reportsApproval(callback, false)) {
       const declined = this.mapCallback(callback, txType, order, paymentModel)
       if (declined.status !== TX_DECLINED) {
         // The approval would skip the field pins, the order binding and the bank's confirmation.
@@ -444,12 +448,17 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
     ref_ret_num: string | null
     transaction_id: string | null
   } {
-    const transactionId = bankInteger(own(record, 'TransactionId'))
+    const transactionId = own(record, 'TransactionId')
 
     return {
       auth_code: ownText(record, 'AuthCode') || null,
       ref_ret_num: ownText(record, 'HostReferenceNumber') || null,
-      transaction_id: transactionId !== null && transactionId > 0 ? String(transactionId) : null,
+      // A reference only, never compared: a positive integer, or its text (the bank's ids exceed 15 digits).
+      transaction_id:
+        (typeof transactionId === 'number' && Number.isSafeInteger(transactionId) && transactionId > 0) ||
+        (typeof transactionId === 'string' && TRANSACTION_ID.test(transactionId))
+          ? String(transactionId)
+          : null,
     }
   }
 
@@ -540,12 +549,18 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
 
     const code = own(answer, 'Code')
     if (typeof code !== 'number' || !Number.isSafeInteger(code)) {
-      const url =
-        client instanceof ToslaPosHttpClient
-          ? client.getApiUrl(txType, paymentModel)
-          : this.config.gateway_endpoints.payment_api
       this.logger.error('bank answer carries no result code', { order_id: echo(orderId), tx_type: txType })
-      throw new PosHttpError('Bank answer carries no result code; the payment outcome is unknown', { url })
+      throw new PosHttpError('Bank answer carries no result code; the payment outcome is unknown', {
+        url: this.moneyRequestUrl(client, txType),
+      })
+    }
+    // A result code 0 says the request was processed; only the bank response code says whether money moved.
+    const responseCode = own(answer, 'BankResponseCode')
+    if (code === 0 && (typeof responseCode !== 'string' || responseCode === '')) {
+      this.logger.error('bank answer carries no bank response code', { order_id: echo(orderId), tx_type: txType })
+      throw new PosHttpError('Bank answer carries no bank response code; the payment outcome is unknown', {
+        url: this.moneyRequestUrl(client, txType),
+      })
     }
 
     if (response.status === TX_APPROVED) {
@@ -559,6 +574,13 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
     }
 
     return response
+  }
+
+  /** The URL a sale or post-authorization was posted to. */
+  private moneyRequestUrl(client: AbstractHttpClient, txType: TxType): string {
+    return client instanceof ToslaPosHttpClient
+      ? client.getApiUrl(txType, MODEL.NON_SECURE)
+      : this.config.gateway_endpoints.payment_api
   }
 
   /**
@@ -596,8 +618,12 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
     return true
   }
 
-  /** Whether any result of the callback reads as an approval, padding ignored (the pins then read the exact text). */
-  private reportsApproval(callback: Record<string, unknown>): boolean {
+  /**
+   * Whether the callback reads as a bank approval, padding ignored (the pins then read the exact text): response code
+   * `00` or request status `1`. A successful 3D result alone is no bank approval on a signed callback (the bank
+   * signs 3D-authenticated declines too); an unsigned callback with one is still refused.
+   */
+  private reportsApproval(callback: Record<string, unknown>, countAuthentication: boolean): boolean {
     const trimmed = (key: string): string | undefined => {
       const value = ownText(callback, key)
       return value === undefined ? undefined : phpTrim(value)
@@ -605,8 +631,8 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
 
     return (
       trimmed('BankResponseCode') === SUCCESS_CODE ||
-      trimmed('MdStatus') === COMPLETED ||
-      trimmed('RequestStatus') === COMPLETED
+      trimmed('RequestStatus') === COMPLETED ||
+      (countAuthentication && trimmed('MdStatus') === COMPLETED)
     )
   }
 
