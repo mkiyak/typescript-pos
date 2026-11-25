@@ -48,6 +48,13 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
   masked in logs and the echoed GUID is removed from returned callback data. An empty or unreadable answer after a
   money request throws: keep the order pending and check `pos.status` (for a hosted payment, on a `ParamPos` gateway built from the `param-pos` entry, with the bank's order id `TURKPOS_RETVAL_Siparis_ID` as `id`, never your own order id). Rotate the GUID with Param if a callback body
   leaks into logs.
+- **PayTR (`PayTrPos`).** A payment result comes only from the signed server-to-server notification, whose hash is
+  always verified and whose order id and total amount must match your order (`OrderMismatchError`, with
+  `paymentMayHaveCompleted` when the payer was charged another amount). Browser returns never approve. The 3D Pay
+  form's signature lets the payer move characters between fields and change the amount; the notification check reports
+  it, and 3D Host does not have the gap. PayTR reports one final status, so the manual-review flag is not used. A test-mode notification never approves a live order. An unclear answer after
+  a sale or refund throws: keep the order pending and check `pos.status`. `paytr_token`, the salt, the key and card
+  fields are masked in logs.
 - **POSNET (`PosNetPos`).** The 3D result is decrypted by the bank and its MAC is verified before any money moves;
   the bank-resolved order id, amount, currency and installment count must equal your order's (`OrderMismatchError`,
   nothing charged). The check cannot be disabled.
