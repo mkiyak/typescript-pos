@@ -455,7 +455,8 @@ describe('Param3DHostPos (mocked collaborators)', () => {
       TX_TYPE.STATUS,
       confirmation,
       answer,
-      { id: '20250119BACB' },
+      // review fix: the hook and the client see the merchant's order, not the bank's order id
+      order,
       MODEL.THREE_D_HOST,
     )
 
@@ -803,22 +804,60 @@ describe('Param3DHostPos (end to end) callbacks', () => {
     expect(JSON.stringify(res)).not.toContain(G)
   })
 
-  // addition: H4 the binding: a record registered for another order or amount never confirms this order
-  it.each([
-    ['another order id', { ...ORDER, id: 'order223' }],
-    ['another amount', { ...ORDER, amount: 10.02 }],
-    ['another currency', { ...ORDER, currency: CURRENCY.USD }],
-  ] as Array<[string, PosOrder]>)('a record registered for %s is an order_id mismatch', async (_n, order) => {
-    const { sent, promise } = run(CP1, order)
+  // addition: H4 the binding: a record registered for another order never confirms this order and raises no alert
+  // (review fix: the record is evidence only when its transaction id is this order's)
+  it('a record registered for another order id is an order_id mismatch without alert', async () => {
+    const { sent, promise } = run(CP1, { ...ORDER, id: 'order223' })
     const err = await mismatch(promise)
     expect(err.field).toBe('order_id')
-    // the record shows a payment: flagged with the bank's evidence, never approved
-    expect(err.paymentMayHaveCompleted).toBe(true)
-    expect(err.response?.requires_manual_review).toBe(true)
-    expect(err.response?.order_id).toBe(order.id)
-    expect(JSON.stringify(err.response)).not.toContain(G)
+    expect(err.paymentMayHaveCompleted).toBe(false)
+    expect(err.response).toBeUndefined()
     expect(sent).toHaveLength(1)
   })
+
+  // addition: review fix, a record of this order registered at another amount or currency is flagged with the
+  // precise field: the bank shows a payment of this order that does not match it
+  it.each([
+    ['another amount', { ...ORDER, amount: 10.02 }, 'amount', '1002', '10.01'],
+    ['another currency', { ...ORDER, currency: CURRENCY.USD }, 'currency', 'USD', 'TRY'],
+  ] as Array<[string, PosOrder, string, string, string]>)(
+    'a record of this order registered for %s is flagged',
+    async (_n, order, field, wanted, actual) => {
+      const { sent, promise } = run(CP1, order)
+      const err = await mismatch(promise)
+      expect(err.field).toBe(field)
+      expect(err.expected).toBe(wanted)
+      expect(err.actual).toBe(actual)
+      expect(err.paymentMayHaveCompleted).toBe(true)
+      expect(err.response?.requires_manual_review).toBe(true)
+      expect(err.response?.order_id).toBe(order.id)
+      expect(JSON.stringify(err.response)).not.toContain(G)
+      expect(sent).toHaveLength(1)
+    },
+  )
+
+  // addition: review fix (PoC), the genuine payment of this order at an older amount is flagged as an amount mismatch
+  it('the genuine payment of this order at an older amount is flagged', async () => {
+    const older = bankRecord({ Islem_ID: hostId('order222', 500), Toplam_Tutar: '5.00' })
+    const err = await mismatch(run(CP1, ORDER, { records: { '20250119BACB': older } }).promise)
+    expect(err.field).toBe('amount')
+    expect(err.paymentMayHaveCompleted).toBe(true)
+    expect(err.response?.requires_manual_review).toBe(true)
+    expect(err.response?.order_id).toBe('order222')
+  })
+
+  // addition: review fix, a record amount that cannot be read is no evidence (and never reaches the derivation)
+  it.each([['0.00'], ['0'], ['abc'], ['-1.00'], ['1.001']])(
+    'a record of this order with the amount %j raises no alert',
+    async (amount) => {
+      const err = await mismatch(
+        run(CP1, ORDER, { records: { '20250119BACB': bankRecord({ Toplam_Tutar: amount }) } }).promise,
+      )
+      expect(err.field).toBe('amount')
+      expect(err.paymentMayHaveCompleted).toBe(false)
+      expect(err.response).toBeUndefined()
+    },
+  )
 
   // addition: H4 a record without the transaction id never confirms
   it.each([
@@ -828,11 +867,14 @@ describe('Param3DHostPos (end to end) callbacks', () => {
   ] as Array<[string, Data]>)('a record with %s is an order_id mismatch', async (_n, over) => {
     const err = await mismatch(run(CP1, ORDER, { records: { '20250119BACB': bankRecord(over) } }).promise)
     expect(err.field).toBe('order_id')
+    expect(err.paymentMayHaveCompleted).toBe(false)
+    expect(err.response).toBeUndefined()
   })
 
   // addition: Review Focus forgeable callbacks, the record decides; evidence decides the flag
   it.each([
-    ['Toplam_Tutar 1.01', { Toplam_Tutar: '1.01' }, 'amount', true],
+    // review fix: a record amount the transaction id was not derived from is no evidence of this order's payment
+    ['Toplam_Tutar 1.01', { Toplam_Tutar: '1.01' }, 'amount', false],
     ['Dekont_ID 1', { Dekont_ID: '1' }, 'transaction_id', true],
     ['Toplam_Iade_Tutar 5.00', { Toplam_Iade_Tutar: '5.00' }, 'order_status', true],
     ['PRE_AUTH', { Islem_Tip: 'PRE_AUTH' }, 'transaction_type', true],
@@ -906,13 +948,23 @@ describe('Param3DHostPos (end to end) callbacks', () => {
   })
 
   // addition: forged callback for any order: a genuine payment record of another order never confirms this one
-  it('a forged approval naming the genuine payment of another order is never approved for this order', async () => {
-    // the record of order222 / 10.01 is real; the forger completes order999 of the same amount with it
-    const err = await mismatch(run(CP1, { ...ORDER, id: 'order999' }).promise)
-    expect(err.field).toBe('order_id')
-    expect(err.expected).toBe(hostId('order999', 1001))
-    expect(err.actual).toBe(ORDER_ID_HOST)
-  })
+  // (review fix PoC: and raises no alert for it)
+  it.each([
+    ['the same amount', 10.01],
+    ['another amount', 999.99],
+  ])(
+    'a forged approval for B (%s) naming the genuine payment of A is never approved or flagged',
+    async (_n, amount) => {
+      // the record of order222 / 10.01 is real; the forger completes order999 with it
+      const err = await mismatch(run(CP1, { ...ORDER, id: 'order999', amount }).promise)
+      expect(err.field).toBe('order_id')
+      expect(err.paymentMayHaveCompleted).toBe(false)
+      expect(err.response).toBeUndefined()
+      // review fix: the message names the derived value, not its hex digits
+      expect(err.expected).toBe('the transaction id of this order')
+      expect(err.message).not.toContain(hostId('order999', Math.round(amount * 100)))
+    },
+  )
 
   // addition: re-splits are closed by the record binding
   it('the CP1 dekont/amount re-split is never approved', async () => {
@@ -1058,7 +1110,8 @@ describe('Param3DHostPos (end to end) callbacks', () => {
       realGateway(fetchImpl, { hooks }).payment(MODEL.THREE_D_HOST, ORDER, 'pay', null, cb(CP1)),
     )
     expect(err.field).toBe('order_id')
-    expect(seen).toStrictEqual([['status', '3d_host', '20250119BACB']])
+    // review fix: the hook sees the merchant's order; the bank's order id is only in the request body
+    expect(seen).toStrictEqual([['status', '3d_host', 'order222']])
     expect(sent.map((s) => s.body.Siparis_ID)).toStrictEqual(['OTHER1'])
   })
 

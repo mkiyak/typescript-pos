@@ -31,6 +31,7 @@ import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { toKurus } from '../util/toKurus.js'
 import { AbstractGateway, type GatewayConfig, type GatewayDeps, type SupportedTransactions } from './AbstractGateway.js'
 import {
+  amountKurus,
   approvalFieldsMalformed,
   callbackCode,
   callbackHash,
@@ -108,8 +109,12 @@ const OTHER_TRANSACTION = 'Use ParamPos for this transaction'
  *   a record that differs) is an `OrderMismatchError`; a status answer that cannot be read (empty, no result, no
  *   integer result code, a success code without a record) is a `PosHttpError` naming the URL, since the payment may
  *   have completed. The result is attached and flagged for manual review only when the record shows a successful
- *   payment with a receipt: a callback anyone could forge raises no alert by itself. Errors of the status request
- *   propagate (the payment may have completed: look it up with `ParamPos.status` before retrying).
+ *   payment with a receipt whose transaction id was derived from this order (at the record's amount, in one of the
+ *   bank's currencies): then a record registered at another amount or currency is reported as an `amount` or
+ *   `currency` mismatch. A record of another order raises no alert, so a callback anyone could forge, naming a real
+ *   payment of another order, flags nothing. Errors of the status request propagate (the payment may have
+ *   completed: look it up with `ParamPos.status` before retrying). The `onRequestDataPrepared` hook of the status
+ *   request sees the merchant's order; the bank's order id is only in the request body.
  * - If the TurkPos service does not list hosted payments, or lists them under another order id or transaction id,
  *   no approval can be confirmed: every hosted approval then fails closed with an `OrderMismatchError` (and no
  *   payment is ever reported approved without the bank's record).
@@ -276,7 +281,7 @@ export class Param3DHostPos extends AbstractGateway<ParamPosAccount> {
       throw new PosError('3D callback approval was not mapped as approved')
     }
 
-    return this.confirmWithStatus(callback, expected, txType, mapped)
+    return this.confirmWithStatus(callback, order, expected, txType, mapped)
   }
 
   /** @throws UnsupportedPaymentModelError non-secure payments are `ParamPos` */
@@ -315,6 +320,7 @@ export class Param3DHostPos extends AbstractGateway<ParamPosAccount> {
    */
   private async confirmWithStatus(
     callback: Record<string, unknown>,
+    order: PosOrder,
     expected: OrderExpectations,
     txType: TxType,
     mapped: PosResponse,
@@ -327,15 +333,16 @@ export class Param3DHostPos extends AbstractGateway<ParamPosAccount> {
       expected.kurus,
       expected.currencyCode,
     )
-    const statusOrder: PosOrder = { id: siparisId }
+    // The hook and the client see the merchant's order; the bank's order id travels in the request body only.
+    const merchantOrder: PosOrder = Object.freeze({ ...order })
     const requestData = await this.dispatchRequestDataPrepared(
       this.#confirmationRequestDataMapper.createConfirmationRequestData(this.account, siparisId),
       TX_TYPE.STATUS,
-      statusOrder,
+      merchantOrder,
       paymentModel,
     )
     const client = this.getClient(TX_TYPE.STATUS, paymentModel)
-    const answer = await client.request(TX_TYPE.STATUS, paymentModel, requestData, statusOrder, null)
+    const answer = await client.request(TX_TYPE.STATUS, paymentModel, requestData, merchantOrder, null)
     const check = paramRecordConfirms(answer, {
       siparisId,
       dekont: ownString(callback, 'TURKPOS_RETVAL_Dekont_ID') ?? '',
@@ -362,8 +369,21 @@ export class Param3DHostPos extends AbstractGateway<ParamPosAccount> {
       throw new PosHttpError(UNKNOWN_STATUS_OUTCOME, { url: this.requestUrl(client, paymentModel) })
     }
     if (check.failure !== null) {
-      const [field, wanted, actual] = check.failure
-      if (check.evidence) {
+      let [field, wanted, actual] = check.failure
+      const islemIdFailed = field === 'order_id' && wanted === islemId
+      if (islemIdFailed) {
+        wanted = 'the transaction id of this order'
+      }
+      // The record shows a payment, but it is evidence for this order only when its transaction id was derived from
+      // this order (at the record's amount, in one of the bank's currencies): the bank's order id comes from the
+      // callback, which anyone who has seen one callback can sign.
+      const registered = check.evidence ? this.registrationOf(check.record, expected) : null
+      if (registered !== null) {
+        if (islemIdFailed && registered.currency !== expected.currency) {
+          ;[field, wanted, actual] = ['currency', expected.currency, registered.currency]
+        } else if (islemIdFailed) {
+          ;[field, wanted, actual] = ['amount', String(expected.kurus), ownString(check.record, 'Toplam_Tutar') ?? '']
+        }
         this.fail(field, wanted, actual, expected.orderId, {
           ...confirmedResult(mapped, values),
           requires_manual_review: true,
@@ -378,6 +398,32 @@ export class Param3DHostPos extends AbstractGateway<ParamPosAccount> {
     this.logger.info('payment confirmed by the bank status record', { order_id: echo(expected.orderId) })
 
     return confirmedResult(mapped, { ...values, transactionTime: time })
+  }
+
+  /**
+   * The currency a status record was registered for by this order, when its transaction id is the one derived from
+   * this order's id, the record's amount and a currency the bank knows (the order's first); null otherwise, also when
+   * the record's amount cannot be read.
+   */
+  private registrationOf(record: Record<string, unknown>, expected: OrderExpectations): { currency: string } | null {
+    const kurus = amountKurus(ownString(record, 'Toplam_Tutar'), 'dot')
+    const islemId = ownString(record, 'Islem_ID')
+    if (kurus === null || kurus <= 0 || !Number.isSafeInteger(kurus) || islemId === null) return null
+
+    const others = Object.entries(this.requestValueMapper.getCurrencyMappings()).filter(
+      ([currency]) => currency !== expected.currency,
+    )
+    for (const [currency, code] of [[expected.currency, expected.currencyCode], ...others]) {
+      const derived = this.#transactionIdCrypt.create3DHostTransactionId(
+        this.account,
+        expected.orderId,
+        kurus,
+        String(code),
+      )
+      if (derived === islemId) return { currency: String(currency) }
+    }
+
+    return null
   }
 
   /** The URL a confirmation was posted to. */
