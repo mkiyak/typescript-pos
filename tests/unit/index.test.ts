@@ -98,6 +98,7 @@ describe('public index', () => {
         'PayFlexV4PosQuery',
         'PayFlexCPV4PosQuery',
         'PayForPosQuery',
+        'PayTrPosQuery',
         'PosNetPosQuery',
         'PosNetV1PosQuery',
         'ToslaPosQuery',
@@ -252,6 +253,8 @@ describe('public index', () => {
     expect(mod.PosQueryFactory.createPosQuery(param, mod.posTestConfig)).toBeInstanceOf(mod.ParamPosQuery)
     const tosla = mod.AccountFactory.createToslaPosAccount('tosla', '1000000494', 'POS_ENT_Test_001', 'k')
     expect(mod.PosQueryFactory.createPosQuery(tosla, mod.posTestConfig)).toBeInstanceOf(mod.ToslaPosQuery)
+    const paytr = mod.AccountFactory.createPayTrPosAccount('paytr', '123456', 'salt', 'key')
+    expect(mod.PosQueryFactory.createPosQuery(paytr, mod.posTestConfig)).toBeInstanceOf(mod.PayTrPosQuery)
     const vakifKatilim = mod.AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'u', 'c', 'k')
     expect(mod.PosQueryFactory.createPosQuery(vakifKatilim, mod.posTestConfig)).toBeInstanceOf(mod.VakifKatilimPosQuery)
   })

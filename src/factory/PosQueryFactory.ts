@@ -9,6 +9,7 @@ import { ParamPosCrypt } from '../crypt/ParamPosCrypt.js'
 import { PayFlexCPV4PosCrypt } from '../crypt/PayFlexCPV4PosCrypt.js'
 import { PayFlexV4PosCrypt } from '../crypt/PayFlexV4PosCrypt.js'
 import { PayForPosCrypt } from '../crypt/PayForPosCrypt.js'
+import { PayTrPosCrypt } from '../crypt/PayTrPosCrypt.js'
 import { PosNetPosCrypt } from '../crypt/PosNetPosCrypt.js'
 import { PosNetV1PosCrypt } from '../crypt/PosNetV1PosCrypt.js'
 import { ToslaPosCrypt } from '../crypt/ToslaPosCrypt.js'
@@ -20,6 +21,7 @@ import { ParamPosRequestValueFormatter } from '../data-mapper/request/value-form
 import { PayFlexCPV4PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayFlexCPV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
 import { PayForPosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayForPosRequestValueFormatter.js'
+import { PayTrPosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayTrPosRequestValueFormatter.js'
 import { PosNetPosRequestValueFormatter } from '../data-mapper/request/value-formatter/PosNetPosRequestValueFormatter.js'
 import { PosNetV1PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PosNetV1PosRequestValueFormatter.js'
 import type { RequestValueFormatterInterface } from '../data-mapper/request/value-formatter/RequestValueFormatterInterface.js'
@@ -33,6 +35,7 @@ import { ParamPosRequestValueMapper } from '../data-mapper/request/value-mapper/
 import { PayFlexCPV4PosRequestValueMapper } from '../data-mapper/request/value-mapper/PayFlexCPV4PosRequestValueMapper.js'
 import { PayFlexV4PosRequestValueMapper } from '../data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
 import { PayForPosRequestValueMapper } from '../data-mapper/request/value-mapper/PayForPosRequestValueMapper.js'
+import { PayTrPosRequestValueMapper } from '../data-mapper/request/value-mapper/PayTrPosRequestValueMapper.js'
 import { PosNetPosRequestValueMapper } from '../data-mapper/request/value-mapper/PosNetPosRequestValueMapper.js'
 import { PosNetV1PosRequestValueMapper } from '../data-mapper/request/value-mapper/PosNetV1PosRequestValueMapper.js'
 import type { RequestValueMapperInterface } from '../data-mapper/request/value-mapper/RequestValueMapperInterface.js'
@@ -44,6 +47,7 @@ import { BoaPosResponseValueFormatter } from '../data-mapper/response/value-form
 import { GarantiPosResponseValueFormatter } from '../data-mapper/response/value-formatter/GarantiPosResponseValueFormatter.js'
 import { InterPosResponseValueFormatter } from '../data-mapper/response/value-formatter/InterPosResponseValueFormatter.js'
 import { ParamPosResponseValueFormatter } from '../data-mapper/response/value-formatter/ParamPosResponseValueFormatter.js'
+import { PayTrPosResponseValueFormatter } from '../data-mapper/response/value-formatter/PayTrPosResponseValueFormatter.js'
 import { PosNetPosResponseValueFormatter } from '../data-mapper/response/value-formatter/PosNetPosResponseValueFormatter.js'
 import type { ResponseValueFormatterInterface } from '../data-mapper/response/value-formatter/ResponseValueFormatterInterface.js'
 import { ToslaPosResponseValueFormatter } from '../data-mapper/response/value-formatter/ToslaPosResponseValueFormatter.js'
@@ -55,6 +59,7 @@ import { ParamPosResponseValueMapper } from '../data-mapper/response/value-mappe
 import { PayFlexCPV4PosResponseValueMapper } from '../data-mapper/response/value-mapper/PayFlexCPV4PosResponseValueMapper.js'
 import { PayFlexV4PosResponseValueMapper } from '../data-mapper/response/value-mapper/PayFlexV4PosResponseValueMapper.js'
 import { PayForPosResponseValueMapper } from '../data-mapper/response/value-mapper/PayForPosResponseValueMapper.js'
+import { PayTrPosResponseValueMapper } from '../data-mapper/response/value-mapper/PayTrPosResponseValueMapper.js'
 import { PosNetPosResponseValueMapper } from '../data-mapper/response/value-mapper/PosNetPosResponseValueMapper.js'
 import { PosNetV1PosResponseValueMapper } from '../data-mapper/response/value-mapper/PosNetV1PosResponseValueMapper.js'
 import type { ResponseValueMapperInterface } from '../data-mapper/response/value-mapper/ResponseValueMapperInterface.js'
@@ -72,6 +77,7 @@ import { InterPosAccount } from '../model/account/InterPosAccount.js'
 import { ParamPosAccount } from '../model/account/ParamPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../model/account/PayForPosAccount.js'
+import { PayTrPosAccount } from '../model/account/PayTrPosAccount.js'
 import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
 import { ToslaPosAccount } from '../model/account/ToslaPosAccount.js'
 import { LANG } from '../PosInterface.js'
@@ -84,6 +90,7 @@ import { ParamPosQuery } from '../pos-query/ParamPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../pos-query/PayFlexV4PosQuery.js'
 import { PayForPosQuery } from '../pos-query/PayForPosQuery.js'
+import { PayTrPosQuery } from '../pos-query/PayTrPosQuery.js'
 import { PosNetPosQuery } from '../pos-query/PosNetPosQuery.js'
 import { PosNetV1PosQuery } from '../pos-query/PosNetV1PosQuery.js'
 import { ToslaPosQuery } from '../pos-query/ToslaPosQuery.js'
@@ -107,6 +114,7 @@ const QUERY_CLASSES = [
   PayFlexCPV4PosQuery,
   PayFlexV4PosQuery,
   PayForPosQuery,
+  PayTrPosQuery,
   PosNetPosQuery,
   PosNetV1PosQuery,
   ToslaPosQuery,
@@ -248,6 +256,17 @@ export const PosQueryFactory = {
         crypt = new PayForPosCrypt(logger)
         responseValueFormatter = new BasicResponseValueFormatter()
         responseValueMapper = new PayForPosResponseValueMapper()
+        break
+      }
+      case 'PayTrPos': {
+        if (!(account instanceof PayTrPosAccount)) {
+          throw new PosError(`Bank [${bankName}] is configured for PayTrPos and needs a PayTrPosAccount.`)
+        }
+        requestValueMapper = new PayTrPosRequestValueMapper()
+        requestValueFormatter = new PayTrPosRequestValueFormatter()
+        crypt = new PayTrPosCrypt(logger)
+        responseValueFormatter = new PayTrPosResponseValueFormatter()
+        responseValueMapper = new PayTrPosResponseValueMapper()
         break
       }
       case 'PosNetPos': {

@@ -8,6 +8,7 @@ import { ParamPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-que
 import { PayFlexCPV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayFlexCPV4PosQueryRequestDataMapper.js'
 import { PayFlexV4PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayFlexV4PosQueryRequestDataMapper.js'
 import { PayForPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayForPosQueryRequestDataMapper.js'
+import { PayTrPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PayTrPosQueryRequestDataMapper.js'
 import { PosNetPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PosNetPosQueryRequestDataMapper.js'
 import { PosNetV1PosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/PosNetV1PosQueryRequestDataMapper.js'
 import { ToslaPosQueryRequestDataMapper } from '../../../src/data-mapper/pos-query/request/ToslaPosQueryRequestDataMapper.js'
@@ -20,6 +21,7 @@ import { ParamPosRequestValueFormatter } from '../../../src/data-mapper/request/
 import { PayFlexCPV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexCPV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
 import { PayForPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayForPosRequestValueFormatter.js'
+import { PayTrPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PayTrPosRequestValueFormatter.js'
 import { PosNetPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PosNetPosRequestValueFormatter.js'
 import { PosNetV1PosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/PosNetV1PosRequestValueFormatter.js'
 import { ToslaPosRequestValueFormatter } from '../../../src/data-mapper/request/value-formatter/ToslaPosRequestValueFormatter.js'
@@ -32,6 +34,7 @@ import { ParamPosRequestValueMapper } from '../../../src/data-mapper/request/val
 import { PayFlexCPV4PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayFlexCPV4PosRequestValueMapper.js'
 import { PayFlexV4PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
 import { PayForPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayForPosRequestValueMapper.js'
+import { PayTrPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PayTrPosRequestValueMapper.js'
 import { PosNetPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PosNetPosRequestValueMapper.js'
 import { PosNetV1PosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/PosNetV1PosRequestValueMapper.js'
 import { ToslaPosRequestValueMapper } from '../../../src/data-mapper/request/value-mapper/ToslaPosRequestValueMapper.js'
@@ -61,6 +64,7 @@ const rows = [
     PayFlexV4PosRequestValueFormatter,
   ],
   ['PayForPos', PayForPosQueryRequestDataMapper, PayForPosRequestValueMapper, PayForPosRequestValueFormatter],
+  ['PayTrPos', PayTrPosQueryRequestDataMapper, PayTrPosRequestValueMapper, PayTrPosRequestValueFormatter],
   ['PosNetPos', PosNetPosQueryRequestDataMapper, PosNetPosRequestValueMapper, PosNetPosRequestValueFormatter],
   ['PosNetV1Pos', PosNetV1PosQueryRequestDataMapper, PosNetV1PosRequestValueMapper, PosNetV1PosRequestValueFormatter],
   ['ToslaPos', ToslaPosQueryRequestDataMapper, ToslaPosRequestValueMapper, ToslaPosRequestValueFormatter],

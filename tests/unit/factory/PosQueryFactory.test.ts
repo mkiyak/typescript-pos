@@ -23,6 +23,7 @@ import { ParamPosQuery } from '../../../src/pos-query/ParamPosQuery.js'
 import { PayFlexCPV4PosQuery } from '../../../src/pos-query/PayFlexCPV4PosQuery.js'
 import { PayFlexV4PosQuery } from '../../../src/pos-query/PayFlexV4PosQuery.js'
 import { PayForPosQuery } from '../../../src/pos-query/PayForPosQuery.js'
+import { PayTrPosQuery } from '../../../src/pos-query/PayTrPosQuery.js'
 import { PosNetPosQuery } from '../../../src/pos-query/PosNetPosQuery.js'
 import { PosNetV1PosQuery } from '../../../src/pos-query/PosNetV1PosQuery.js'
 import { ToslaPosQuery } from '../../../src/pos-query/ToslaPosQuery.js'
@@ -1307,5 +1308,278 @@ describe('PosQueryFactory with ParamPos', () => {
     const all = JSON.stringify(lines)
     expect(all).not.toContain('Test2')
     expect(all).not.toContain(GUID)
+  })
+})
+
+describe('PosQueryFactory with PayTrPos', () => {
+  const SALT = 'YEUaNcdHXqyt7hjt'
+  const KEY = 'wWwU8buJp6jo1r25'
+  const BASE = 'https://www.paytr.com'
+  const account = () => AccountFactory.createPayTrPosAccount('paytr', '123456', SALT, KEY)
+  const sign = (message: string) =>
+    createHmac('sha256', KEY)
+      .update(message + SALT, 'utf8')
+      .digest('base64')
+
+  const BIN_ANSWER = {
+    status: 'success',
+    cardType: 'credit',
+    businessCard: 'n',
+    bank: 'Garanti Bankası',
+    brand: 'Bonus',
+    schema: 'VISA',
+    bankCode: 62,
+  }
+  const RATES_ANSWER = {
+    status: 'success',
+    request_id: 'x',
+    oranlar: { world: { taksit_2: 7.28, taksit_3: 9.32 } },
+  }
+  const HISTORY_ANSWER = {
+    status: 'success',
+    list: [
+      {
+        siparis_no: 'ORDER001',
+        islem_tipi: 'S',
+        islem_tarihi: '2026-06-01 10:00:00',
+        islem_tutari: '10,00',
+        odeme_tutari: '10.00',
+        para_birimi: 'TL',
+        kart_no: '411111******1111',
+        taksit: '1',
+      },
+    ],
+  }
+
+  function e2e(answer: unknown, logger?: PosLogger, hooks?: PosHooks, status = 200) {
+    const calls: Array<{ url: string; body: URLSearchParams }> = []
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const raw = init?.body
+      const text = typeof raw === 'string' ? raw : Buffer.from(raw as Uint8Array).toString('utf8')
+      calls.push({ url: String(url), body: new URLSearchParams(text) })
+      return new Response(typeof answer === 'string' ? answer : JSON.stringify(answer), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as unknown as typeof fetch
+    const q = PosQueryFactory.createPosQuery(account(), posTestConfig, { fetch: fetchFn, logger, hooks })
+    return { q, calls, fetchFn }
+  }
+
+  function recordingLogger() {
+    const lines: unknown[] = []
+    const record = (...a: unknown[]) => void lines.push(a)
+    return { lines, logger: { debug: record, info: record, warn: record, error: record } as unknown as PosLogger }
+  }
+
+  it('creates the query class from the shipped test config', () => {
+    expect(PosQueryFactory.createPosQuery(account(), posTestConfig)).toBeInstanceOf(PayTrPosQuery)
+    expect(PosQueryFactory.getPosQueryClassForGateway('PayTrPos')).toBe(PayTrPosQuery)
+  })
+
+  it('rejects a ToslaPosAccount for the paytr bank', () => {
+    const wrong = AccountFactory.createToslaPosAccount('paytr', 'm', 'u', 'p')
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosQueryFactory.createPosQuery(wrong, posTestConfig)).toThrow(
+      'Bank [paytr] is configured for PayTrPos and needs a PayTrPosAccount.',
+    )
+  })
+
+  // addition: registry order, every gateway still resolves to exactly its own query class
+  it('exactly one query class answers each gateway class', () => {
+    const classes = [
+      ['AkbankPos', AkbankPosQuery],
+      ['AssecoPos', AssecoPosQuery],
+      ['GarantiPos', GarantiPosQuery],
+      ['InterPos', InterPosQuery],
+      ['ParamPos', ParamPosQuery],
+      ['PayFlexCPV4Pos', PayFlexCPV4PosQuery],
+      ['PayFlexV4Pos', PayFlexV4PosQuery],
+      ['PayForPos', PayForPosQuery],
+      ['PayTrPos', PayTrPosQuery],
+      ['PosNetPos', PosNetPosQuery],
+      ['PosNetV1Pos', PosNetV1PosQuery],
+      ['ToslaPos', ToslaPosQuery],
+      ['VakifKatilimPos', VakifKatilimPosQuery],
+    ] as const
+    for (const [gatewayClass, expected] of classes) {
+      expect(PosQueryFactory.getPosQueryClassForGateway(gatewayClass)).toBe(expected)
+      expect(classes.filter(([, c]) => c.supports(gatewayClass))).toHaveLength(1)
+    }
+  })
+
+  it('getBinList posts the signed form to the BIN endpoint and maps the answer', async () => {
+    const { q, calls } = e2e(BIN_ANSWER)
+    const result = await q.getBinList({ bin: '415956' })
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toBe(`${BASE}/odeme/api/bin-detail`)
+    expect(Object.fromEntries(calls[0]?.body ?? [])).toEqual({
+      merchant_id: '123456',
+      bin_number: '415956',
+      paytr_token: sign('415956123456'),
+    })
+    expect(result.status).toBe('approved')
+    expect(result.bin_list).toEqual([
+      {
+        bin: null,
+        bank_code: '62',
+        bank_name: 'Garanti Bankası',
+        card_type: 'visa',
+        card_class: 'credit',
+        card_family: 'Bonus',
+      },
+    ])
+  })
+
+  it('getInstallmentRates posts merchant_id, a random request_id and the token', async () => {
+    const { q, calls } = e2e(RATES_ANSWER)
+    const result = await q.getInstallmentRates({})
+    const body = Object.fromEntries(calls[0]?.body ?? [])
+
+    expect(calls[0]?.url).toBe(`${BASE}/odeme/taksit-oranlari`)
+    expect(body.request_id).toMatch(/^[0-9A-F]{24}$/)
+    expect(body.paytr_token).toBe(sign(`123456${body.request_id}`))
+    expect(result.installment_rates).toHaveLength(1)
+  })
+
+  it('history posts the Türkiye wall-clock dates with dummy and maps the report', async () => {
+    const { q, calls } = e2e(HISTORY_ANSWER)
+    const result = await q.history({
+      start_date: new Date('2026-06-01T00:00:00+03:00'),
+      end_date: new Date('2026-06-03T23:59:59+03:00'),
+    })
+
+    expect(calls[0]?.url).toBe(`${BASE}/rapor/islem-dokumu`)
+    // the shipped test config marks every request as a test transaction
+    expect(Object.fromEntries(calls[0]?.body ?? [])).toEqual({
+      merchant_id: '123456',
+      start_date: '2026-06-01 00:00:00',
+      end_date: '2026-06-03 23:59:59',
+      dummy: '1',
+      paytr_token: sign('1234562026-06-01 00:00:002026-06-03 23:59:59'),
+    })
+    expect(result.trans_count).toBe(1)
+  })
+
+  // addition: live mode still sends dummy (the report API requires it) and it stays unsigned
+  it('history in live mode sends dummy 0', async () => {
+    const calls: URLSearchParams[] = []
+    const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      calls.push(new URLSearchParams(String(init?.body)))
+      return new Response(JSON.stringify(HISTORY_ANSWER), { status: 200 })
+    }) as unknown as typeof fetch
+    const q = PosQueryFactory.createPosQuery(account(), posTestConfig, { fetch: fetchFn, testMode: false })
+    await q.history({
+      start_date: new Date('2026-06-01T00:00:00+03:00'),
+      end_date: new Date('2026-06-02T00:00:00+03:00'),
+    })
+
+    expect(calls[0]?.get('dummy')).toBe('0')
+    expect(calls[0]?.get('paytr_token')).toBe(sign('1234562026-06-01 00:00:002026-06-02 00:00:00'))
+  })
+
+  it('a custom query posts to /odeme with merchant_id added and signed with the status formula', async () => {
+    const { q, calls } = e2e({ status: 'success', payment_amount: '10.00' })
+    const answer = await q.customQuery({ merchant_oid: 'ORDER1' })
+
+    expect(calls[0]?.url).toBe(`${BASE}/odeme`)
+    expect(Object.fromEntries(calls[0]?.body ?? [])).toEqual({
+      merchant_oid: 'ORDER1',
+      merchant_id: '123456',
+      paytr_token: sign('123456ORDER1'),
+    })
+    expect(answer).toEqual({ status: 'success', payment_amount: '10.00' })
+  })
+
+  it('a custom query may target another path on the configured origin', async () => {
+    const { q, calls } = e2e({ status: 'success' })
+    await q.customQuery({ merchant_oid: 'ORDER1' }, `${BASE}/odeme/durum-sorgu`)
+    expect(calls[0]?.url).toBe(`${BASE}/odeme/durum-sorgu`)
+  })
+
+  it('a custom query on a foreign origin rejects before anything is sent', async () => {
+    const { q, fetchFn } = e2e({ status: 'success' })
+    await expect(q.customQuery({ merchant_oid: 'X' }, 'https://evil.example/odeme')).rejects.toBeInstanceOf(PosError)
+    await expect(q.customQuery({ merchant_oid: 'X' }, 'http://www.paytr.com/odeme')).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('a custom query naming return_amount without merchant_oid rejects before anything is sent', async () => {
+    const { q, fetchFn } = e2e({ status: 'success' })
+    await expect(q.customQuery({ return_amount: '1.00' })).rejects.toBeInstanceOf(PosError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('getInstallmentPrices rejects as unsupported and sends nothing', async () => {
+    const { q, fetchFn } = e2e({ status: 'success' })
+    await expect(q.getInstallmentPrices({ amount: 10 })).rejects.toBeInstanceOf(UnsupportedTransactionTypeError)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('bad history and BIN input reject before any request', async () => {
+    const { q, fetchFn } = e2e(BIN_ANSWER)
+    await expect(q.getBinList({})).rejects.toBeInstanceOf(PosError)
+    await expect(q.getBinList({ bin: '41595' })).rejects.toBeInstanceOf(PosError)
+    await expect(q.history({ start_date: new Date(), end_date: new Date(Date.now() - 1000) })).rejects.toBeInstanceOf(
+      PosError,
+    )
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('an HTML answer is a PosHttpError, not a parsing crash', async () => {
+    const { q } = e2e('<html>blocked</html>')
+    await expect(q.getBinList({ bin: '415956' })).rejects.toBeInstanceOf(PosHttpError)
+  })
+
+  it('a non-2xx answer is a PosHttpError', async () => {
+    const { q } = e2e({ status: 'error' }, undefined, undefined, 500)
+    await expect(q.getInstallmentRates({})).rejects.toBeInstanceOf(PosHttpError)
+  })
+
+  it('a JSON dump of the query contains no secret', () => {
+    const { q } = e2e(BIN_ANSWER)
+    expect(JSON.stringify(q)).not.toContain(KEY)
+    expect(JSON.stringify(q)).not.toContain(SALT)
+  })
+
+  // the hook changes the data, so the query logs the initial and the updated request data
+  it('masks the token, the merchant key and the merchant salt in every logged line', async () => {
+    const { lines, logger } = recordingLogger()
+    const hook = (e: { requestData: Record<string, unknown> }) => {
+      e.requestData.merchant_key = KEY
+      e.requestData.merchant_salt = SALT
+    }
+    const { q } = e2e(BIN_ANSWER, logger, { onPosQueryRequestDataPrepared: [hook] })
+    await q.getBinList({ bin: '415956' })
+    await q.getInstallmentRates({})
+    await q.history({
+      start_date: new Date('2026-06-01T00:00:00+03:00'),
+      end_date: new Date('2026-06-02T00:00:00+03:00'),
+    })
+    await q.customQuery({ merchant_oid: 'ORDER1' })
+
+    const all = JSON.stringify(lines)
+    expect(all).toContain('Request data is changed via listeners')
+    expect(all).toContain('"merchant_key":"***"')
+    expect(all).toContain('"merchant_salt":"***"')
+    expect(all).toContain('"paytr_token":"***"')
+    expect(all).not.toContain(KEY)
+    expect(all).not.toContain(SALT)
+    expect(all).not.toContain(sign('415956123456'))
+    expect(all).not.toContain(sign('123456ORDER1'))
+    expect(all).not.toMatch(/"paytr_token":"[A-Za-z0-9+/]{43}="/)
+  })
+
+  it('a secret echoed in a bank text reaches neither the log nor the error', async () => {
+    const { lines, logger } = recordingLogger()
+    const { q } = e2e(`<html>bad ${KEY} ${SALT}</html>`, logger)
+    const error = await q.getBinList({ bin: '415956' }).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(PosHttpError)
+    expect(JSON.stringify(lines)).not.toContain(KEY)
+    expect(JSON.stringify(lines)).not.toContain(SALT)
+    expect(JSON.stringify(error)).not.toContain(KEY)
+    expect(String((error as PosHttpError).bodySnippet ?? '')).not.toContain(KEY)
+    expect(String((error as Error).message)).not.toContain(SALT)
   })
 })

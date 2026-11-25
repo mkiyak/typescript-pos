@@ -7,6 +7,7 @@ import { ParamPosQueryRequestDataMapper } from '../data-mapper/pos-query/request
 import { PayFlexCPV4PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayFlexCPV4PosQueryRequestDataMapper.js'
 import { PayFlexV4PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayFlexV4PosQueryRequestDataMapper.js'
 import { PayForPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayForPosQueryRequestDataMapper.js'
+import { PayTrPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PayTrPosQueryRequestDataMapper.js'
 import { PosNetPosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PosNetPosQueryRequestDataMapper.js'
 import { PosNetV1PosQueryRequestDataMapper } from '../data-mapper/pos-query/request/PosNetV1PosQueryRequestDataMapper.js'
 import type { QueryRequestDataMapperInterface } from '../data-mapper/pos-query/request/QueryRequestDataMapperInterface.js'
@@ -27,6 +28,7 @@ const REQUEST_MAPPERS = [
   PayFlexCPV4PosQueryRequestDataMapper,
   PayFlexV4PosQueryRequestDataMapper,
   PayForPosQueryRequestDataMapper,
+  PayTrPosQueryRequestDataMapper,
   PosNetPosQueryRequestDataMapper,
   PosNetV1PosQueryRequestDataMapper,
   ToslaPosQueryRequestDataMapper,
