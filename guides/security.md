@@ -52,7 +52,8 @@ Report vulnerabilities privately: see [SECURITY.md](https://github.com/mkiyak/ty
   always verified and whose order id and total amount must match your order (`OrderMismatchError`, with
   `paymentMayHaveCompleted` when the payer was charged another amount). Browser returns never approve. The 3D Pay
   form's signature lets the payer move characters between fields and change the amount; the notification check reports
-  it, and 3D Host does not have the gap. PayTR reports one final status, so the manual-review flag is not used. A test-mode notification never approves a live order. An unclear answer after
+  it, and 3D Host does not have the gap. PayTR reports one final status, so there is no approved-but-3D-failed case; a charged mismatch carries
+  `requires_manual_review` in `error.response`. A test-mode notification never approves a live order. An unclear answer after
   a sale or refund throws: keep the order pending and check `pos.status`. `paytr_token`, the salt, the key and card
   fields are masked in logs.
 - **POSNET (`PosNetPos`).** The 3D result is decrypted by the bank and its MAC is verified before any money moves;

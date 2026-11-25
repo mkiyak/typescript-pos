@@ -92,7 +92,7 @@ Hata yönetimi dahil tam ve derleme denetimli sürümler [`examples/`](https://g
 - [Vakıf Katılım ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/vakif-katilim-payment.md)
 - [Tosla ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/tosla-payment.md)
 - [Param ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/param-payment.md)
-- [PayTR ödeme kılavuzu](https://github.com/mkiyak/typescript-pos/blob/main/guides/paytr-payment.md)
+- [PayTR ödemesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/paytr-payment.md)
 - [Sorgular (özel banka istekleri)](https://github.com/mkiyak/typescript-pos/blob/main/guides/queries.md)
 - [Güvenlik ve canlıya çıkış kontrol listesi](https://github.com/mkiyak/typescript-pos/blob/main/guides/security.md)
 

@@ -48,7 +48,7 @@ post-authorization, cancel and order history are not offered (`pos.orderHistory`
 | `lang` | `tr` or `en`. |
 | `buyer` | `{ email, name, gsm_number }`, all required. |
 | `billing_address` | `{ address }`, required. |
-| `basket_items` | Optional list of `{ name, price, item_count }`. Without it one default row with the charged amount is sent. |
+| `basket_items` | Optional list of `{ name, price, item_count }`; a price has at most two decimals. Without it one default row with the charged amount is sent. |
 
 A missing required field throws `PosError` before anything is sent.
 
@@ -98,9 +98,17 @@ import { HashMismatchError, MODEL, OrderMismatchError, PayTrPos, TX_TYPE } from 
 async function notificationUrl(body: Record<string, string>): Promise<'OK'> {
   const id = PayTrPos.notificationOrderId(body) // unverified: only to load the order
   const order = await loadOrder(id) // from your database, with the amount you stored
-  const response = await pos.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, null, body)
-  await storeOnce(order.id, response) // idempotent, see below
-  return 'OK'
+  try {
+    const response = await pos.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, null, body)
+    await storeOnce(order.id, response) // idempotent, see below
+    return 'OK'
+  } catch (error) {
+    if (error instanceof OrderMismatchError && error.paymentMayHaveCompleted) {
+      await recordForReview(order.id, error.response) // charged at another amount or currency
+      return 'OK'
+    }
+    throw error // HashMismatchError or another PosError: answer an error status, not OK
+  }
 }
 ```
 
@@ -114,7 +122,9 @@ async function notificationUrl(body: Record<string, string>): Promise<'OK'> {
 - **Deduplicate by order id and complete each order once.** The library keeps no state: a repeated notification gives the
   same result every time. Act on the first verified result and never downgrade an approved order because a later
   notification says `failed`.
-- On `HashMismatchError` or another `PosError` answer an error status (not `OK`) and investigate; PayTR will retry.
+- On `HashMismatchError`, or an `OrderMismatchError` without `paymentMayHaveCompleted` (the wrong order was loaded, or a
+  test payment reached a live gateway), answer an error status (not `OK`) and investigate; PayTR will retry. After
+  recording an `OrderMismatchError` with `paymentMayHaveCompleted` for review, answer `OK`.
 
 What is checked, in this order:
 
