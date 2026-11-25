@@ -78,3 +78,20 @@ describe('soapFault', () => {
     expect(faultMessage('x dGhpc2lzYXNlY3JldHNpZ25hdHVyZQ== y Zm9v+/Zm9vZm9vZm9vZm9vZm9vZm9v= z')).toBe('x *** y *** z')
   })
 })
+
+// addition: a secret that crosses the input cap must not leave a piece in the message once masking shortens the text
+describe('faultMessage input cap', () => {
+  it('drops the partial word at the cap so no prefix of a secret survives', () => {
+    const secret = 'Str0ngApiPassw0rd!'
+    const text = `${'A'.repeat(8000)}= ${'x'.repeat(181)}${secret} tail`
+    const message = faultMessage(text, [secret])
+    expect(message).not.toContain('Str0ng')
+    expect(message).not.toContain(secret)
+  })
+
+  it('handles a long run without whitespace quickly', () => {
+    const started = Date.now()
+    faultMessage(`${'B'.repeat(9000)} end`)
+    expect(Date.now() - started).toBeLessThan(500)
+  })
+})

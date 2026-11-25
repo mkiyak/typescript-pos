@@ -36,7 +36,9 @@ function decodeEntities(text: string): string {
  * 256 characters. Masking comes before shortening so a cut can never leave a piece of a secret.
  */
 export function faultMessage(text: string, secrets: readonly string[] = [], limit = FAULT_MAX): string {
-  let masked = decodeEntities(text.slice(0, FAULT_INPUT_MAX))
+  // Past the cap the cut drops the trailing partial word too, so a secret crossing the cut never leaves a piece behind.
+  const capped = text.length > FAULT_INPUT_MAX ? dropPartialWord(text.slice(0, FAULT_INPUT_MAX)) : text
+  let masked = decodeEntities(capped)
   for (const secret of secrets) masked = masked.split(secret).join('***')
   const clean = maskSensitiveData(masked.replace(BASE64_TOKEN, '***').replace(CONTROL_CHARACTERS, ' ').trim())
 
@@ -51,4 +53,11 @@ export function faultTextOf(fault: Record<string, unknown>): string {
 
   // Shortened only when the request's own secrets are known (see the client's `request`), so a cut cannot split one.
   return faultMessage(text, [], FAULT_WORKING_MAX)
+}
+
+/** The text up to its last whitespace (a linear scan, unlike a trailing-word regex on a long run). */
+function dropPartialWord(text: string): string {
+  let end = text.length
+  while (end > 0 && !/\s/.test(text.charAt(end - 1))) end--
+  return text.slice(0, end)
 }
