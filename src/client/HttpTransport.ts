@@ -8,8 +8,9 @@ export interface HttpTransportOptions {
 
 export interface HttpTransportRequestOptions {
   /**
-   * An HTTP 4xx answer is returned instead of thrown, for a caller that reads the failure body itself. Other
-   * non-2xx answers (3xx, 5xx) are errors as always.
+   * An HTTP 400 answer is returned instead of thrown, for a caller that reads the failure body itself (the one
+   * client error code a bank documents for its failure answers). Every other non-2xx answer (401, 403, 404, 429, 3xx,
+   * 5xx) is an error as always.
    */
   returnClientErrors?: boolean
 }
@@ -94,7 +95,7 @@ export class HttpTransport {
           { cause: e },
         )
       }
-      const clientError = options?.returnClientErrors === true && res.status >= 400 && res.status < 500
+      const clientError = options?.returnClientErrors === true && res.status === 400
       if (!clientError && (res.status < 200 || res.status >= 300)) {
         throw new PosHttpError(`Bank returned HTTP ${res.status}`, { url: errorUrl, status: res.status, body: text })
       }

@@ -83,14 +83,17 @@ describe('HttpTransport', () => {
   })
 
   // addition: a caller that reads failure bodies itself gets 4xx answers back; other statuses stay errors
-  it('returns a 4xx answer only when asked to, and still throws on 5xx and 3xx', async () => {
+  it('returns an HTTP 400 answer only when asked to, and still throws on other 4xx, 5xx and 3xx', async () => {
     const opts = { returnClientErrors: true }
     const t = (status: number) => new HttpTransport({ fetch: fakeFetch(status, '{"a":1}') })
     await expect(t(400).post('https://bank.test/api', 'x', {})).rejects.toThrow(PosHttpError)
     const res = await t(400).post('https://bank.test/api', 'x', {}, opts)
     expect(res.status).toBe(400)
     expect(res.body).toBe('{"a":1}')
-    expect((await t(404).get('https://bank.test/api', {}, opts)).status).toBe(404)
+    expect((await t(400).get('https://bank.test/api', {}, opts)).status).toBe(400)
+    for (const code of [401, 403, 404, 429]) {
+      await expect(t(code).post('https://bank.test/api', 'x', {}, opts)).rejects.toThrow(PosHttpError)
+    }
     await expect(t(500).post('https://bank.test/api', 'x', {}, opts)).rejects.toThrow(PosHttpError)
     await expect(t(302).post('https://bank.test/api', 'x', {}, opts)).rejects.toThrow(PosHttpError)
   })

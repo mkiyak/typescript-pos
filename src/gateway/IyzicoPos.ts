@@ -598,7 +598,7 @@ export class IyzicoPos extends AbstractGateway<IyzicoPosAccount> {
     const { answer, url } = await this.send(txType, paymentModel, requestData, order)
 
     this.guard(orderId ?? '', txType, () => {
-      if (ownValue(answer, 'status') === ANSWER_SUCCESS) {
+      if (answerOutcome(answer, url) === ANSWER_SUCCESS) {
         requireSignedAnswer(this.iyzicoCrypt(), this.account, answer, 'payment', url, true)
       }
       if (orderId !== null && Object.hasOwn(answer, 'conversationId') && answer.conversationId !== orderId) {

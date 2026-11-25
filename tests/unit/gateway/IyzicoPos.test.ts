@@ -2591,6 +2591,28 @@ describe('IyzicoPos (end to end) readable failures of client errors', () => {
     }
   })
 
+  // addition: only HTTP 400 is iyzico's documented failure code; other client errors are never read
+  it.each(readOnly)('%s: HTTP 401, 403, 404 and 429 with a failure body stay a PosHttpError', async (_n, run, path) => {
+    for (const code of [401, 403, 404, 429]) {
+      const { pos } = gateway({ [path]: reply(code, FAILURE) })
+      const err = await run(pos).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(PosHttpError)
+      expect((err as PosHttpError).status).toBe(code)
+    }
+  })
+
+  // addition: a status answer that is neither success nor failure does not tell the outcome
+  it.each([
+    ['empty record', () => new Response('{}', { status: 200 })],
+    ['204', () => new Response(null, { status: 204 })],
+    ['another word', () => new Response('{"status":"pending"}', { status: 200 })],
+    ['another case', () => new Response('{"status":"SUCCESS"}', { status: 200 })],
+  ] as Array<[string, Handler]>)('status: an answer with %s is an unknown outcome PosHttpError', async (_n, h) => {
+    const { pos } = gateway({ '/payment/detail': h })
+    const err = await pos.status({ id: 'order-001' }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosHttpError)
+  })
+
   it.each(readOnly)('%s: HTTP 500 with a failure body stays a PosHttpError', async (_n, run, path) => {
     const { pos } = gateway({ [path]: reply(500, FAILURE) })
     const err = await run(pos).catch((e: unknown) => e)

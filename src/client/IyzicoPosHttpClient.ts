@@ -43,9 +43,9 @@ export class IyzicoPosHttpClient extends AbstractIyzicoPosHttpClient {
   }
 
   /**
-   * The form and checkout initialize requests, the checkout record and the payment record move no money: an HTTP 4xx
-   * with iyzico's own failure answer is then read like any failure. After a money request the outcome of a 4xx is
-   * unknown, so it stays an HTTP error.
+   * The form and checkout initialize requests, the checkout record and the payment record move no money: an HTTP 400
+   * (the code iyzico documents for its failure answers) with iyzico's own failure answer is then read like any
+   * failure. Other client errors, and any client error after a money request, stay HTTP errors.
    */
   protected override readsClientErrorBody(txType: ClientTxType, _paymentModel: PaymentModel): boolean {
     return (
