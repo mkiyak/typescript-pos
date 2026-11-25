@@ -88,7 +88,8 @@ An approved query answer must belong to your order. The order id, amount (in the
 are always compared. The merchant id, transaction type, transaction id (the order's, otherwise the callback's) and
 payment token (the order's) are compared when the bank answer carries them. A mismatch throws `OrderMismatchError`;
 its `paymentMayHaveCompleted` is `true` because the bank approved something, so check the bank panel and void or
-refund it if it is not yours.
+refund it if it is not yours. For a payment token mismatch the error's `expected` / `actual` describe the tokens
+instead of carrying them, so the error can be logged as it is.
 
 When the callback said the payment succeeded but the query does not confirm it, the result is `declined` with
 `requires_manual_review: true`. Do not ship the goods; re-check later with `pos.status({ transaction_id })` and

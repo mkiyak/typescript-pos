@@ -93,7 +93,7 @@ describe('no credential in a factory-built object', () => {
     for (const dump of dumpsOf(gateway)) {
       for (const secret of c.secrets) expect(dump).not.toContain(secret)
     }
-    // the dump does reach the gateway's parts (the account's bank name is printed), so the check is not vacuous
+    // the dump does reach the gateway's parts (its client strategy is printed), so the check is not vacuous
     expect(inspect(gateway, { depth: 10 })).toContain('HttpClientStrategy')
   })
 

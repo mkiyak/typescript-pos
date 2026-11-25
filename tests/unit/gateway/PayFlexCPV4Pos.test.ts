@@ -1,3 +1,4 @@
+import { inspect } from 'node:util'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AbstractHttpClient } from '../../../src/client/AbstractHttpClient.js'
 import { HttpClientStrategy } from '../../../src/client/HttpClientStrategy.js'
@@ -907,8 +908,10 @@ describe('PayFlexCPV4Pos (end to end)', () => {
       expect(err).toBeInstanceOf(OrderMismatchError)
       const mismatch = err as OrderMismatchError
       expect(mismatch.field).toBe('transaction_id')
-      expect(mismatch.expected).toBe('P_new')
-      expect(mismatch.actual).toBe('P_old')
+      // deviation: L4 (review) — the error carries no payment token, only what was compared
+      expect(mismatch.expected).toBe('the payment token of this order')
+      expect(mismatch.actual).toBe('another payment token')
+      expect(`${mismatch.message} ${inspect(mismatch)}`).not.toMatch(/P_new|P_old/)
       expect(mismatch.paymentMayHaveCompleted).toBe(false)
       expect(fetchSpy).not.toHaveBeenCalled()
     })
@@ -983,6 +986,10 @@ describe('PayFlexCPV4Pos (end to end)', () => {
       expect(err).toBeInstanceOf(OrderMismatchError)
       expect((err as OrderMismatchError).field).toBe('transaction_id')
       expect((err as OrderMismatchError).paymentMayHaveCompleted).toBe(true)
+      // addition: L4 (review) — the answer binding error carries no payment token either
+      expect((err as OrderMismatchError).expected).toBe('the payment token of this order')
+      expect((err as OrderMismatchError).actual).toBe('another payment token')
+      expect((err as Error).message).not.toMatch(/P1|P_old/)
     })
 
     // addition: 2.10 — a payment token mismatch is logged by length only; the raw tokens never reach the logger
@@ -1206,6 +1213,31 @@ describe('PayFlexCPV4Pos (end to end)', () => {
         if (message !== null) expect((err as Error).message).toBe(message)
       },
     )
+
+    // addition: L4 (review) — a payment URL that is not https may carry the payment token in its query: only its
+    // scheme and host are logged
+    it('logs only the scheme and host of a refused payment URL', async () => {
+      const lines: unknown[][] = []
+      const record = (...args: unknown[]) => {
+        lines.push(args)
+      }
+      const logger: PosLogger = { debug: record, info: record, warn: record, error: record }
+      for (const url of ['http://pay.example/CommonPayment?Ptkn=SecretTok123', 'not a url Ptkn=SecretTok123']) {
+        const err = await realGateway(
+          recordingFetch([], () => JSON.stringify({ PaymentToken: 'SecretTok123', CommonPaymentUrl: url })),
+          logger,
+        )
+          .get3DFormData(boundOrder, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH)
+          .catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosError)
+      }
+      expect(JSON.stringify(lines)).not.toContain('SecretTok123')
+      const refused = lines.filter(([m]) => m === 'payment register response has no https payment URL')
+      expect(refused.map(([, ctx]) => ctx)).toEqual([
+        { url_scheme: 'http:', url_host: 'pay.example' },
+        { url_scheme: null, url_host: null },
+      ])
+    })
 
     it('fails with PosHttpError on an HTML registration answer', async () => {
       const pos = realGateway(recordingFetch([], () => '<html><body>blocked</body></html>'))

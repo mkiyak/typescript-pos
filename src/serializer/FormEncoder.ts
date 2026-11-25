@@ -1,4 +1,4 @@
-function phpUrlEncode(value: string): string {
+export function phpUrlEncode(value: string): string {
   // PHP urlencode(): everything except [A-Za-z0-9_.-] is percent-encoded, space becomes "+".
   return encodeURIComponent(value)
     .replace(/[!'()*~]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)

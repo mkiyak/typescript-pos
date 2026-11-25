@@ -3,6 +3,7 @@ import { createSafeLogger, type PosLogger } from '../logger.js'
 import type { PaymentModel, TxType } from '../PosInterface.js'
 import type { QueryType } from '../pos-query/PosQueryInterface.js'
 import type { EncodedData } from '../serializer/EncodedData.js'
+import { phpUrlEncode } from '../serializer/FormEncoder.js'
 import { encodeIso88599 } from '../serializer/iso88599.js'
 import { JsonDecoder } from '../serializer/JsonDecoder.js'
 import type { PosOrder } from '../types.js'
@@ -43,6 +44,26 @@ function hideValue(text: string, value: string): string {
 }
 
 /**
+ * The other forms a secret may take in a bank text: URL-encoded (`%20` or `+` for a space), as in an echoed form body,
+ * and mangled, as in a Turkish-charset page the transport read as UTF-8. A secret that cannot be URL-encoded (a lone
+ * surrogate) has no encoded form.
+ */
+function otherForms(secret: string): string[] {
+  const forms = new Set<string | null>([mangledForm(secret)])
+  try {
+    const encoded = encodeURIComponent(secret)
+    forms.add(encoded).add(encoded.replace(/%20/g, '+')).add(phpUrlEncode(secret))
+  } catch {
+    // no encoded form
+  }
+  forms.delete(secret)
+  forms.delete('')
+  forms.delete(null)
+
+  return [...forms] as string[]
+}
+
+/**
  * The text with every occurrence of the secrets masked, and a trailing piece of one (a text shortened elsewhere may
  * end inside a secret) masked too. Without secrets the text is returned as it is.
  */
@@ -56,21 +77,23 @@ export function hideSecrets(text: string, secrets: readonly string[]): string {
     if (typeof maskedForm === 'string' && maskedForm !== secret && maskedForm !== '') {
       out = out.split(maskedForm).join('***')
     }
-    const mangled = mangledForm(secret)
-    if (mangled !== null) out = hideValue(out, mangled)
     out = hideValue(out, secret)
+    for (const form of otherForms(secret)) out = hideValue(out, form)
   }
 
   return out
 }
 
-/** The request fields that carry an account credential in the older gateways' request bodies. */
-const CREDENTIAL_FIELDS: readonly string[] = ['Password', 'MerchantPassword', 'UserPass']
+/**
+ * The request fields that carry an account credential in request bodies. `HashPassword` is not a password but a fixed
+ * value derived from the secret key that signs every request, so it is a credential too.
+ */
+const CREDENTIAL_FIELDS: readonly string[] = ['Password', 'MerchantPassword', 'UserPass', 'HashPassword']
 
 /**
- * The non-empty own string values of the credential fields (`Password`, `MerchantPassword`, `UserPass`) of a
- * request, read at its top level and one level down (a wrapper such as `MerchantCriteria`). Inherited, empty and
- * non-string values are not credentials.
+ * The non-empty own string values of the credential fields (`Password`, `MerchantPassword`, `UserPass`,
+ * `HashPassword`) of a request, read at its top level and one level down (a wrapper such as `MerchantCriteria`).
+ * Inherited, empty and non-string values are not credentials.
  */
 export function requestCredentials(requestData: Record<string, unknown>): string[] {
   const found: string[] = []

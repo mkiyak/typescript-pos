@@ -9,7 +9,7 @@ import { VakifKatilimPosXmlDecoder } from '../serializer/VakifKatilimPosXmlDecod
 import { XmlEncoder } from '../serializer/XmlEncoder.js'
 import type { PosOrder } from '../types.js'
 import { ownValue } from '../util/ownValue.js'
-import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
+import { AbstractHttpClient, type ClientTxType, requestCredentials } from './AbstractHttpClient.js'
 import { assertPaymentAnswerHasCode } from './boaPaymentAnswer.js'
 import type { HttpTransport, HttpTransportResponse } from './HttpTransport.js'
 
@@ -73,6 +73,14 @@ export class VakifKatilimPosHttpClient extends AbstractHttpClient {
       (apiName === VakifKatilimPosHttpClient.API_NAME_PAYMENT_API ||
         apiName === VakifKatilimPosHttpClient.API_NAME_GATEWAY_3D_API)
     )
+  }
+
+  /**
+   * The request body carries `HashPassword`, a fixed value derived from the secret key that signs every request: a
+   * bank page that echoes it, in free text too, never shows it in a thrown error or a log line.
+   */
+  protected override logSecrets(requestData: Record<string, unknown>): readonly string[] {
+    return requestCredentials(requestData)
   }
 
   /** A custom query has no route of its own but is supported: the caller names the url. */

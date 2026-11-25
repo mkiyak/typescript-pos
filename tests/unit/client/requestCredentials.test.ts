@@ -1,6 +1,7 @@
 import { inspect } from 'node:util'
 import iconv from 'iconv-lite'
 import { describe, expect, it, vi } from 'vitest'
+import { hideSecrets } from '../../../src/client/AbstractHttpClient.js'
 import { AssecoPosHttpClient } from '../../../src/client/AssecoPosHttpClient.js'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { InterPosHttpClient } from '../../../src/client/InterPosHttpClient.js'
@@ -9,6 +10,7 @@ import { PayFlexV4Pos3DFormHttpClient } from '../../../src/client/PayFlexV4Pos3D
 import { PayFlexV4PosHttpClient } from '../../../src/client/PayFlexV4PosHttpClient.js'
 import { PayFlexV4PosSearchApiHttpClient } from '../../../src/client/PayFlexV4PosSearchApiHttpClient.js'
 import { PayForPosHttpClient } from '../../../src/client/PayForPosHttpClient.js'
+import { VakifKatilimPosHttpClient } from '../../../src/client/VakifKatilimPosHttpClient.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { PosHttpError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
@@ -186,21 +188,31 @@ describe('the clients name the credentials of their requests', () => {
     PayFlexCPV4PosHttpClient: new PayFlexCPV4PosHttpClient(url, transport),
     PayForPosHttpClient: new PayForPosHttpClient(url, transport),
     InterPosHttpClient: new InterPosHttpClient(url, transport),
+    VakifKatilimPosHttpClient: new VakifKatilimPosHttpClient(url, transport),
   }
   const secretsOf = (client: unknown, data: Record<string, unknown>): readonly string[] =>
     (client as { logSecrets(d: Record<string, unknown>): readonly string[] }).logSecrets(data)
 
-  it.each(Object.entries(clients))('%s reads Password, MerchantPassword and UserPass at two levels', (_n, client) => {
-    expect(
-      secretsOf(client, {
+  it.each(Object.entries(clients))(
+    '%s reads Password, MerchantPassword, UserPass and HashPassword at two levels',
+    (_n, client) => {
+      const secrets = secretsOf(client, {
         Password: 'a1',
         MerchantPassword: 'b2',
         UserPass: 'c3',
-        Wrapper: { Password: 'd4', MerchantPassword: 'e5', UserPass: 'f6', Deeper: { Password: 'g7' } },
+        HashPassword: 'h8',
+        Wrapper: {
+          Password: 'd4',
+          MerchantPassword: 'e5',
+          UserPass: 'f6',
+          HashPassword: 'h9',
+          Deeper: { Password: 'g7' },
+        },
         Name: 'not-a-secret',
-      }),
-    ).toEqual(expect.arrayContaining(['a1', 'b2', 'c3', 'd4', 'e5', 'f6']))
-  })
+      })
+      expect([...secrets].sort()).toEqual(['a1', 'b2', 'c3', 'd4', 'e5', 'f6', 'h8', 'h9'])
+    },
+  )
 
   it.each(Object.entries(clients))('%s ignores empty, non-string, inherited and deeper values', (_n, client) => {
     const inherited = Object.create({ Password: 'inherited' }) as Record<string, unknown>
@@ -258,5 +270,119 @@ describe('Asseco ISO-8859-9 pages', () => {
     const line = calls.find(([, m]) => m === 'parsing bank response failed')
     expect(line).toBeDefined()
     expect((line?.[2] as { response?: string } | undefined)?.response).toContain('Geçersiz işlem')
+  })
+})
+
+// addition: L4 (review) — Vakıf Katılım signs every request with `HashPassword`, a fixed value derived from the secret
+// key: whoever reads it can sign requests, so a bank page echoing it is hidden like a password
+describe('Vakıf Katılım HashPassword', () => {
+  const SECRET_KEY = 'VkS3cretKey-913'
+  const VK_ORDER = {
+    ...ORDER,
+    remote_order_id: '123',
+    ref_ret_num: '1',
+    auth_code: '1',
+  } as PosOrder
+  const VK_OPERATIONS: Array<[operation: string, run: (g: AbstractGateway) => Promise<unknown>]> = [
+    ['cancel', (g) => g.cancel(VK_ORDER)],
+    ['refund', (g) => g.refund(VK_ORDER)],
+    ['non-secure sale', (g) => g.makeRegularPayment(VK_ORDER, card(g), TX_TYPE.PAY_AUTH)],
+  ]
+  const answersFor = (hp: string): Array<[label: string, status: number, body: string]> => [
+    ['HTTP 500 HTML', 500, `<html><body>Invalid credential hash ${hp} for user</body></html>`],
+    ['HTTP 200 HTML', 200, `<html><body>Invalid credential hash ${hp}</body></html>`],
+    ['HTTP 503 cut at the snippet edge', 503, `${'x'.repeat(495)}${hp} tail`],
+    ['HTTP 500 URL-encoded echo', 500, `hash=${encodeURIComponent(hp)}&x=1`],
+  ]
+
+  for (const [operation, run] of VK_OPERATIONS) {
+    for (const [label] of answersFor('')) {
+      it(`${operation}: ${label}`, async () => {
+        const { calls, logger } = recordingLogger()
+        let hp = ''
+        const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
+          const sent = Buffer.from(
+            await new Request('https://x.invalid', { method: 'POST', body: init?.body ?? '' }).arrayBuffer(),
+          ).toString('latin1')
+          hp = /<HashPassword>([^<]*)<\/HashPassword>/.exec(sent)?.[1] ?? ''
+          const [, status, body] = answersFor(hp).find(([l]) => l === label) as [string, number, string]
+          return new Response(body, { status })
+        }) as unknown as typeof fetch
+        const account = AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'APIUSER', '11111', SECRET_KEY)
+        const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl, logger })
+        const error = await run(gateway).then(
+          () => null,
+          (e: unknown) => e,
+        )
+        // the request was sent and carried a hash password, so the check is not vacuous
+        expect(hp.length).toBeGreaterThan(10)
+        expect(error).toBeInstanceOf(PosHttpError)
+        const text = visibleText(error, calls)
+        for (const form of [hp, encodeURIComponent(hp), hp.slice(0, 5)]) expect(text).not.toContain(form)
+        expect(text).toContain('***')
+      })
+    }
+  }
+
+  it('the query object hides a HashPassword a custom query sends', async () => {
+    const { calls, logger } = recordingLogger()
+    const fetchImpl = (async () => new Response(`<html>bad ${PW}</html>`, { status: 500 })) as unknown as typeof fetch
+    const account = AccountFactory.createBoaPosAccount('vakif-katilim', '1', 'APIUSER', '11111', SECRET_KEY)
+    const query = PosQueryFactory.createPosQuery(account, posTestConfig, { fetch: fetchImpl, logger })
+    const error = await query
+      .customQuery({ HashPassword: PW }, 'https://boa.vakifkatilim.com.tr/VirtualPOS.Gateway/Home/SelectOrder')
+      .then(
+        () => null,
+        (e: unknown) => e,
+      )
+    expect(error).toBeInstanceOf(PosHttpError)
+    const text = visibleText(error, calls)
+    expect(text).not.toContain(PW)
+    expect(text).not.toContain(PW.slice(0, 3))
+  })
+})
+
+// addition: L4 (review) — a bank page may echo the posted form body itself, where the password stands URL-encoded
+describe('URL-encoded credentials', () => {
+  const password = 'Pw!9137&xZq'
+  const echoes: Array<[label: string, echo: (sent: string) => string]> = [
+    ['the posted body', (sent) => `Request rejected: ${sent}`],
+    ['encodeURIComponent', () => `rejected pw=${encodeURIComponent(password)} end`],
+    [
+      'form encoding with + for a space',
+      () => `rejected pw=${encodeURIComponent(`${password} x`).replace(/%20/g, '+')}`,
+    ],
+  ]
+  for (const [label, echo] of echoes) {
+    it(`PayFlexV4 hides the password echoed in ${label} on a 500`, async () => {
+      const { calls, logger } = recordingLogger()
+      const fetchImpl = (async (_url: unknown, init?: RequestInit) =>
+        new Response(echo(String(init?.body ?? '')), { status: 500 })) as unknown as typeof fetch
+      const pw = label.startsWith('form') ? `${password} x` : password
+      const account = AccountFactory.createPayFlexPosAccount('vakifbank', '000000000111111', pw, 'VP999999')
+      const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl, logger })
+      const error = await gateway.makeRegularPayment(ORDER, card(gateway), TX_TYPE.PAY_AUTH).catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(PosHttpError)
+      const text = visibleText(error, calls)
+      for (const form of [
+        pw,
+        encodeURIComponent(pw),
+        encodeURIComponent(pw).replace(/%20/g, '+'),
+        'Pw%219137%26xZq',
+        'Pw%21',
+        '9137',
+      ]) {
+        expect(text).not.toContain(form)
+      }
+    })
+  }
+
+  it('hides the encoded forms in hideSecrets and leaves an unrelated text alone', () => {
+    expect(hideSecrets('a Pw%219137%26xZq b Pw!9137%26xZq c Pw!9137&xZq', [password])).toBe('a *** b *** c ***')
+    expect(hideSecrets('a%20b c+d', ['x y'])).toBe('a%20b c+d')
+    expect(hideSecrets('pw=x%20y and x+y', ['x y'])).toBe('pw=*** and ***')
+    expect(hideSecrets('cut Pw%2191', [password])).toBe('cut ***')
+    // a secret that cannot be URL-encoded is still hidden as it is, without throwing
+    expect(hideSecrets('x \uD800ab y', ['\uD800ab'])).toBe('x *** y')
   })
 })

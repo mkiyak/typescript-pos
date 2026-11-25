@@ -75,6 +75,13 @@ function firstNonEmptyString(data: Raw, ...keys: string[]): string | null {
   return null
 }
 
+/**
+ * What an `OrderMismatchError` says about a payment token that differs from the order's: a token opens the bank's card
+ * page for its payment, so neither token is put into the error (whose message is often logged).
+ */
+const ORDER_TOKEN = 'the payment token of this order'
+const OTHER_TOKEN = 'another payment token'
+
 /** What a log line may say about two payment tokens that differ: their lengths, never the tokens. */
 function tokenLengths(expected: string, actual: string): { expected_length: number; actual_length: number } {
   return { expected_length: expected.length, actual_length: actual.length }
@@ -123,7 +130,8 @@ function orderCents(v: unknown): bigint | null {
  * - When the order carries its own `transaction_id` and/or `payment_token` (the values used for the
  *   registration), the query is built from those order values only. A callback `TransactionId` /
  *   `PaymentToken` that contradicts them is an `OrderMismatchError('transaction_id')` with
- *   `paymentMayHaveCompleted: false` and no HTTP call. This stops a replay of an earlier transaction of a reused
+ *   `paymentMayHaveCompleted: false` and no HTTP call (for a payment token, its `expected` / `actual` describe the
+ *   tokens instead of carrying them). This stops a replay of an earlier transaction of a reused
  *   order id (the query API does not report later cancels or refunds). Without order ids the callback
  *   `TransactionId` / `PaymentToken` are queried; a callback with neither id is returned as declined without an
  *   HTTP call.
@@ -289,14 +297,18 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
       })
     }
 
-    let protocol: string
+    let parsed: URL | null
     try {
-      protocol = new URL(url).protocol
+      parsed = new URL(url)
     } catch {
-      protocol = ''
+      parsed = null
     }
-    if (protocol !== 'https:') {
-      this.logger.error('payment register response has no https payment URL', { url })
+    if (parsed?.protocol !== 'https:') {
+      // The URL may carry the payment token in its query: only where it points is logged.
+      this.logger.error('payment register response has no https payment URL', {
+        url_scheme: parsed?.protocol ?? null,
+        url_host: parsed?.host ?? null,
+      })
       throw new PosError('Common payment URL must be an https: URL')
     }
   }
@@ -403,10 +415,14 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
    * bank's card page for its payment, so a token mismatch is logged by length only.
    */
   private rejectCallbackId(expected: string, actual: string, isPaymentToken = false): never {
-    this.logger.error(
-      '3D callback id does not match the order',
-      isPaymentToken ? { field: 'payment_token', ...tokenLengths(expected, actual) } : { expected, actual },
-    )
+    if (isPaymentToken) {
+      this.logger.error('3D callback id does not match the order', {
+        field: 'payment_token',
+        ...tokenLengths(expected, actual),
+      })
+      throw new OrderMismatchError('transaction_id', ORDER_TOKEN, OTHER_TOKEN)
+    }
+    this.logger.error('3D callback id does not match the order', { expected, actual })
     throw new OrderMismatchError('transaction_id', expected, actual)
   }
 
@@ -420,10 +436,14 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
     response: PosResponse,
   ): void {
     const fail = (field: OrderMismatchField, expected: string, actual: string, isPaymentToken = false): never => {
-      this.logger.error(
-        `transaction query ${field} does not match the payment`,
-        isPaymentToken ? { field: 'payment_token', ...tokenLengths(expected, actual) } : { expected, actual },
-      )
+      if (isPaymentToken) {
+        this.logger.error(`transaction query ${field} does not match the payment`, {
+          field: 'payment_token',
+          ...tokenLengths(expected, actual),
+        })
+        throw new OrderMismatchError(field, ORDER_TOKEN, OTHER_TOKEN, response)
+      }
+      this.logger.error(`transaction query ${field} does not match the payment`, { expected, actual })
       throw new OrderMismatchError(field, expected, actual, response)
     }
 
