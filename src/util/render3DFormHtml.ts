@@ -79,6 +79,10 @@ function addInput(pairs: Array<[string, string]>, seen: Set<string>, name: strin
   if (name === '') {
     throw new PosError('3D form input name is empty')
   }
+  // A browser sends its page encoding instead of the value of a hidden input with this name.
+  if (name.toLowerCase() === '_charset_') {
+    throw new PosError('3D form input must not be named _charset_')
+  }
   if (seen.has(name)) {
     throw new PosError(`3D form has a duplicate input "${name.slice(0, 64)}"`)
   }
@@ -86,6 +90,18 @@ function addInput(pairs: Array<[string, string]>, seen: Set<string>, name: strin
   assertSendable(value, `input "${name.slice(0, 64)}"`)
   seen.add(name)
   pairs.push([name, value])
+}
+
+/**
+ * One form-encoded name or value of the gateway query. A part the browser could not send back the same way (a
+ * malformed escape, bytes that are not UTF-8) is refused instead of being turned into U+FFFD or kept as literal text.
+ */
+function decodeQueryPart(part: string): string {
+  try {
+    return decodeURIComponent(part.replaceAll('+', ' '))
+  } catch {
+    throw new PosError('3D form gateway query is not valid form encoding')
+  }
 }
 
 /**
@@ -97,7 +113,8 @@ function addInput(pairs: Array<[string, string]>, seen: Set<string>, name: strin
  * becomes hidden inputs (a browser drops the query of a GET form's action). Line breaks in values are sent as CR LF by
  * the browser, as with any form.
  *
- * @throws PosError for a non-https gateway URL, an unknown method, a non-string input, a duplicate input name or a bad nonce
+ * @throws PosError for a non-https gateway URL, an unknown method, a non-string input, an empty, duplicate or
+ *   `_charset_` input name, a GET query that is not valid form encoding or a bad nonce
  */
 export function render3DFormHtml(form: ThreeDFormData, options?: Render3DFormOptions): string {
   if (typeof form === 'string') {
@@ -141,8 +158,20 @@ export function render3DFormHtml(form: ThreeDFormData, options?: Render3DFormOpt
     const beforeFragment = hashAt === -1 ? gateway : gateway.slice(0, hashAt)
     const queryAt = beforeFragment.indexOf('?')
     if (queryAt !== -1) {
-      for (const [name, value] of new URLSearchParams(beforeFragment.slice(queryAt + 1))) {
-        addInput(pairs, seen, name, value)
+      const query = beforeFragment.slice(queryAt + 1)
+      if (query !== '') {
+        for (const segment of query.split('&')) {
+          const equalsAt = segment.indexOf('=')
+          if (equalsAt === -1) {
+            throw new PosError('3D form gateway query has a parameter without a value')
+          }
+          addInput(
+            pairs,
+            seen,
+            decodeQueryPart(segment.slice(0, equalsAt)),
+            decodeQueryPart(segment.slice(equalsAt + 1)),
+          )
+        }
       }
       action = beforeFragment.slice(0, queryAt) + fragment
     }

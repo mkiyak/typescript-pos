@@ -111,7 +111,8 @@ Host by default) return HTML that your server received from the bank or the paym
 yours and must be treated as untrusted:
 
 - Serve it as the whole response of a route of its own (the same form route you would use for a form object), with
-  `Cache-Control: no-store`. Point the iframe `src` or the popup at that route.
+  `Cache-Control: no-store` and `Content-Security-Policy: frame-ancestors 'self'` (only your own pages may frame it).
+  Point the iframe `src` or the popup at that route.
 - Never insert it into your checkout page's DOM (`innerHTML`, `document.write`, `srcdoc`, a template variable left
   unescaped). Scripts in it would run with your page's privileges.
 - Do not wrap it in `render3DFormHtml`; the helper refuses strings.
@@ -124,16 +125,18 @@ yours and must be treated as untrusted:
 
 A typical setup has four routes. All of them are on your own origin.
 
-1. **Form route** (`GET /pay/3d/:orderId`): loads the stored order for the signed-in customer, calls
+1. **Form route** (`GET /pay/3d/:orderId`): loads the stored order for the signed-in customer (check the session:
+   never render the form for someone who only knows the order id), calls
    `get3DFormData`, and answers with `render3DFormHtml(...)` (or the bank's HTML string) and the headers above. Point
    the redirect, the iframe `src` or `window.open` at this route. Do not build the page in the browser with `srcdoc` or
    `document.write`: your route can set the CSP, `no-store` and `frame-ancestors` headers, an `about:srcdoc` frame
    cannot.
 2. **Callback route** (the `success_url` / `fail_url` you put in the order, for example
-   `POST /pay/3d/callback/:orderId`): the bank posts the browser here. Load the order from your own store by the id in
-   the path you issued (never by a field the bank posted), call `pos.payment(...)` with the posted body, store the
-   result, and answer with a small page that tells the opener "done for order X" (below). Errors such as
-   `OrderMismatchError` and `HashMismatchError` are handled here, on the server, exactly as in the gateway guides.
+   `POST /pay/3d/callback/:orderId/:token`): the bank posts the browser here. Load the payment attempt from your own
+   store by the id in the path you issued (never by a field the bank posted), compare the token in the path with the
+   attempt's token in constant time (refuse and change nothing on a mismatch), call `pos.payment(...)` with the posted
+   body, store the result as described in "What a callback may change", and answer with a small page that tells the
+   opener "done for order X" (below).
 3. **Result route** (`GET /pay/orders/:orderId/state`): returns the stored state of the order to the signed-in
    customer (`pending`, `paid`, `failed`, `review`). The checkout page asks this route after the message arrives, after
    the popup closes, or after a timeout.
@@ -145,11 +148,29 @@ The bank posts the callback from its own site. In a full redirect that is a cros
 it is also a third-party context. Session cookies with `SameSite=Lax` (the browser default) are not sent on a
 cross-site `POST`, and many browsers block third-party cookies in frames altogether. Two ways to cope:
 
-- Do not need the session on the callback: put the order id in the callback URL you issue, look the order up by that
-  id, and let `pos.payment(...)` bind the callback to it (order id, amount, currency, signature). The result route,
-  called later from your checkout page, is first-party and has the session.
-- Or set the session cookie with `SameSite=None; Secure`. This does not help where the browser blocks third-party
-  cookies in frames, so the first way is more robust.
+- Do not need the session on the callback: put the order id **and an unguessable per-attempt token** in the callback
+  URL you issue (at least 128 random bits, for example `randomBytes(16).toString('base64url')`, stored with the
+  attempt and new for every attempt). Look the attempt up by the id, compare the token in constant time, and only then
+  let `pos.payment(...)` bind the callback to the order (order id, amount, currency, signature). An order id alone is
+  not enough: order ids are often guessable, and anyone could post a replayed decline or an empty body to the
+  callback URL of someone else's order. The result route, called later from your checkout page, is first-party and has
+  the session.
+- Or set the session cookie with `SameSite=None; Secure` and check that the session owns the order. This does not help
+  where the browser blocks third-party cookies in frames, so the first way is more robust.
+
+### What a callback may change
+
+Only a verified result that belongs to the order ends an attempt:
+
+| Outcome of `pos.payment(...)` on the token-checked route | Store |
+|---|---|
+| `status: 'approved'` | `paid` |
+| `requires_manual_review: true`, or `OrderMismatchError` with `paymentMayHaveCompleted: true` | `review` (the card may have been charged: check with the bank, void or refund) |
+| `status: 'declined'` | `failed` for this attempt; a retry starts a new attempt with a new token |
+| `HashMismatchError`, `OrderMismatchError` without `paymentMayHaveCompleted`, `PosHttpError` or any other error | log it and leave the attempt `pending`; check it later from the server with `status` / `orderHistory` |
+
+An attempt that is no longer `pending` is never changed by a later callback: a decline (or a replayed one) never
+downgrades an order that is already `paid` or in `review`.
 
 ## The callback page tells its opener
 
@@ -199,7 +220,11 @@ window.addEventListener('message', function (event) {
 ## Timeouts, closed popups and fallbacks
 
 - **Popup closed early.** Poll `popup.closed` (for example every 500 ms). When it closes without a message, ask the
-  result route: the payer may have completed the payment just before closing it.
+  result route: the payer may have completed the payment just before closing it. A `pending` answer then means "still
+  running" (the bank's callback may not have arrived yet), not "failed": keep a waiting state and ask again later.
+- **Opener policy.** If your checkout page sends `Cross-Origin-Opener-Policy`, use `same-origin-allow-popups`. With
+  `same-origin` the popup loses its link to your page once it navigates to the bank: the callback page finds no
+  `window.opener` and `popup.closed` no longer tells you anything useful.
 - **No answer.** Give up waiting after a generous timeout (the bank's 3D page can stay open for minutes; 15 minutes is
   a reasonable upper bound) and ask the result route. Leave the order `pending` if the server has no result yet;
   never mark it failed only because the browser gave up. Check unclear orders later from the server with `status` or
@@ -230,7 +255,10 @@ bank's pages, which need scripts, form submission and, often, their own cookies 
 - [ ] The form route sets `Cache-Control: no-store`, a CSP with a fresh nonce and `frame-ancestors 'self'`.
 - [ ] Form objects go through `render3DFormHtml`; bank HTML strings are served as they are on their own route.
 - [ ] Card data never reaches logs or caches; hosted models are used where the bank offers them.
-- [ ] The callback route looks the order up by the id in the URL you issued and calls `pos.payment(...)`.
+- [ ] The callback URL carries an unguessable per-attempt token; the callback route checks it in constant time
+      before calling `pos.payment(...)`.
+- [ ] Only a verified result ends an attempt; hash or binding errors leave it `pending`; a later callback never
+      changes an attempt that has ended.
 - [ ] The callback page posts only "done for order X" to your own origin; never `'*'`.
 - [ ] The checkout page checks `event.origin` and `event.source`, then asks the server for the order's state.
 - [ ] Popup blocked, frame refused, popup closed and timeouts all end in the full redirect or a server check.

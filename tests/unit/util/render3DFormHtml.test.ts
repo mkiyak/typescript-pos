@@ -328,6 +328,32 @@ describe('render3DFormHtml', () => {
       expectPosError(() => render3DFormHtml(get({}, 'https://h/p?a=1&a=2')), /duplicate/)
     })
 
+    // addition: D3 a query the hidden inputs cannot reproduce byte for byte is refused rather than altered
+    it.each([
+      ['a bare name', 'https://h/p?a'],
+      ['a bare name after a pair', 'https://h/p?a=1&b'],
+      ['an empty segment', 'https://h/p?a=1&&b=2'],
+      ['a trailing separator', 'https://h/p?a=1&'],
+      ['an invalid UTF-8 percent byte', 'https://h/p?a=%FF'],
+      ['a truncated UTF-8 sequence', 'https://h/p?a=%C3'],
+      ['a malformed percent escape', 'https://h/p?a=%zz'],
+      ['a lone percent sign', 'https://h/p?a=50%'],
+      ['a bad escape in a name', 'https://h/p?%E0%A4=1'],
+    ])('refuses a GET URL with %s in its query', (_label, gateway) => {
+      expectPosError(() => render3DFormHtml(get({}, gateway)), /query/)
+    })
+
+    it('accepts an empty value and percent-encoded UTF-8 in a GET query', () => {
+      expect(inputLines(render3DFormHtml(get({}, 'https://h/p?a=&%C3%BC=%F0%9F%92%B3')))).toEqual([
+        '<input type="hidden" name="a" value="">',
+        '<input type="hidden" name="ü" value="💳">',
+      ])
+    })
+
+    it('refuses a GET query parameter named _charset_', () => {
+      expectPosError(() => render3DFormHtml(get({}, 'https://h/p?_CharSet_=x')), /_charset_/)
+    })
+
     it('keeps the query of a POST URL in the action and adds no inputs from it', () => {
       const html = render3DFormHtml(post({ a: '2' }, 'https://h/p?a=1'))
 
@@ -381,6 +407,18 @@ describe('render3DFormHtml', () => {
 
     it('refuses an empty input name (the browser would not send it)', () => {
       expectPosError(() => render3DFormHtml(post({ '': '1' })), /empty/)
+    })
+
+    // addition: D3 a browser replaces the value of a hidden input named _charset_ with the page encoding
+    it.each([['_charset_'], ['_CHARSET_'], ['_Charset_']])('refuses an input named %s', (name) => {
+      expectPosError(() => render3DFormHtml(post({ [name]: 'ISO-8859-9' })), /_charset_/)
+    })
+
+    it('accepts names that only contain _charset_', () => {
+      expect(inputLines(render3DFormHtml(post({ x_charset_: '1', _charset: '2' })))).toEqual([
+        '<input type="hidden" name="x_charset_" value="1">',
+        '<input type="hidden" name="_charset" value="2">',
+      ])
     })
 
     it.each([

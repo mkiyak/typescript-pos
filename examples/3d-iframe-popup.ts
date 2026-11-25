@@ -2,11 +2,10 @@
 // server). See guides/3d-iframe-and-popup.md.
 // Nothing here runs on import; call the exported functions from your own route handlers. No framework is assumed:
 // each page function returns the headers and body to send.
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import {
   type AbstractGateway,
   AccountFactory,
-  HashMismatchError,
   MissingAccountInfoError,
   MODEL,
   OrderMismatchError,
@@ -46,11 +45,15 @@ function pos(): AbstractGateway {
 }
 
 // Replace with your database. Orders hold no card data.
-const orders = new Map<string, { order: PosOrder; state: OrderState }>()
+const orders = new Map<string, { order: PosOrder; state: OrderState; callbackToken: string }>()
 
-/** Stores a new order; its id is part of the callback URL you issue, so the callback can find it without a cookie. */
+/**
+ * Stores a new payment attempt. The callback URL you issue carries the order id and an unguessable token of this
+ * attempt, so the callback finds the order without a cookie and nobody else can post to it.
+ */
 export function createOrder(origin: string, orderId: string, amount: number): PosOrder {
-  const callback = `${checkedOrigin(origin)}/pay/3d/callback/${encodeURIComponent(orderId)}`
+  const callbackToken = randomBytes(16).toString('base64url') // 128 bits, new for every attempt
+  const callback = `${checkedOrigin(origin)}/pay/3d/callback/${encodeURIComponent(orderId)}/${callbackToken}`
   const order: PosOrder = {
     id: orderId,
     amount,
@@ -59,12 +62,14 @@ export function createOrder(origin: string, orderId: string, amount: number): Po
     success_url: callback,
     fail_url: callback,
   }
-  orders.set(orderId, { order, state: 'pending' })
+  orders.set(orderId, { order, state: 'pending', callbackToken })
   return order
 }
 
 /** `GET /pay/3d/:orderId`: the page the redirect, the iframe `src` or `window.open` points at. */
 export async function formPage(orderId: string): Promise<Page> {
+  // Load the order only for the signed-in customer who owns it (check your session here); never for anyone who knows
+  // the id.
   const stored = orders.get(orderId)
   if (stored === undefined || stored.state !== 'pending') {
     throw new PosError('No pending order with this id')
@@ -78,6 +83,7 @@ export async function formPage(orderId: string): Promise<Page> {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-store',
+        'Content-Security-Policy': "frame-ancestors 'self'",
         'X-Content-Type-Options': 'nosniff',
       },
       body: form,
@@ -97,28 +103,41 @@ export async function formPage(orderId: string): Promise<Page> {
   }
 }
 
-/** `POST /pay/3d/callback/:orderId`: completes the payment, stores the result and answers with the callback page. */
+/**
+ * `POST /pay/3d/callback/:orderId/:token`: completes the payment, stores the result and answers with the callback page.
+ * Only a verified result bound to the order ends the attempt; anything else leaves it `pending` for a server-side check.
+ */
 export async function callbackRoute(
   origin: string,
   orderId: string,
+  token: string,
   body: Record<string, string | undefined>,
 ): Promise<Page> {
   const stored = orders.get(orderId) // by the id in the URL you issued, never by a posted field
-  if (stored === undefined) {
-    throw new PosError('Unknown order')
+  if (stored === undefined || !sameToken(token, stored.callbackToken)) {
+    // Not the URL you issued for this attempt: nothing is processed and nothing changes.
+    throw new PosError('Unknown payment attempt')
   }
+  // An attempt that already ended stays as it is: a later callback (a replayed decline, say) never changes it.
   if (stored.state === 'pending') {
     try {
       const response = await pos().payment(MODEL.THREE_D_HOST, stored.order, TX_TYPE.PAY_AUTH, null, body)
-      stored.state =
-        response.requires_manual_review === true ? 'review' : response.status === 'approved' ? 'paid' : 'failed'
-    } catch (error) {
-      if (error instanceof OrderMismatchError) {
-        stored.state = error.paymentMayHaveCompleted ? 'review' : 'failed'
-      } else if (error instanceof HashMismatchError) {
-        stored.state = 'review' // forged, or a genuine callback in an unexpected format: check with the bank
+      if (response.requires_manual_review === true) {
+        stored.state = 'review'
+      } else if (response.status === 'approved') {
+        stored.state = 'paid'
+      } else {
+        // A decline that came through this attempt's own URL ends the attempt; retry with a new attempt.
+        stored.state = 'failed'
       }
-      // Anything else (PosHttpError…): the outcome is unknown, the order stays pending; check it later from the server.
+    } catch (error) {
+      if (error instanceof OrderMismatchError && error.paymentMayHaveCompleted) {
+        stored.state = 'review' // the card may have been charged: check with the bank, void or refund
+      } else {
+        // HashMismatchError, OrderMismatchError without a charge, PosHttpError…: not a verified result for this order.
+        // Log it and leave the attempt pending; check it later from the server with status / orderHistory.
+        console.warn('3D callback not accepted', { orderId, error: error instanceof Error ? error.name : 'unknown' })
+      }
     }
   }
   return callbackPage(origin, orderId)
@@ -160,7 +179,8 @@ export function callbackPage(origin: string, orderId: string): Page {
 /**
  * The checkout page's script (serve it from a file with your CSP nonce). It opens the form route in an iframe or a
  * popup, falls back to a full redirect, accepts only messages from your own callback page in the window it opened,
- * and then asks your server for the order's state; a message is never proof of payment.
+ * and then asks your server for the order's state; a message is never proof of payment. A `pending` state after the popup
+ * closed early means the payment is still running: keep waiting and ask again later.
  */
 export function parentListenerScript(origin: string): string {
   const base = jsonForScript(`${checkedOrigin(origin)}/pay/3d/`)
@@ -224,6 +244,12 @@ function checkedOrigin(origin: string): string {
     throw new PosError('origin must be an https origin such as https://shop.example')
   }
   return origin
+}
+
+/** Constant-time comparison of the posted token with the stored one (hashes first, so lengths never leak). */
+function sameToken(given: string, expected: string): boolean {
+  const digest = (text: string) => createHash('sha256').update(text, 'utf8').digest()
+  return timingSafeEqual(digest(given), digest(expected))
 }
 
 /** JSON that is safe inside an inline <script>: nothing in it can close the element or end a JS string early. */
