@@ -222,6 +222,18 @@ describe('AbstractPosQuery', () => {
     })
   })
 
+  // addition: with no usable origin the message says so instead of ending in an empty list
+  it('names the missing configuration when no origin is allowed', async () => {
+    const { q } = setup({
+      config: { ...config, gateway_endpoints: { payment_api: 'http://plain.test/api' } },
+    })
+    await expect(q.customQuery({}, 'https://other.test/x')).rejects.toThrow(
+      new PosError(
+        'Custom query URL must be an https: URL on a configured bank origin; none is configured or allowed.',
+      ),
+    )
+  })
+
   describe('hooks', () => {
     it('passes a frozen shallow copy of the input and a clone of the mapped data; the change reaches the client only', async () => {
       const seen: unknown[] = []

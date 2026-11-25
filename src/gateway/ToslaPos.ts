@@ -276,7 +276,7 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
       paymentModel,
       txType,
       this.get3DGatewayURL(paymentModel),
-      this.cardForForm(card, createWithoutCard),
+      this.cardForForm(card, createWithoutCard, paymentModel),
     ) as Promise<ThreeDFormData>
   }
 

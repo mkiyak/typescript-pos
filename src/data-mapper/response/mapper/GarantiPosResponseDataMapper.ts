@@ -25,11 +25,13 @@ function path(data: unknown, ...keys: string[]): unknown {
   return current
 }
 
-/** A bank field as a string, or null when missing. */
+/** A bank field as text; a missing value, an object and an array are null. */
 function text(data: unknown, key: string | number): string | null {
   const value = field(data, key)
-  if (value === null) return null
-  return typeof value === 'string' ? value : String(value)
+  if (typeof value === 'string') return value
+  // an object or array is no text: it would read "[object Object]"
+  if (value === null || typeof value === 'object') return null
+  return String(value)
 }
 
 /** PHP 8 `$value > 0` for a bank string: numeric strings compare as numbers, others as strings. */
@@ -252,6 +254,8 @@ export class GarantiPosResponseDataMapper extends AbstractResponseDataMapper {
     const currency = text(raw, 'txncurrencycode')
     const securityLevel = text(raw, 'secure3dsecuritylevel')
 
+    // The bank's references, the masked card number and the 3D proofs (eci, cavv, tx_status) are read only from an
+    // approved 3D answer; for a declined one they stay null, whatever the callback happens to carry.
     const result: Raw = {
       order_id: field(raw, 'oid'),
       transaction_id: null,

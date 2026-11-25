@@ -5,6 +5,8 @@ import { AbstractResponseValueFormatter } from './AbstractResponseValueFormatter
 
 const EPOCH_MILLISECONDS = /^\d{1,16}$/
 const DECIMAL = /^\d{1,13}(?:\.\d+)?$/
+/** Amounts at or above this are not payments (the request side refuses them too). */
+const MAX_AMOUNT = 1e13
 
 /**
  * Value formatter of the iyzico gateway. Payment, cancel, refund and status answers print `systemTime` as epoch
@@ -16,9 +18,9 @@ export class IyzicoPosResponseValueFormatter extends AbstractResponseValueFormat
     return gatewayClass === 'IyzicoPos'
   }
 
-  /** @throws PosError for a value that is not a finite non-negative number or a decimal text */
+  /** @throws PosError for a value that is not a finite number from 0 up to (not including) 1e13, or a decimal text */
   override formatAmount(amount: string | number, _txType: string): number {
-    if (typeof amount === 'number' && Number.isFinite(amount) && amount >= 0) return amount
+    if (typeof amount === 'number' && Number.isFinite(amount) && amount >= 0 && amount < MAX_AMOUNT) return amount
     if (typeof amount === 'string' && DECIMAL.test(amount)) return Number(amount)
 
     throw new PosError('The amount of the bank answer is not readable')

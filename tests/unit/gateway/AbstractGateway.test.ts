@@ -198,8 +198,12 @@ class StubGateway extends AbstractGateway {
   authSuccess(data: Record<string, unknown>): boolean {
     return this.is3dAuthSuccess(data)
   }
-  formCard(c: CreditCard | null, createWithoutCard: boolean): CreditCard | null {
-    return this.cardForForm(c, createWithoutCard)
+  formCard(
+    c: CreditCard | null,
+    createWithoutCard: boolean,
+    paymentModel: PaymentModel = MODEL.THREE_D_SECURE,
+  ): CreditCard | null {
+    return this.cardForForm(c, createWithoutCard, paymentModel)
   }
   prepare(data: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.dispatchRequestDataPrepared(data, TX_TYPE.STATUS, { id: 'X' }, MODEL.NON_SECURE)
@@ -440,6 +444,27 @@ describe('AbstractGateway', () => {
       expect(logged).not.toContain('4111111111111111')
       expect(logged).not.toContain('"123"')
     })
+
+    // addition: the bank page of a hosted model collects the card, so a passed card is dropped without the flag too
+    it.each([MODEL.THREE_D_HOST, MODEL.THREE_D_PAY_HOSTING] as const)(
+      'drops a card passed with the hosted model %s even without the flag',
+      (model) => {
+        const logger = spyLogger()
+        const { gateway } = build({ logger })
+        expect(gateway.formCard(card, false, model)).toBeNull()
+        expect(logger.debug).toHaveBeenCalledTimes(1)
+        expect(logger.debug.mock.calls[0]?.[0]).toBe('card ignored: the bank page collects the card')
+        expect(JSON.stringify(logger.debug.mock.calls)).not.toContain('4111111111111111')
+      },
+    )
+
+    it.each([MODEL.THREE_D_SECURE, MODEL.THREE_D_PAY, MODEL.NON_SECURE] as const)(
+      'keeps a card for the model %s',
+      (model) => {
+        const { gateway } = build()
+        expect(gateway.formCard(card, false, model)).toBe(card)
+      },
+    )
 
     it.each([
       ['a card without the flag', card, false, card],

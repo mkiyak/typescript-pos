@@ -1,5 +1,6 @@
 import { CARD_TYPE, type Currency, LANG, TX_TYPE } from '../../../PosInterface.js'
 import { AbstractRequestValueMapper } from './AbstractRequestValueMapper.js'
+import type { RequestTxTypeMappings } from './RequestValueMapperInterface.js'
 
 export class PayFlexCPV4PosRequestValueMapper extends AbstractRequestValueMapper {
   protected override cardTypeMappings: Record<string, string> = {
@@ -9,7 +10,7 @@ export class PayFlexCPV4PosRequestValueMapper extends AbstractRequestValueMapper
     [CARD_TYPE.AMEX]: '400',
   }
 
-  protected override txTypeMappings = {
+  protected override txTypeMappings: RequestTxTypeMappings = {
     [TX_TYPE.PAY_AUTH]: 'Sale',
     [TX_TYPE.PAY_PRE_AUTH]: 'Auth',
     [TX_TYPE.PAY_POST_AUTH]: 'Capture',

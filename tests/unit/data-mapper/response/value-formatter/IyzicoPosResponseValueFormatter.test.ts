@@ -50,7 +50,7 @@ describe('IyzicoPosResponseValueFormatter', () => {
     expect(formatter.formatAmount(raw, TX_TYPE.PAY_AUTH)).toBe(expected)
   })
 
-  it.each([['abc'], [''], ['-1'], ['1e3'], [Number.NaN], [-1], [Number.POSITIVE_INFINITY]])(
+  it.each([['abc'], [''], ['-1'], ['1e3'], [Number.NaN], [-1], [Number.POSITIVE_INFINITY], [1e13], [1e20]])(
     'formatAmount(%j) is unreadable',
     (raw) => {
       expect(() => formatter.formatAmount(raw as string | number, TX_TYPE.PAY_AUTH)).toThrow(PosError)

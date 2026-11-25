@@ -1,3 +1,4 @@
+import { ORDER_ID_LENGTH } from '../data-mapper/request/value-formatter/PosNetPosRequestValueFormatter.js'
 import { TX_DECLINED } from '../data-mapper/response/mapper/ResponseDataMapperInterface.js'
 import { PosNetV1PosResponseValueMapper } from '../data-mapper/response/value-mapper/PosNetV1PosResponseValueMapper.js'
 import {
@@ -21,6 +22,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
+import { orderIdOf } from '../util/orderId.js'
 import { ownValue } from '../util/ownValue.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { required } from '../util/required.js'
@@ -142,7 +144,7 @@ export class PosNetV1Pos extends AbstractGateway<PosNetPosAccount> {
       paymentModel,
       txType,
       this.get3DGatewayURL(paymentModel),
-      this.cardForForm(card, createWithoutCard),
+      this.cardForForm(card, createWithoutCard, paymentModel),
     ) as Promise<ThreeDFormData>
   }
 
@@ -295,7 +297,7 @@ export class PosNetV1Pos extends AbstractGateway<PosNetPosAccount> {
    * them.
    */
   private assertCallbackMatchesOrder(callback: GatewayResponseData, order: PosOrder, txType: TxType): void {
-    const orderId = String(required(order, 'id'))
+    const orderId = orderIdOf(order, ORDER_ID_LENGTH)
     const amount = parseOrderAmount(required(order, 'amount'))
     if (!(amount > 0)) {
       throw new PosError('The order amount must be a positive number.')

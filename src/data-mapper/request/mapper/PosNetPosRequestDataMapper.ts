@@ -4,6 +4,7 @@ import type { PosNetPosAccount } from '../../../model/account/PosNetPosAccount.j
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
+import { optionalBankReference, requiredBankReference } from '../../../util/bankReference.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
 import { isSet, required } from '../../../util/required.js'
@@ -156,7 +157,7 @@ export class PosNetPosRequestDataMapper extends AbstractRequestDataMapper<PosNet
   }
 
   createNonSecurePostAuthPaymentRequestData(account: PosNetPosAccount, order: PosOrder): Record<string, unknown> {
-    const hostLogKey = required(order, 'ref_ret_num')
+    const hostLogKey = requiredBankReference(order, 'ref_ret_num')
     const amount = this.kurus(order)
     const installment = this.installment(order)
 
@@ -188,8 +189,9 @@ export class PosNetPosRequestDataMapper extends AbstractRequestDataMapper<PosNet
     const data: Record<string, unknown> = {
       transaction: this.valueMapper.mapTxType(transactionType).toLowerCase(),
     }
-    if (isSet(order.auth_code) && order.auth_code !== '') {
-      data.authCode = order.auth_code
+    const authCode = optionalBankReference(order, 'auth_code')
+    if (authCode !== null) {
+      data.authCode = authCode
     }
     // Either identifies the transaction; the bank's own reference wins.
     this.addTransactionReference(data, order, TX_TYPE.CANCEL)
@@ -223,8 +225,9 @@ export class PosNetPosRequestDataMapper extends AbstractRequestDataMapper<PosNet
 
   /** Sets `hostLogKey` or the padded `orderID`; one of the two must exist. */
   private addTransactionReference(data: Record<string, unknown>, order: PosOrder, txType: TxType): void {
-    if (isSet(order.ref_ret_num) && order.ref_ret_num !== '') {
-      data.hostLogKey = order.ref_ret_num
+    const reference = optionalBankReference(order, 'ref_ret_num')
+    if (reference !== null) {
+      data.hostLogKey = reference
       return
     }
     if (!isSet(order.id) || order.id === '') {

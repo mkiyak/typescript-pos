@@ -283,6 +283,38 @@ describe('PayFlexCPV4PosResponseDataMapper', () => {
       expect(integrationMapper().mapStatusResponse(raw).first_amount).toBe(10)
     })
 
+    // addition: the bank references are text or null, never an object printed as "[object Object]"
+    it('reads TransactionId, MaskedPan and Rrn as text, numbers as decimal text and objects as null', () => {
+      const raw = {
+        ResultCode: '0000',
+        AuthorizeId: '123456',
+        OrderId: 'o1',
+        Amount: '10.00',
+        AmountCode: '949',
+        TransactionType: 'Sale',
+        HostDate: '20260224101500',
+      }
+      const numbers = { ...raw, TransactionId: 306822971283, MaskedPan: 4938, Rrn: 5 }
+      const status = integrationMapper().mapStatusResponse(numbers)
+      expect(status.transaction_id).toBe('306822971283')
+      expect(status.masked_number).toBe('4938')
+      expect(status.ref_ret_num).toBe('5')
+      const pay = integrationMapper().map3DPayResponseData(numbers, TX_TYPE.PAY_AUTH, {} as never)
+      expect(pay.transaction_id).toBe('306822971283')
+      expect(pay.ref_ret_num).toBe('306822971283')
+      expect(pay.masked_number).toBe('4938')
+
+      const objects = { ...raw, TransactionId: { a: 1 }, MaskedPan: ['4938'], Rrn: {} }
+      const statusOfObjects = integrationMapper().mapStatusResponse(objects)
+      expect(statusOfObjects.transaction_id).toBeNull()
+      expect(statusOfObjects.masked_number).toBeNull()
+      expect(statusOfObjects.ref_ret_num).toBeNull()
+      const payOfObjects = integrationMapper().map3DPayResponseData(objects, TX_TYPE.PAY_AUTH, {} as never)
+      expect(payOfObjects.transaction_id).toBeNull()
+      expect(payOfObjects.ref_ret_num).toBeNull()
+      expect(payOfObjects.masked_number).toBeNull()
+    })
+
     // addition: only a plain decimal comma is normalized
     it('passes a grouped amount through unchanged', () => {
       formatter.formatAmount.mockReturnValue(1234.56)

@@ -1269,6 +1269,40 @@ describe('AssecoPos (end to end) 3D Secure callback bound to the order before th
     },
   )
 
+  // addition: the order id is read with the shared rule: an array or object never turns into the callback's id text
+  it.each([[['2022103030CB']], [{}], [true], [1.5], [-1], [2 ** 53], ['_2022103030CB'], ['a'.repeat(65)]])(
+    'an order id of %j is a PosError before any request',
+    async (id) => {
+      const { result, sent, hook } = await run(SECURE_CALLBACK, { ...payOrder, id: id as never })
+      expect(result).toBeInstanceOf(PosError)
+      expect(result).not.toBeInstanceOf(OrderMismatchError)
+      expect((result as Error).message).toMatch(/^Order field "id"/)
+      expect(sent).toHaveLength(0)
+      expect(hook).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([[['2022103030CB']], [{}], [true]])('a 3D Pay callback for an order id of %j is a PosError', async (id) => {
+    const { pos, crypt, account: acc } = realGateway(noNetwork)
+    const err = await pos
+      .payment(
+        MODEL.THREE_D_PAY,
+        { ...payOrder, id: id as never },
+        TX_TYPE.PAY_AUTH,
+        null,
+        signedCallback(crypt, acc, payCallback),
+      )
+      .catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(PosError)
+    expect((err as Error).message).toMatch(/^Order field "id"/)
+  })
+
+  it('binds an order id that is a safe integer number to the callback text', async () => {
+    const { result, sent } = await run({ ...SECURE_CALLBACK, oid: '7' }, { ...payOrder, id: 7 as never })
+    expect((result as Data).status).toBe('approved')
+    expect(sent).toHaveLength(1)
+  })
+
   it('the same callback provisions an order whose amount is within 0.005, with or without a currency', async () => {
     for (const order of [
       payOrder,

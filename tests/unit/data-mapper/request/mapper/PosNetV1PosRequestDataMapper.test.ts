@@ -718,6 +718,25 @@ describe('PosNetV1PosRequestDataMapper with the real crypt', () => {
     await expect(Promise.resolve().then(run)).rejects.toThrow(PosError)
   })
 
+  // addition: a bank reference is a non-blank string; whitespace, numbers and objects never reach the bank
+  it.each([['   '], ['\t\n'], [123], [{}], [['R1']], [true]])(
+    'rejects ref_ret_num %j on post-auth, cancel and refund',
+    (ref) => {
+      const o = { id: '1', amount: 1, ref_ret_num: ref } as unknown as PosOrder
+      expect(() => mapper.createNonSecurePostAuthPaymentRequestData(account, o)).toThrow(PosError)
+      expect(() => mapper.createCancelRequestData(account, o)).toThrow(PosError)
+      expect(() => mapper.createRefundRequestData(account, o, TX_TYPE.REFUND)).toThrow(PosError)
+    },
+  )
+
+  it('treats an empty or null ref_ret_num as absent and uses the order id', () => {
+    for (const ref of ['', null]) {
+      const request = mapper.createCancelRequestData(account, { id: '1', ref_ret_num: ref } as unknown as PosOrder)
+      expect(request.ReferenceCode).toBeNull()
+      expect(request.OrderId).not.toBeNull()
+    }
+  })
+
   it('never puts "undefined" in a request', () => {
     const all = [
       mapper.createNonSecurePaymentRequestData(account, { id: '1', amount: 1 }, TX_TYPE.PAY_AUTH, card),

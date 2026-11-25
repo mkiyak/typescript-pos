@@ -348,6 +348,30 @@ describe('GarantiPosResponseDataMapper', () => {
       })
     })
 
+    // deviation: the bank references, masked number and 3D proofs of a declined 3D answer stay null (they are read
+    // only for an approved one), whatever the callback carries
+    // addition: a non-scalar bank value is no text: the fields read through the text helper stay null
+    it('3D Pay with objects and arrays where text is expected leaves those fields null', () => {
+      const actual = integrationMapper().map3DPayResponseData(
+        {
+          ...success3DPay,
+          txnamount: { a: 1 },
+          txncurrencycode: ['949'],
+          txntype: {},
+          secure3dsecuritylevel: ['3D'],
+          txninstallmentcount: {},
+        },
+        TX_TYPE.PAY_AUTH,
+        order,
+      ) as Data
+
+      expect(actual.amount).toBeNull()
+      expect(actual.currency).toBeNull()
+      expect(actual.payment_model).not.toBe('[object Object]')
+      expect(actual.installment_count).toBe(0)
+      expect(JSON.stringify({ ...actual, all: undefined, '3d_all': undefined })).not.toContain('[object')
+    })
+
     // addition: response 'Error' discards the provision answer even with mdstatus 1 and procreturncode 00
     it('3D Pay with response Error but procreturncode 00 is declined and flagged for review', () => {
       const warn = vi.fn()

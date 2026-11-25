@@ -202,6 +202,26 @@ describe('GarantiPosQueryRequestDataMapper', () => {
       expect(sorted(actual)).toEqual(sorted(expected(page)))
     })
 
+    // addition: the page number is an integer from 1 to 9999, as a number or digit text
+    it.each([
+      [1, 1],
+      [9999, 9999],
+      ['3', 3],
+    ])('accepts page %j', (page, want) => {
+      const { mapper } = create()
+      const actual = mapper.createHistoryRequestData(account, { ...base, page })
+      expect((actual.Order as Record<string, unknown>).ListPageNum).toBe(want)
+    })
+
+    it.each([[0], [-1], [10000], [1.5], ['abc'], [''], ['1e2'], ['0'], [' 2'], [{}], [['1']], [true], [Number.NaN]])(
+      'rejects page %j',
+      (page) => {
+        const { mapper, createHash } = create()
+        expect(() => mapper.createHistoryRequestData(account, { ...base, page })).toThrow(PosError)
+        expect(createHash).not.toHaveBeenCalled()
+      },
+    )
+
     // addition: G19 required fields
     it('rejects a missing ip', () => {
       const { mapper } = create()
@@ -253,6 +273,23 @@ describe('GarantiPosQueryRequestDataMapper', () => {
       expect(createHash).toHaveBeenCalledWith(account, hashInput)
       expect(sorted(actual)).toEqual(sorted(want))
     })
+
+    // addition: a BIN is 6 to 8 digits
+    it.each([['415956'], ['41595612'], [415956]])('accepts bin %j', (bin) => {
+      const { mapper } = create()
+      const actual = mapper.createBinListRequestData(account, { ip: '127.0.0.1', bin })
+      const inquiry = (actual.Transaction as Record<string, Record<string, unknown>>).BINInq
+      expect(inquiry?.BINNum).toBe(String(bin))
+    })
+
+    it.each([['41595'], ['415956123'], ['41595a'], [''], [' 415956'], [{}], [['415956']], [true], [41595.5]])(
+      'rejects bin %j',
+      (bin) => {
+        const { mapper, createHash } = create()
+        expect(() => mapper.createBinListRequestData(account, { ip: '127.0.0.1', bin })).toThrow(PosError)
+        expect(createHash).not.toHaveBeenCalled()
+      },
+    )
 
     // addition: G19 required ip
     it('rejects a missing ip', () => {

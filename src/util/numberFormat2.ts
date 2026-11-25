@@ -17,6 +17,10 @@ export function numberFormat2(amount: number): string {
   const magnitude = Math.abs(amount)
   const floor = Math.floor(magnitude * 100)
   const cents = magnitude >= (floor + 0.5) / 100 ? floor + 1 : floor
+  // a value just below the limit can round up to it: the text would then be 1e13 or more
+  if (cents >= MAX_AMOUNT * 100) {
+    throw new PosError(`Invalid amount: ${amount}`)
+  }
   const text = (cents / 100).toFixed(2)
 
   return amount < 0 && cents !== 0 ? `-${text}` : text

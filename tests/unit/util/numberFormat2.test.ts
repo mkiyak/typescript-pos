@@ -18,4 +18,11 @@ describe('numberFormat2', () => {
     expect(() => numberFormat2(1e13)).toThrow(PosError)
     expect(() => numberFormat2(Number.NaN)).toThrow(PosError)
   })
+
+  // addition: an amount just below 1e13 that rounds up to 1e13 is refused like 1e13 itself
+  it('rejects an amount that rounds up to 1e13 and keeps the largest one that does not', () => {
+    expect(() => numberFormat2(9999999999999.996)).toThrow(PosError)
+    expect(() => numberFormat2(-9999999999999.996)).toThrow(PosError)
+    expect(numberFormat2(9999999999999.99)).toBe('9999999999999.99')
+  })
 })

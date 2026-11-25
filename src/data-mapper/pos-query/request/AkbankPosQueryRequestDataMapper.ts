@@ -12,6 +12,17 @@ function validDate(data: Record<string, unknown>, key: string): Date {
   return value
 }
 
+/** A batch number: a positive integer, as a number or as digit text (kept as given). */
+function batchNumber(value: unknown): number | string {
+  const valid =
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= 1) ||
+    (typeof value === 'string' && /^[1-9]\d{0,14}$/.test(value))
+  if (!valid) {
+    throw new PosError('Query field "batch_num" must be a positive integer')
+  }
+  return value as number | string
+}
+
 /**
  * Builds the Akbank query requests. The terminal (and the sub-merchant of a sub-merchant account) and a random
  * number go into every request; the HTTP client signs the exact body it sends, so nothing is signed here.
@@ -32,7 +43,10 @@ export class AkbankPosQueryRequestDataMapper extends AbstractQueryRequestDataMap
     return this.mergeAccountData(requestData, {
       ...this.getAccountData(account),
       version: API_VERSION,
-      requestDateTime: this.valueFormatter.formatDateTime(new Date(), 'requestDateTime'),
+      // the current time is only worked out when the caller left the request time out
+      ...(requestData.requestDateTime === undefined
+        ? { requestDateTime: this.valueFormatter.formatDateTime(new Date(), 'requestDateTime') }
+        : {}),
       randomNumber: this.crypt.generateRandomString(),
     })
   }
@@ -45,7 +59,7 @@ export class AkbankPosQueryRequestDataMapper extends AbstractQueryRequestDataMap
     }
 
     if (data.batch_num !== undefined && data.batch_num !== null) {
-      result.report = { batchNumber: data.batch_num }
+      result.report = { batchNumber: batchNumber(data.batch_num) }
     } else if (data.start_date !== undefined && data.end_date !== undefined) {
       result.report = {
         startDateTime: this.valueFormatter.formatDateTime(validDate(data, 'start_date'), 'startDateTime'),

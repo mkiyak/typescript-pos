@@ -41,7 +41,7 @@ describe('errors', () => {
   it.each(['currency', 'merchant_id', 'test_mode'] as const)('OrderMismatchError supports the %s field', (field) => {
     const e = new E.OrderMismatchError(field, '949', '840')
     expect(e.field).toBe(field)
-    expect(e.message).toBe(`Callback ${field} mismatch: expected "949", got "840"`)
+    expect(e.message).toBe(`Order ${field} mismatch: expected "949", got "840"`)
   })
 
   it('OrderMismatchError masks the raw bank data attached in response.all', () => {

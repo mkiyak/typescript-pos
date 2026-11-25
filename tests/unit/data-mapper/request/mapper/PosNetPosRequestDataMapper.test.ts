@@ -492,6 +492,33 @@ describe('PosNetPosRequestDataMapper', () => {
         expect(() => mapper.createStatusRequestData(account, {})).toThrow(PosError)
       })
 
+      // addition: a bank reference or authorization code is a non-blank string
+      it.each([['   '], ['\t\n'], [123], [{}], [['R1']], [true]])('rejects ref_ret_num %j', (ref) => {
+        const o = { id: 'A1', amount: 1, ref_ret_num: ref } as unknown as PosOrder
+        expect(() => mapper.createNonSecurePostAuthPaymentRequestData(account, o)).toThrow(PosError)
+        expect(() => mapper.createCancelRequestData(account, o)).toThrow(PosError)
+        expect(() => mapper.createRefundRequestData(account, o, TX_TYPE.REFUND)).toThrow(PosError)
+      })
+
+      it.each([['   '], [123456], [{}], [['901477']], [true]])('rejects auth_code %j on cancel', (code) => {
+        const o = { id: 'A1', auth_code: code } as unknown as PosOrder
+        expect(() => mapper.createCancelRequestData(account, o)).toThrow(PosError)
+      })
+
+      it('treats an empty or null ref_ret_num and auth_code as absent', () => {
+        for (const empty of ['', null]) {
+          const request = mapper.createCancelRequestData(account, {
+            id: 'A1',
+            ref_ret_num: empty,
+            auth_code: empty,
+          } as unknown as PosOrder)
+          const data = request.reverse as Record<string, unknown>
+          expect(data.hostLogKey).toBeUndefined()
+          expect(data.authCode).toBeUndefined()
+          expect(data.orderID).toBeDefined()
+        }
+      })
+
       it('produces no "undefined" value', () => {
         const outputs = [
           mapper.createNonSecurePostAuthPaymentRequestData(account, { ref_ret_num: 'R1', amount: 1 }),

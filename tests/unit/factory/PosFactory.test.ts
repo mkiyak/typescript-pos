@@ -489,7 +489,7 @@ describe('PosFactory.createPosGateway', () => {
       TURKPOS_RETVAL_Hash: 'LOpkL9J8vne8E2j0A0HKOhUWGhI=',
     }
     await expect(gateway.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, null, callback)).rejects.toThrow(
-      'Callback order_status mismatch',
+      'Order order_status mismatch',
     )
     expect(urls).toStrictEqual([
       'https://test-pos.param.com.tr/to.ws/Service_Odeme.asmx',

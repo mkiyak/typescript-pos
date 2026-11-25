@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
+import { posProductionConfig } from '../../../src/config/posProductionConfig.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
 import { PosError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
@@ -281,8 +283,25 @@ const ORDER_ID_CASES = GATEWAYS.flatMap((gatewayClass) =>
 )
 
 describe('one order-id rule on every gateway', () => {
-  it('covers every gateway and its order-id operations', () => {
-    expect(new Set(ORDER_ID_CASES.map(([g]) => g)).size).toBe(16)
+  // The gateways PosFactory builds, read from its own switch, so a gateway added there without a row here fails.
+  const REGISTERED = [
+    ...readFileSync(new URL('../../../src/factory/PosFactory.ts', import.meta.url), 'utf8').matchAll(
+      /case (\w+)\.GATEWAY_CLASS:/g,
+    ),
+  ].map(([, name]) => name as string)
+
+  it('covers every gateway the factory registers and its order-id operations', () => {
+    expect(REGISTERED.length).toBeGreaterThanOrEqual(16)
+    expect([...new Set(REGISTERED)].sort()).toStrictEqual([...GATEWAYS].sort())
+    expect([...new Set(ORDER_ID_CASES.map(([g]) => g))].sort()).toStrictEqual([...new Set(REGISTERED)].sort())
+  })
+
+  it('every bank of the shipped configs uses a registered gateway', () => {
+    for (const config of [posProductionConfig, posTestConfig]) {
+      for (const bank of Object.values(config.banks)) {
+        expect(REGISTERED).toContain(bank.class)
+      }
+    }
   })
 
   it.each(ORDER_ID_CASES)(
@@ -492,4 +511,65 @@ describe('a card passed with createWithoutCard never reaches the browser form', 
       expect(keys(a, withCard)).toStrictEqual(keys(b, withoutCard))
     },
   )
+})
+
+// ---- hosted models: the bank page collects the card, so a passed card never reaches the browser form ----
+
+describe('a card passed to a hosted payment model never reaches the browser form', () => {
+  const HOSTED_CASES = GATEWAYS.flatMap((gatewayClass) => {
+    const cls = build(gatewayClass).gateway.constructor as typeof AbstractGateway
+    return HOSTED.filter((model) => cls.isSupportedTransaction(TX_TYPE.PAY_AUTH, model)).map(
+      (model) => [gatewayClass, model] as const,
+    )
+  })
+
+  it('covers a gateway with a hosted model', () => {
+    expect(HOSTED_CASES.length).toBeGreaterThan(0)
+  })
+
+  it.each(HOSTED_CASES)(
+    '%s %s: no PAN, CVV or expiry in the form, with or without createWithoutCard',
+    async (gatewayClass, model) => {
+      for (const createWithoutCard of [false, true]) {
+        const built = build(gatewayClass, answers(gatewayClass))
+        const error = await built.gateway
+          .get3DFormData(
+            order('ORDER-1', gatewayClass),
+            model,
+            TX_TYPE.PAY_AUTH,
+            cardFor(built.gateway),
+            createWithoutCard,
+          )
+          .then(
+            (form) => {
+              expectNoCard(browserSide(built, form))
+              return undefined
+            },
+            (e: unknown) => e,
+          )
+        // a model that cannot take a card at all is refused; otherwise the card is dropped silently
+        if (error !== undefined) {
+          expect(error).toBeInstanceOf(PosError)
+          expect((error as Error).message).toMatch(/^Do not use \[/)
+        }
+        expect(JSON.stringify(built.logger.debug.mock.calls)).not.toContain(PAN)
+        expect(JSON.stringify(built.onBefore3DFormHashCalculated.mock.calls)).not.toContain(PAN)
+      }
+    },
+  )
+
+  it('AssecoPos 3d_pay_hosting drops the card and logs that it did', async () => {
+    const built = build('AssecoPos')
+    const form = (await built.gateway.get3DFormData(
+      order('ORDER-1', 'AssecoPos'),
+      MODEL.THREE_D_PAY_HOSTING,
+      TX_TYPE.PAY_AUTH,
+      cardFor(built.gateway),
+    )) as ThreeDFormData
+    expectNoCard(browserSide(built, form))
+    expect(Object.keys(form.inputs)).not.toContain('pan')
+    expect(
+      built.logger.debug.mock.calls.some(([message]) => message === 'card ignored: the bank page collects the card'),
+    ).toBe(true)
+  })
 })

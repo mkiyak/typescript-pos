@@ -11,7 +11,7 @@ import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
  * VakifBank Common Payment guide v2.1 §7 (error 0097): order ids may only hold digits, letters and hyphens. The
  * library-wide rule (a letter or digit first, at most 64) applies on top.
  */
-const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/
+export const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/
 /** VakifBank Common Payment guide v2.1 §4/§5: alphanumeric, at most 40 characters, no special or Turkish characters. */
 const TRANSACTION_ID_PATTERN = /^[0-9A-Za-z-]{1,40}$/
 
@@ -180,6 +180,16 @@ export class PayFlexCPV4PosRequestDataMapper extends AbstractRequestDataMapper<P
       MerchantId: this.getMerchantId(account),
       Password: account.getPassword(),
     }
+    const [a, b] = what === 'Order' ? ['transaction_id', 'payment_token'] : ['TransactionId', 'PaymentToken']
+    // An id of another type is refused: dropping it silently would query by the other id alone.
+    for (const [id, name] of [
+      [transactionId, a],
+      [paymentToken, b],
+    ] as const) {
+      if (isSet(id) && typeof id !== 'string') {
+        throw new PosError(`${what} field "${name}" must be a string`)
+      }
+    }
     if (typeof transactionId === 'string' && transactionId !== '') {
       data.TransactionId = transactionId
     }
@@ -187,7 +197,6 @@ export class PayFlexCPV4PosRequestDataMapper extends AbstractRequestDataMapper<P
       data.PaymentToken = paymentToken
     }
     if (data.TransactionId === undefined && data.PaymentToken === undefined) {
-      const [a, b] = what === 'Order' ? ['transaction_id', 'payment_token'] : ['TransactionId', 'PaymentToken']
       throw new PosError(`${what} field "${a}" or "${b}" is required`)
     }
 

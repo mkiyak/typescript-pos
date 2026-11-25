@@ -190,7 +190,9 @@ export abstract class AbstractPosQuery<A extends AbstractPosAccount = AbstractPo
       this.#allowedOrigins.has(url.origin)
     if (!allowed) {
       throw new PosError(
-        `Custom query URL must be an https: URL on one of these origins: ${[...this.#allowedOrigins].sort().join(', ')}.`,
+        this.#allowedOrigins.size === 0
+          ? 'Custom query URL must be an https: URL on a configured bank origin; none is configured or allowed.'
+          : `Custom query URL must be an https: URL on one of these origins: ${[...this.#allowedOrigins].sort().join(', ')}.`,
       )
     }
   }

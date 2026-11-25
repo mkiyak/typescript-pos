@@ -228,6 +228,12 @@ describe('IyzicoPosResponseDataMapper', () => {
     expect(warnedFields()).toEqual(['paidPrice'])
   })
 
+  it('addition: a paidPrice of 1e13 or more leaves amount null and warns with the key only', () => {
+    const actual = mapper.mapPaymentResponse(payment({ paidPrice: 1e13 }), TX_TYPE.PAY_AUTH, ORDER) as Data
+    expect(actual.amount).toBeNull()
+    expect(warnedFields()).toEqual(['paidPrice'])
+  })
+
   it('addition: non-scalar values never become text', () => {
     const actual = mapper.mapPaymentResponse(
       payment({

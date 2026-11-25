@@ -55,7 +55,7 @@ export class OrderMismatchError extends PosError {
   readonly paymentMayHaveCompleted: boolean
 
   constructor(field: OrderMismatchField, expected: string, actual: string, response?: PosResponse) {
-    super(`Callback ${field} mismatch: expected "${expected}", got "${actual}"`)
+    super(`Order ${field} mismatch: expected "${expected}", got "${actual}"`)
     this.field = field
     this.expected = expected
     this.actual = actual

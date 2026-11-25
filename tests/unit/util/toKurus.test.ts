@@ -46,6 +46,8 @@ describe('toKurus', () => {
     ['-Infinity', Number.NEGATIVE_INFINITY],
     ['1e13', 1e13],
     ['1e20', 1e20],
+    // addition: rounds up to 1e13
+    ['9999999999999.996', 9999999999999.996],
     ['zero', 0],
     ['negative zero', -0],
     ['negative', -1.5],

@@ -26,6 +26,30 @@ function requiredDate(data: Record<string, unknown>, key: string): Date {
   return value
 }
 
+/** The result page: an integer from 1 to 9999 as a number or as digit text; the first page when not given. */
+function listPageNumber(value: unknown): number {
+  if (value === undefined || value === null) return 1
+  const page =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && /^[1-9]\d{0,3}$/.test(value)
+        ? Number(value)
+        : Number.NaN
+  if (!Number.isInteger(page) || page < 1 || page > 9999) {
+    throw new PosError('Query field "page" must be an integer from 1 to 9999')
+  }
+  return page
+}
+
+/** A BIN is the first six to eight digits of a card number, as digit text or a number. */
+function binNumber(value: unknown): string {
+  const text = typeof value === 'number' && Number.isSafeInteger(value) ? String(value) : value
+  if (typeof text !== 'string' || !/^\d{6,8}$/.test(text)) {
+    throw new PosError('Query field "bin" must be 6 to 8 digits')
+  }
+  return text
+}
+
 /** Builds the Garanti (GVP) query requests: every one carries the provisioning user terminal and its signature. */
 export class GarantiPosQueryRequestDataMapper extends AbstractQueryRequestDataMapper<GarantiPosAccount> {
   static supports(gatewayClass: string): boolean {
@@ -76,7 +100,7 @@ export class GarantiPosQueryRequestDataMapper extends AbstractQueryRequestDataMa
         Description: null,
         StartDate: this.valueFormatter.formatDateTime(requiredDate(data, 'start_date'), 'StartDate', txType),
         EndDate: this.valueFormatter.formatDateTime(requiredDate(data, 'end_date'), 'EndDate', txType),
-        ListPageNum: data.page ?? 1,
+        ListPageNum: listPageNumber(data.page),
       },
       Transaction: {
         Type: this.valueMapper.mapTxType(txType),
@@ -103,7 +127,7 @@ export class GarantiPosQueryRequestDataMapper extends AbstractQueryRequestDataMa
       CardType: this.valueMapper.mapCardClass((params.card_class as string | null | undefined) ?? null),
     }
     if (params.bin !== undefined && params.bin !== null) {
-      binInquiry.BINNum = String(params.bin)
+      binInquiry.BINNum = binNumber(params.bin)
     }
 
     const result: Record<string, unknown> = {

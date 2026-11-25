@@ -1118,6 +1118,20 @@ describe('PosNetPos (end to end) 3D payment', () => {
     expect(res.requires_manual_review).toBeUndefined()
   })
 
+  // addition: the order id is read with the shared rule, so an array or object never turns into the id text
+  it.each([[['2020110828BC']], [{}], [true], [1.5], [-1], [2 ** 53], ['_2020110828BC'], ['a'.repeat(21)]])(
+    'rejects the order id %j before any request',
+    async (id) => {
+      const { posted, fetchImpl } = threeDBank(resolveAnswer())
+      const err = await expectRejection(
+        pay3D(realGateway(fetchImpl), { ...orderO, id: id as never }, callbackC),
+        PosError,
+      )
+      expect(err.message).toMatch(/^Order field "id"/)
+      expect(posted).toHaveLength(0)
+    },
+  )
+
   // addition: P8 packets of another order: the bank resolves that order, nothing is provisioned
   it('rejects a resolve for another order id (OrderMismatchError, no provision)', async () => {
     const { posted, fetchImpl } = threeDBank(resolveAnswer({ xid: '000000002020110828BD', mac: E3 }))

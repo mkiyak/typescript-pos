@@ -136,7 +136,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       } else {
         requestData.txnCode = '1013'
       }
-      requestData.order = { orderTrackId: String(required(order, 'recurring_id')) }
+      requestData.order = { orderTrackId: this.trackIdOf(required(order, 'recurring_id')) }
     } else {
       requestData.order = { orderId: orderIdOf(order) }
     }
@@ -161,7 +161,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
     if (isSet(order.recurringOrderInstallmentNumber)) {
       // Only recurring and forward-dated sales that were provisioned can be refunded.
       requestData.recurring = { recurringOrder: order.recurringOrderInstallmentNumber }
-      requestData.order = { orderTrackId: String(required(order, 'recurring_id')) }
+      requestData.order = { orderTrackId: this.trackIdOf(required(order, 'recurring_id')) }
     } else {
       requestData.order = { orderId: orderIdOf(order) }
     }
@@ -178,7 +178,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       randomNumber: this.crypt.generateRandomString(),
       order:
         isSet(order.recurring_id) && order.recurring_id !== ''
-          ? { orderTrackId: String(order.recurring_id) }
+          ? { orderTrackId: this.trackIdOf(order.recurring_id) }
           : { orderId: orderIdOf(order) },
     }
   }
@@ -234,6 +234,11 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
     const hash = this.crypt.create3DHash(account, inputs)
 
     return { gateway: gatewayURL, method: 'POST', inputs: { ...inputs, hash } }
+  }
+
+  /** The recurring order's track id follows the same rule as an order id (plain ASCII, at most 64 characters). */
+  private trackIdOf(recurringId: unknown): string {
+    return orderIdOf({ id: recurringId } as PosOrder)
   }
 
   private now(): string {

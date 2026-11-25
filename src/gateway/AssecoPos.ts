@@ -11,14 +11,13 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
+import { orderIdOf } from '../util/orderId.js'
 import { ownValue } from '../util/ownValue.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { AbstractGateway, type SupportedTransactions } from './AbstractGateway.js'
 
 /** Largest difference between the callback amount and the order amount still treated as equal. */
 const AMOUNT_TOLERANCE = 0.005
-
-/** A plain decimal number (no hex, exponent, Infinity or empty string, which `Number()` would accept). */
 
 /** Callback `storetype` values (compared case-insensitively) accepted by each payment method. */
 const STORE_TYPES_3D = ['3d'] as const
@@ -164,7 +163,7 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
       paymentModel,
       txType,
       this.get3DGatewayURL(paymentModel),
-      this.cardForForm(card, createWithoutCard),
+      this.cardForForm(card, createWithoutCard, paymentModel),
     )) as ThreeDFormData
   }
 
@@ -209,7 +208,7 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
    * and the currency when the callback carries them. Nothing was charged yet, so no response is attached.
    */
   private assertSecureCallbackMatchesOrder(callback: GatewayResponseData, order: PosOrder): void {
-    const expectedId = asText(order.id)
+    const expectedId = boundOrderId(order)
     const oid = ownValue(callback, 'oid')
     if (expectedId === '' || typeof oid !== 'string' || oid !== expectedId) {
       this.logger.error('3D callback order id does not match the order', { expected: expectedId, actual: asText(oid) })
@@ -246,7 +245,7 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
 
   /** A verified callback must still belong to this order (id and amount). */
   private assertCallbackMatchesOrder(callback: GatewayResponseData, response: PosResponse, order: PosOrder): void {
-    const expectedId = asText(order.id)
+    const expectedId = boundOrderId(order)
     const actualId = asText(response.order_id)
     if (expectedId === '' || actualId !== expectedId) {
       this.logger.error('3D callback order id does not match the order', { expected: expectedId, actual: actualId })
@@ -267,6 +266,14 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
       throw new OrderMismatchError('amount', expectedAmount, actualAmount, response)
     }
   }
+}
+
+/**
+ * The order id a callback is compared with, read with the shared order id rule so that an array or object never
+ * turns into the text of a matching id. A missing id is `''`, which never matches.
+ */
+function boundOrderId(order: PosOrder): string {
+  return order.id === undefined || order.id === null || order.id === '' ? '' : orderIdOf(order)
 }
 
 function asText(value: unknown): string {

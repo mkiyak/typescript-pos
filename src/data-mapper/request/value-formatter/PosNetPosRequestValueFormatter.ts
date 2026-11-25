@@ -6,7 +6,7 @@ import { orderIdOf } from '../../../util/orderId.js'
 import type { RequestValueFormatterInterface } from './RequestValueFormatterInterface.js'
 
 /** The bank's order number field is 20 characters wide; lookups and reversals use 24 (prefix included). */
-const ORDER_ID_LENGTH = 20
+export const ORDER_ID_LENGTH = 20
 const ORDER_ID_TOTAL_LENGTH = 24
 
 const LOOKUP_TX_TYPES: readonly TxType[] = [TX_TYPE.STATUS, TX_TYPE.REFUND, TX_TYPE.REFUND_PARTIAL, TX_TYPE.CANCEL]

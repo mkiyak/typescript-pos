@@ -15,11 +15,13 @@ function field(data: unknown, key: string): unknown {
   return null
 }
 
-/** A bank field as a string, or null when missing. */
+/** A bank field as text: a string as is, a finite number as decimal text; missing values, objects and arrays are null. */
 function text(data: unknown, key: string): string | null {
   const value = field(data, key)
-  if (value === null) return null
-  return typeof value === 'string' ? value : String(value)
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'boolean' || typeof value === 'bigint') return String(value)
+  return null
 }
 
 /** First non-null text among several candidate field names. */
@@ -72,8 +74,8 @@ export class PayFlexCPV4PosResponseDataMapper extends AbstractResponseDataMapper
     response.md_status = null
     response.md_error_message = null
     response.transaction_security = null
-    response.transaction_id = field(raw, 'TransactionId')
-    response.masked_number = field(raw, 'MaskedPan')
+    response.transaction_id = text(raw, 'TransactionId')
+    response.masked_number = text(raw, 'MaskedPan')
 
     if (response.status === TX_APPROVED) {
       const amount = normalizeAmount(field(raw, 'Amount'))
@@ -82,7 +84,7 @@ export class PayFlexCPV4PosResponseDataMapper extends AbstractResponseDataMapper
       const hostDate = text(raw, 'HostDate')
 
       response.auth_code = firstText(raw, 'AuthCode', 'AuthorizeId')
-      response.ref_ret_num = field(raw, 'TransactionId')
+      response.ref_ret_num = text(raw, 'TransactionId')
       response.order_id = firstText(raw, 'OrderID', 'OrderId')
       response.currency = amountCode !== null ? this.valueMapper.mapCurrency(amountCode, txType) : null
       response.amount = this.formatAmount(amount, txType)
@@ -129,13 +131,13 @@ export class PayFlexCPV4PosResponseDataMapper extends AbstractResponseDataMapper
 
       response.order_id = firstText(raw, 'OrderID', 'OrderId')
       response.auth_code = firstText(raw, 'AuthCode', 'AuthorizeId')
-      response.transaction_id = field(raw, 'TransactionId')
-      response.ref_ret_num = field(raw, 'Rrn')
+      response.transaction_id = text(raw, 'TransactionId')
+      response.ref_ret_num = text(raw, 'Rrn')
       response.transaction_time = this.formatHostDate(hostDate, txType)
       response.transaction_type = bankTxType !== null ? this.valueMapper.mapTxType(bankTxType) : null
       response.first_amount = this.formatAmount(amount, txType)
       response.currency = amountCode !== null ? this.valueMapper.mapCurrency(amountCode, txType) : null
-      response.masked_number = field(raw, 'MaskedPan')
+      response.masked_number = text(raw, 'MaskedPan')
       response.installment_count = this.valueFormatter.formatInstallment(text(raw, 'InstallmentCount'), txType)
       // the query API does not report later cancels or refunds, so order_status stays null
     }

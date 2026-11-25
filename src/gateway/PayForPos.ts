@@ -336,7 +336,7 @@ export class PayForPos extends AbstractGateway<PayForPosAccount> {
     }
 
     this.logger.debug('preparing 3D form data', { payment_model: paymentModel, tx_type: txType })
-    const formCard = this.cardForForm(card, createWithoutCard)
+    const formCard = this.cardForForm(card, createWithoutCard, paymentModel)
 
     if (formFormat === FORM_FORMAT.HTML) {
       return this.initialize3DForm(order, paymentModel, txType, formCard)

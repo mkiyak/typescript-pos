@@ -646,6 +646,32 @@ describe('PayFlexCPV4Pos (end to end)', () => {
       expect((err as OrderMismatchError).field).toBe('order_id')
     })
 
+    // addition: the order id is read with the shared rule before the query is sent
+    it.each([[['2023030913ED']], [{}], [true], [1.5], [-1], [2 ** 53], ['a_b'], ['a'.repeat(65)]])(
+      'rejects the order id %j before any request',
+      async (id) => {
+        const sent: Sent[] = []
+        const pos = realGateway(recordingFetch(sent, () => answer()))
+        const err = await pos
+          .payment(MODEL.THREE_D_HOST, { ...boundOrder, id: id as never }, TX_TYPE.PAY_AUTH, null, {
+            ...forgedCallback,
+          })
+          .catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(PosError)
+        expect(err).not.toBeInstanceOf(OrderMismatchError)
+        expect((err as Error).message).toMatch(/^Order field "id"/)
+        expect(sent).toHaveLength(0)
+      },
+    )
+
+    it('binds an order id that is a safe integer number to the answer text', async () => {
+      const pos = realGateway(recordingFetch([], () => answer({ OrderID: '7' })))
+      const res = await pos.payment(MODEL.THREE_D_HOST, { ...boundOrder, id: 7 as never }, TX_TYPE.PAY_AUTH, null, {
+        ...forgedCallback,
+      })
+      expect(res.status).toBe('approved')
+    })
+
     // addition: OrderId (guide spelling) is read when OrderID is absent
     it('reads OrderId when OrderID is absent', async () => {
       const pos = realGateway(recordingFetch([], () => answer({ OrderID: undefined, OrderId: '2023030913ED' })))

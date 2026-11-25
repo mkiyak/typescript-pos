@@ -1,3 +1,4 @@
+import { ORDER_ID_PATTERN } from '../data-mapper/request/mapper/PayFlexCPV4PosRequestDataMapper.js'
 import type { RequestDataMapperInterface } from '../data-mapper/request/mapper/RequestDataMapperInterface.js'
 import {
   OrderMismatchError,
@@ -20,6 +21,7 @@ import {
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
 import { numberFormat2 } from '../util/numberFormat2.js'
+import { orderIdOf } from '../util/orderId.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { AbstractGateway, type GatewayConfig, type GatewayDeps, type SupportedTransactions } from './AbstractGateway.js'
 
@@ -330,6 +332,11 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
       throw new UnsupportedTransactionTypeError(`Invalid transaction type "${txType}" provided`)
     }
 
+    // Read with the registration's order id rule before anything is sent, so an array or object never turns into
+    // the text of a matching id. A missing id is '' and never matches an approved answer.
+    const expectedOrderId =
+      order.id === undefined || order.id === null || order.id === '' ? '' : orderIdOf(order, 64, ORDER_ID_PATTERN)
+
     const cb = callback as Raw
     const callbackSaysApproved = firstNonEmptyString(cb, 'Rc', 'RC', 'ResultCode') === SUCCESS_CODE
     const map = (data: Raw): PosResponse =>
@@ -385,6 +392,7 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
     if (response.status === 'approved') {
       this.assertAnswerMatchesOrder(
         answer,
+        expectedOrderId,
         orderTransactionId ?? callbackTransactionId,
         orderPaymentToken,
         order,
@@ -429,6 +437,7 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
   /** Binds an approved query answer to the order (fail closed: a missing required value never matches). */
   private assertAnswerMatchesOrder(
     answer: Raw,
+    expectedOrderId: string,
     expectedTransactionId: string | null,
     expectedPaymentToken: string | null,
     order: PosOrder,
@@ -447,7 +456,6 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
       throw new OrderMismatchError(field, expected, actual, response)
     }
 
-    const expectedOrderId = asText(order.id)
     const answerOrderId = value(answer, 'OrderID') ?? value(answer, 'OrderId')
     if (expectedOrderId === '' || typeof answerOrderId !== 'string' || answerOrderId !== expectedOrderId) {
       fail('order_id', expectedOrderId, asText(answerOrderId))

@@ -116,6 +116,43 @@ describe('AkbankPosQueryRequestDataMapper', () => {
     expect(Object.keys(input)).toEqual(['txnCode', 'terminal'])
   })
 
+  // addition: a request time the caller supplies is kept and the current time is not even formatted
+  it('does not format the request time when the caller supplies one', () => {
+    const formatter = new AkbankPosRequestValueFormatter()
+    const spy = vi.spyOn(formatter, 'formatDateTime')
+    const mapper = new AkbankPosQueryRequestDataMapper(new AkbankPosRequestValueMapper(), formatter, {
+      generateRandomString: () => 'rand',
+    } as never)
+
+    const supplied = mapper.createCustomQueryRequestData(account, {
+      txnCode: '1020',
+      requestDateTime: '2024-01-01T12:00:00.000',
+    })
+    expect(supplied.requestDateTime).toBe('2024-01-01T12:00:00.000')
+    expect(spy).not.toHaveBeenCalled()
+
+    const missing = mapper.createCustomQueryRequestData(account, { txnCode: '1020', requestDateTime: undefined })
+    expect(String(missing.requestDateTime)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000$/)
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  // addition: a batch number is a positive integer (number or digit text)
+  it.each([
+    [39, 39],
+    ['39', '39'],
+  ])('history accepts batch_num %j', (batch, want) => {
+    const { mapper } = create()
+    expect(mapper.createHistoryRequestData(account, { batch_num: batch }).report).toEqual({ batchNumber: want })
+  })
+
+  it.each([[''], ['abc'], [Number.NaN], [0], [-1], [1.5], ['0'], ['-3'], ['1.5'], [' 3'], [{}], [['1']], [true]])(
+    'history rejects batch_num %j',
+    (batch) => {
+      const { mapper } = create()
+      expect(() => mapper.createHistoryRequestData(account, { batch_num: batch })).toThrow(PosError)
+    },
+  )
+
   it.each([
     [
       'with_batch_number',

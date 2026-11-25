@@ -535,6 +535,58 @@ describe('AkbankPosRequestDataMapper', () => {
     })
   })
 
+  // addition: the recurring track id follows the library-wide order id rule
+  describe('recurring_id', () => {
+    const requests: Array<[string, (recurringId: unknown) => Record<string, unknown>]> = [
+      [
+        'cancel',
+        (recurringId) =>
+          mapper.createCancelRequestData(account, {
+            recurring_id: recurringId,
+            recurringOrderInstallmentNumber: 2,
+          } as PosOrder),
+      ],
+      [
+        'refund',
+        (recurringId) =>
+          mapper.createRefundRequestData(
+            account,
+            { recurring_id: recurringId, amount: 1.02, recurringOrderInstallmentNumber: 2 } as PosOrder,
+            TX_TYPE.REFUND,
+          ),
+      ],
+      [
+        'order history',
+        (recurringId) => mapper.createOrderHistoryRequestData(account, { recurring_id: recurringId } as PosOrder),
+      ],
+    ]
+
+    it.each(requests)('%s sends a number as its decimal text', (_name, build) => {
+      expect((build(7).order as Record<string, unknown>).orderTrackId).toBe('7')
+    })
+
+    it.each(
+      requests.flatMap(([name]) =>
+        [
+          ['a leading "_"', '_a'],
+          ['a blank', 'a b'],
+          ['"&"', 'a&b'],
+          ['non-ASCII', 'ä1'],
+          ['65 characters', 'a'.repeat(65)],
+          ['an array', ['a']],
+          ['a boolean', true],
+          ['an object', {}],
+          ['a fraction', 1.5],
+          ['a negative number', -1],
+          ['an unsafe integer', 2 ** 53],
+        ].map(([label, id]) => [name, label, id] as const),
+      ),
+    )('%s rejects %s', (name, _label, id) => {
+      const build = requests.find(([n]) => n === name)?.[1] as (recurringId: unknown) => Record<string, unknown>
+      expect(() => build(id)).toThrow(PosError)
+    })
+  })
+
   it('has no status request', () => {
     // deviation: A22 (error class: NotImplementedError)
     expect(() => mapper.createStatusRequestData(account, {})).toThrow(NotImplementedError)

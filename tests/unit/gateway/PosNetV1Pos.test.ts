@@ -899,6 +899,20 @@ describe('PosNetV1Pos (end to end) order binding', () => {
     return err
   }
 
+  // addition: the order id is read with the shared rule, so an array or object never turns into the id text
+  it.each([[['2020110828BC']], [{}], [true], [1.5], [-1], [2 ** 53], ['_2020110828BC'], ['a'.repeat(21)]])(
+    'rejects the order id %j before any request',
+    async (id) => {
+      const { posted, fetchImpl } = fakeBank()
+      const err = await expectRejection(
+        pay3D(realGateway(fetchImpl), { ...SUCCESS_ORDER, id: id as never }, SUCCESS_CALLBACK),
+        PosError,
+      )
+      expect((err as Error).message).toMatch(/^Order field "id"/)
+      expect(posted).toHaveLength(0)
+    },
+  )
+
   // addition: P16 the echoed amount must be the order's amount in kuruş
   it('rejects another amount', async () => {
     const err = await expectMismatch({ ...SUCCESS_CALLBACK, Amount: '100' }, SUCCESS_ORDER, 'amount')

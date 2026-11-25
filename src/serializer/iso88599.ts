@@ -1,7 +1,14 @@
 import iconv from 'iconv-lite'
-import type { HttpTransportResponse } from '../client/HttpTransport.js'
 
 export const ISO_8859_9 = 'ISO-8859-9'
+
+/** What decoding an XML answer needs of an HTTP response (the transport's response has both). */
+export interface DecodableResponse {
+  /** The body decoded as UTF-8. */
+  body: string
+  /** The raw body bytes. */
+  bytes: Uint8Array
+}
 
 /** The six Turkish letters ISO-8859-9 has in place of the Latin-1 letters Ð Ý Þ ð ý þ. */
 const TURKISH_LETTERS: ReadonlySet<number> = new Set([0x011e, 0x011f, 0x0130, 0x0131, 0x015e, 0x015f])
@@ -56,7 +63,7 @@ export function encodeIso88599(value: string): Uint8Array {
 const XML_DECLARATION_ENCODING = /^\s*<\?xml[^>]*\bencoding\s*=\s*["']([A-Za-z0-9._-]+)["']/
 
 /** Decodes a response body with the charset its XML declaration announces (UTF-8 when there is none or it is unknown). */
-export function decodeXmlResponseText(response: HttpTransportResponse): string {
+export function decodeXmlResponseText(response: DecodableResponse): string {
   const head = Buffer.from(response.bytes.subarray(0, 200)).toString('latin1')
   const encoding = XML_DECLARATION_ENCODING.exec(head)?.[1]
   if (encoding === undefined || /^utf-?8$/i.test(encoding) || !iconv.encodingExists(encoding)) {

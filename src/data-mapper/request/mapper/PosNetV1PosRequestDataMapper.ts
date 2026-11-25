@@ -4,6 +4,7 @@ import type { PosNetPosAccount } from '../../../model/account/PosNetPosAccount.j
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
+import { optionalBankReference, requiredBankReference } from '../../../util/bankReference.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
@@ -128,7 +129,7 @@ export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosN
   }
 
   createNonSecurePostAuthPaymentRequestData(account: PosNetPosAccount, order: PosOrder): Record<string, unknown> {
-    const referenceCode = required(order, 'ref_ret_num')
+    const referenceCode = requiredBankReference(order, 'ref_ret_num')
     const amount = this.kurus(order)
     const installment = this.installment(order)
 
@@ -267,7 +268,8 @@ export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosN
 
   /** Cancel and refund share the lookup by the bank's reference code, or else by the padded order id. */
   private referenceRequest(account: PosNetPosAccount, order: PosOrder, lookupTxType: TxType): Record<string, unknown> {
-    const hasReference = isSet(order.ref_ret_num) && order.ref_ret_num !== ''
+    const reference = optionalBankReference(order, 'ref_ret_num')
+    const hasReference = reference !== null
     if (!hasReference && (!isSet(order.id) || order.id === '')) {
       throw new PosError('Order field "id" or "ref_ret_num" is required')
     }
@@ -283,7 +285,7 @@ export class PosNetV1PosRequestDataMapper extends AbstractRequestDataMapper<PosN
       DealerData: null,
       IsEncrypted: null,
       PaymentFacilitatorData: null,
-      ReferenceCode: hasReference ? order.ref_ret_num : null,
+      ReferenceCode: reference,
       OrderId: hasReference
         ? null
         : this.valueFormatter.formatOrderId(order.id as string, lookupTxType, this.paymentModel(order)),

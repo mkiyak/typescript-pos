@@ -277,6 +277,41 @@ describe('PayFlexCPV4PosRequestDataMapper', () => {
     })
   })
 
+  // addition: a non-string id is refused instead of being dropped silently (the query would then run on the other id)
+  describe('status ids of another type', () => {
+    it.each([
+      ['transaction_id', { transaction_id: 12345, payment_token: 'tok' }],
+      ['transaction_id', { transaction_id: { a: 1 }, payment_token: 'tok' }],
+      ['transaction_id', { transaction_id: ['a'], payment_token: 'tok' }],
+      ['payment_token', { transaction_id: 'abc', payment_token: 7 }],
+      ['payment_token', { transaction_id: 'abc', payment_token: true }],
+    ])('createStatusRequestData rejects a non-string %s', (field, order) => {
+      expect(() => mapper.createStatusRequestData(account, order as unknown as PosOrder)).toThrow(
+        new PosError(`Order field "${field}" must be a string`),
+      )
+    })
+
+    it('createStatusRequestData still ignores null and empty ids', () => {
+      expect(
+        mapper.createStatusRequestData(account, { transaction_id: null, payment_token: 'tok' } as unknown as PosOrder),
+      ).toStrictEqual({
+        HostMerchantId: '000000000111111',
+        MerchantId: '1',
+        Password: '3XTgER89as',
+        PaymentToken: 'tok',
+      })
+      expect(mapper.createStatusRequestData(account, { transaction_id: '', payment_token: 'tok' }).TransactionId).toBe(
+        undefined,
+      )
+    })
+
+    it('create3DPaymentStatusRequestData rejects a non-string callback id', () => {
+      expect(() => mapper.create3DPaymentStatusRequestData(account, { TransactionId: 5, PaymentToken: 'tok' })).toThrow(
+        new PosError('3D response field "TransactionId" must be a string'),
+      )
+    })
+  })
+
   describe('unsupported operations', () => {
     const order: PosOrder = { id: 'order222', amount: 1 }
 

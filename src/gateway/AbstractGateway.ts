@@ -603,12 +603,25 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
   }
 
   /**
-   * The card a browser form may carry. With `createWithoutCard` the payer types the card on the bank page, so a card
-   * the caller passed anyway is dropped here and never written into a form that reaches the browser.
+   * The card a browser form may carry. With `createWithoutCard`, and for the hosted models (`3d_host`,
+   * `3d_pay_hosting`), the payer types the card on the bank page, so a card the caller passed anyway is dropped here
+   * and never written into a form that reaches the browser.
    */
-  protected cardForForm(card: CreditCard | null, createWithoutCard: boolean): CreditCard | null {
-    if (createWithoutCard && card !== null) {
+  protected cardForForm(
+    card: CreditCard | null,
+    createWithoutCard: boolean,
+    paymentModel: PaymentModel,
+  ): CreditCard | null {
+    if (card === null) {
+      return null
+    }
+    if (createWithoutCard) {
       this.logger.debug('card ignored: createWithoutCard is set')
+
+      return null
+    }
+    if (paymentModel === MODEL.THREE_D_HOST || paymentModel === MODEL.THREE_D_PAY_HOSTING) {
+      this.logger.debug('card ignored: the bank page collects the card')
 
       return null
     }
