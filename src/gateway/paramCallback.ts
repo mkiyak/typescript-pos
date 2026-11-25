@@ -90,6 +90,8 @@ export type RecordCheck = {
   evidence: boolean
   failure: Mismatch | null
   unreadable: boolean
+  /** True when the failure is the record's transaction id differing from the one derived for the order. */
+  transactionIdFailed?: boolean
 }
 
 /** The values of the order an approved result is built from. */
@@ -324,7 +326,7 @@ export function paramRecordConfirms(answer: unknown, expected: RecordExpectation
     return closed(['order_id', expected.siparisId, siparisId])
   }
   if (expected.islemId !== undefined && text('Islem_ID') !== expected.islemId) {
-    return closed(['order_id', expected.islemId, text('Islem_ID')])
+    return { ...closed(['order_id', expected.islemId, text('Islem_ID')]), transactionIdFailed: true }
   }
   if (state !== RECORD_SUCCESS) {
     return closed(['order_status', RECORD_SUCCESS, state])

@@ -6,8 +6,10 @@ import type { QueryType } from './PosQueryInterface.js'
 
 /**
  * Queries of the Param TurkPos service. A custom query takes one SOAP action with its fields as a record; the
- * account's client code, API user, API password and merchant key are added to it, and an answer that echoes one of
- * them is returned with `***` in its place. History needs `start_date` and `end_date` (both are read as Türkiye
+ * account's client code, API user, API password and merchant key are added to it. The answer of a custom query has
+ * its credential fields (`GUID`, `CLIENT_PASSWORD`, `CLIENT_USERNAME`) replaced with `***`, and so has every text
+ * equal to the account's password or merchant key (such a secret of 8 or more characters also from inside longer
+ * text). The normalized answers (history, installments, BIN list) keep only the credential-field scrub in `all`. History needs `start_date` and `end_date` (both are read as Türkiye
  * time) and can be limited with `order_status` and `transaction_type`; it only reports records. Installment rates
  * take no parameter. The BIN list takes an optional `bin` of 6 or 8 digits. Installment prices are not offered.
  */

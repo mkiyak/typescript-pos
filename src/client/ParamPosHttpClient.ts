@@ -23,10 +23,20 @@ const SECRET_KEYS = new Set(['CLIENT_PASSWORD', 'GUID', 'CLIENT_USERNAME'])
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
+/**
+ * A request may carry further values to keep out of logs and error texts under this key (a symbol, so it is never
+ * serialised): the hosted page registration does not send the merchant key, yet a bank fault can echo it.
+ */
+export const PARAM_EXTRA_SECRETS: unique symbol = Symbol('paramExtraSecrets')
+
 /** The string values of the request's credential fields, at any depth. */
 function requestSecrets(value: unknown, depth = 0): string[] {
   if (depth > 8 || value === null || typeof value !== 'object') return []
   const found: string[] = []
+  if (depth === 0) {
+    const extra = (value as { [PARAM_EXTRA_SECRETS]?: unknown })[PARAM_EXTRA_SECRETS]
+    if (Array.isArray(extra)) found.push(...extra.filter((v): v is string => typeof v === 'string' && v !== ''))
+  }
   for (const [key, item] of Object.entries(value)) {
     if (SECRET_KEYS.has(key) && typeof item === 'string' && item !== '') found.push(item)
     else found.push(...requestSecrets(item, depth + 1))
@@ -73,8 +83,8 @@ export class ParamPosHttpClient extends AbstractHttpClient {
   }
 
   /**
-   * A non-2xx answer keeps the transport's `PosHttpError` (status included); when its masked body snippet holds a
-   * SOAP fault, the fault text is added to the message.
+   * A non-2xx answer keeps the transport's status; when its body snippet holds a SOAP fault, the fault text is added
+   * to the message. The original error is not chained: its snippet may hold this request's secrets in free text.
    */
   override async request(
     txType: ClientTxType,
@@ -89,11 +99,10 @@ export class ParamPosHttpClient extends AbstractHttpClient {
       if (e instanceof PosHttpError && e.status !== undefined && e.bodySnippet !== undefined) {
         const text = FAULT_STRING_IN_TEXT.exec(e.bodySnippet)?.[1]
         if (text !== undefined) {
-          throw new PosHttpError(
-            `${FAULT_PREFIX}${faultMessage(text, requestSecrets(requestData))}`,
-            { url: e.url, status: e.status },
-            { cause: e },
-          )
+          throw new PosHttpError(`${FAULT_PREFIX}${faultMessage(text, requestSecrets(requestData))}`, {
+            url: e.url,
+            status: e.status,
+          })
         }
       }
       if (e instanceof PosHttpError && e.message.startsWith(FAULT_PREFIX)) {
@@ -101,7 +110,6 @@ export class ParamPosHttpClient extends AbstractHttpClient {
         throw new PosHttpError(
           `${FAULT_PREFIX}${faultMessage(e.message.slice(FAULT_PREFIX.length), requestSecrets(requestData))}`,
           { url: e.url, ...(e.status !== undefined ? { status: e.status } : {}) },
-          { cause: e },
         )
       }
       throw e

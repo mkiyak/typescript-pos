@@ -8,7 +8,16 @@ import {
 } from '../../../errors.js'
 import type { ParamPosAccount } from '../../../model/account/ParamPosAccount.js'
 import type { CreditCard } from '../../../model/card/CreditCard.js'
-import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
+import {
+  CURRENCY,
+  type Currency,
+  LANG,
+  type Lang,
+  MODEL,
+  type PaymentModel,
+  TX_TYPE,
+  type TxType,
+} from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
@@ -219,7 +228,10 @@ export class Param3DHostPosRequestDataMapper extends AbstractRequestDataMapper<P
     if (typeof currency !== 'string') {
       throw new PosError('The order currency must be text.')
     }
-    return { code: String(this.valueMapper.mapCurrency(currency as never)), foreign: currency !== CURRENCY.TRY }
+    if (!isKnownCurrency(currency)) {
+      throw new PosError('The order currency is not one the bank supports.')
+    }
+    return { code: String(this.valueMapper.mapCurrency(currency)), foreign: currency !== CURRENCY.TRY }
   }
 
   private assertSale(txType: TxType): void {
@@ -228,6 +240,8 @@ export class Param3DHostPosRequestDataMapper extends AbstractRequestDataMapper<P
     }
   }
 }
+
+const isKnownCurrency = (value: string): value is Currency => (Object.values(CURRENCY) as string[]).includes(value)
 
 function secretsOf(account: ParamPosAccount): string[] {
   return [account.getPassword(), account.getSecretKey()]

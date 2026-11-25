@@ -186,7 +186,7 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
           ? this.valueFormatter.formatInstallment(installment, txType)
           : null
       mappedResponse.masked_number = ownDisplay(raw, 'TURKPOS_RETVAL_KK_No')
-      mappedResponse.transaction_time = this.time(time, txType)
+      mappedResponse.transaction_time = this.time(time, txType, 'transaction_time')
     }
     this.logResult('mapped 3D payment response', mappedResponse)
 
@@ -286,7 +286,7 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
     }
 
     const date = ownString(record, 'Tarih')
-    const transactionDate = this.time(date, txType)
+    const transactionDate = this.time(date, txType, 'status date')
     // The record carries the refunded total of the order, not a refund transaction: it has no refund time, and the
     // order status already says the order was refunded.
     if (result.order_status === PAYMENT_STATUS.CANCELED) {
@@ -362,13 +362,16 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
     return this.mergeArraysPreferNonNullValues(defaultResponse, mappedResponse) as PosResponse
   }
 
-  /** A bank time that cannot be read never hides a bank answer: the field stays null and a warning is logged. */
-  private time(value: string | null, txType: TxType): Date | null {
+  /**
+   * A bank time that cannot be read never hides a bank answer: the fields read from it stay null and a warning naming
+   * the field it came from is logged.
+   */
+  private time(value: string | null, txType: TxType, field: string): Date | null {
     if (value === null) return null
     try {
       return this.valueFormatter.formatDateTime(value, txType)
     } catch {
-      this.logger.warn('bank timestamp could not be parsed', { field: 'transaction_time' })
+      this.logger.warn('bank timestamp could not be parsed', { field })
 
       return null
     }

@@ -82,7 +82,11 @@ export abstract class AbstractHttpClient {
         error:
           secrets.length === 0 || !(e instanceof Error)
             ? e
-            : { name: e.name, message: hideSecrets(e.message, secrets) },
+            : {
+                name: e.name,
+                message: hideSecrets(e.message, secrets),
+                ...(e instanceof PosHttpError ? { url: hideSecrets(e.url, secrets), status: e.status } : {}),
+              },
         ...(e instanceof PosHttpError
           ? {
               status_code: e.status,
@@ -107,7 +111,7 @@ export abstract class AbstractHttpClient {
       const secrets = this.logSecrets(requestData)
       this.logger.error('parsing bank response failed', {
         status_code: response.status,
-        response: hideSecrets(maskSensitiveData(response.body), secrets).slice(0, 500),
+        response: maskSensitiveData(hideSecrets(response.body, secrets)).slice(0, 500),
         message: hideSecrets(e instanceof Error ? e.message : String(e), secrets),
       })
       if (e instanceof PosHttpError && e.url === '') {

@@ -763,6 +763,39 @@ describe('Param3DHostPos (end to end) 3D form', () => {
     expect(err).toBeInstanceOf(PosError)
     expect((err as Error).message).toBe('3D form could not be created: SOAP Güvenlik Hatası. ***')
   })
+
+  // addition: a 500 fault that echoes the merchant key, which the registration does not send, is masked everywhere
+  it('a 500 fault on the registration that echoes the merchant key is masked in the error and the logs', async () => {
+    const records: string[] = []
+    const record =
+      (level: string) =>
+      (...args: unknown[]) =>
+        records.push(JSON.stringify([level, ...args]))
+    const logger: PosLogger = {
+      debug: record('debug'),
+      info: record('info'),
+      warn: record('warn'),
+      error: record('error'),
+    }
+    const { sent, fetchImpl } = bankFetch({
+      answer: {
+        TO_Pre_Encrypting_OOS: () =>
+          new Response(soapFault(`Unknown merchant ${G} user ${USERNAME}`), {
+            status: 500,
+            headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+          }),
+      },
+    })
+    const err = await realGateway(fetchImpl, { logger })
+      .get3DFormData(formOrder(), MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH)
+      .catch((e: unknown) => e)
+
+    expect(sent[0]?.text).not.toContain(G)
+    expect(err).toBeInstanceOf(PosError)
+    expect(JSON.stringify([(err as Error).message, (err as PosError & { cause?: unknown }).cause])).not.toContain(G)
+    expect(records.join('\n')).not.toContain(G)
+    expect(records.join('\n')).toContain('***')
+  })
 })
 
 describe('Param3DHostPos (end to end) callbacks', () => {
@@ -846,16 +879,18 @@ describe('Param3DHostPos (end to end) callbacks', () => {
     expect(err.response?.order_id).toBe('order222')
   })
 
-  // addition: review fix, a record amount that cannot be read is no evidence (and never reaches the derivation)
+  // addition: a record that carries this order's own derived transaction id is evidence of its payment, whatever its
+  // amount reads like (the amount is not needed to derive the id again)
   it.each([['0.00'], ['0'], ['abc'], ['-1.00'], ['1.001']])(
-    'a record of this order with the amount %j raises no alert',
+    'a record of this order with the amount %j is flagged for review',
     async (amount) => {
       const err = await mismatch(
         run(CP1, ORDER, { records: { '20250119BACB': bankRecord({ Toplam_Tutar: amount }) } }).promise,
       )
       expect(err.field).toBe('amount')
-      expect(err.paymentMayHaveCompleted).toBe(false)
-      expect(err.response).toBeUndefined()
+      expect(err.paymentMayHaveCompleted).toBe(true)
+      expect(err.response?.requires_manual_review).toBe(true)
+      expect(err.response?.order_id).toBe('order222')
     },
   )
 
@@ -873,8 +908,8 @@ describe('Param3DHostPos (end to end) callbacks', () => {
 
   // addition: Review Focus forgeable callbacks, the record decides; evidence decides the flag
   it.each([
-    // review fix: a record amount the transaction id was not derived from is no evidence of this order's payment
-    ['Toplam_Tutar 1.01', { Toplam_Tutar: '1.01' }, 'amount', false],
+    // the record carries this order's own transaction id, so its payment is evidence whatever the amount reads like
+    ['Toplam_Tutar 1.01', { Toplam_Tutar: '1.01' }, 'amount', true],
     ['Dekont_ID 1', { Dekont_ID: '1' }, 'transaction_id', true],
     ['Toplam_Iade_Tutar 5.00', { Toplam_Iade_Tutar: '5.00' }, 'order_status', true],
     ['PRE_AUTH', { Islem_Tip: 'PRE_AUTH' }, 'transaction_type', true],

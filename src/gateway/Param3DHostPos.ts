@@ -1,5 +1,5 @@
 import type { AbstractHttpClient } from '../client/AbstractHttpClient.js'
-import { ParamPosHttpClient } from '../client/ParamPosHttpClient.js'
+import { PARAM_EXTRA_SECRETS, ParamPosHttpClient } from '../client/ParamPosHttpClient.js'
 import { orderValue, readOrderId } from '../data-mapper/request/mapper/paramRequestFields.js'
 import { isRecord, ownString } from '../data-mapper/response/mapper/paramResponseFields.js'
 import { TX_APPROVED, TX_DECLINED } from '../data-mapper/response/mapper/ResponseDataMapperInterface.js'
@@ -191,7 +191,11 @@ export class Param3DHostPos extends AbstractGateway<ParamPosAccount> {
       order,
       paymentModel,
     )
-    const answer = await this.sendRequest(requestTxType, paymentModel, requestData, order)
+    // The registration does not send the merchant key; a fault that echoes it is still masked (the hidden property
+    // is neither enumerable nor serialised).
+    const sendable = { ...requestData }
+    Object.defineProperty(sendable, PARAM_EXTRA_SECRETS, { value: [this.account.getSecretKey()] })
+    const answer = await this.sendRequest(requestTxType, paymentModel, sendable, order)
 
     return this.requestDataMapper.create3DFormData(
       this.account,
@@ -370,14 +374,14 @@ export class Param3DHostPos extends AbstractGateway<ParamPosAccount> {
     }
     if (check.failure !== null) {
       let [field, wanted, actual] = check.failure
-      const islemIdFailed = field === 'order_id' && wanted === islemId
+      const islemIdFailed = check.transactionIdFailed === true
       if (islemIdFailed) {
         wanted = 'the transaction id of this order'
       }
       // The record shows a payment, but it is evidence for this order only when its transaction id was derived from
       // this order (at the record's amount, in one of the bank's currencies): the bank's order id comes from the
       // callback, which anyone who has seen one callback can sign.
-      const registered = check.evidence ? this.registrationOf(check.record, expected) : null
+      const registered = check.evidence ? this.registrationOf(check.record, expected, islemId) : null
       if (registered !== null) {
         if (islemIdFailed && registered.currency !== expected.currency) {
           ;[field, wanted, actual] = ['currency', expected.currency, registered.currency]
@@ -403,9 +407,16 @@ export class Param3DHostPos extends AbstractGateway<ParamPosAccount> {
   /**
    * The currency a status record was registered for by this order, when its transaction id is the one derived from
    * this order's id, the record's amount and a currency the bank knows (the order's first); null otherwise, also when
-   * the record's amount cannot be read.
+   * the record's amount cannot be read. A record carrying exactly this order's own derived id is registered for it
+   * whatever its amount reads like.
    */
-  private registrationOf(record: Record<string, unknown>, expected: OrderExpectations): { currency: string } | null {
+  private registrationOf(
+    record: Record<string, unknown>,
+    expected: OrderExpectations,
+    ownId: string,
+  ): { currency: string } | null {
+    if (ownString(record, 'Islem_ID') === ownId) return { currency: expected.currency }
+
     const kurus = amountKurus(ownString(record, 'Toplam_Tutar'), 'dot')
     const islemId = ownString(record, 'Islem_ID')
     if (kurus === null || kurus <= 0 || !Number.isSafeInteger(kurus) || islemId === null) return null

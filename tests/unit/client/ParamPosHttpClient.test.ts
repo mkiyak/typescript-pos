@@ -1,7 +1,7 @@
 import iconv from 'iconv-lite'
 import { describe, expect, it } from 'vitest'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
-import { ParamPosHttpClient } from '../../../src/client/ParamPosHttpClient.js'
+import { PARAM_EXTRA_SECRETS, ParamPosHttpClient } from '../../../src/client/ParamPosHttpClient.js'
 import { PosHttpError } from '../../../src/errors.js'
 import type { PosLogger } from '../../../src/logger.js'
 import { MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../src/PosInterface.js'
@@ -47,6 +47,7 @@ describe('ParamPosHttpClient', () => {
     expect(ParamPosHttpClient.supports('AkbankPos', 'payment_api')).toBe(false)
     // addition: only the payment API belongs to this client
     expect(ParamPosHttpClient.supports('ParamPos', 'query_api')).toBe(false)
+    expect(ParamPosHttpClient.supports('Param3DHostPos', 'query_api')).toBe(false)
   })
 
   it('supportsTx', () => {
@@ -249,5 +250,55 @@ describe('ParamPosHttpClient', () => {
     // the masking is visible, not just a missing text
     expect(text).toContain('***')
     expect(logged.length).toBeGreaterThan(0)
+  })
+
+  // addition: a password that looks like a card number is hidden as a secret, not first cut down to a masked card number
+  it('hides a card-shaped password completely in the log lines', async () => {
+    const password = '12345678901234567'
+    const logged: string[] = []
+    const record = (m: string, c: unknown): number => logged.push(JSON.stringify([m, c]))
+    const logger: PosLogger = { debug: record, info: record, warn: record, error: record }
+    const data = { G: { CLIENT_CODE: '10738', CLIENT_USERNAME: 'Test1', CLIENT_PASSWORD: password }, GUID }
+    await call(createClient(fakeFetch([], `<html>blocked ${password} here</html>`, 200), logger), data).catch((e) => e)
+    const text = logged.join('\n')
+    expect(text).toContain('parsing bank response failed')
+    // the card-number mask would keep the first six and last four digits
+    expect(text).not.toContain(password.slice(0, 6))
+    expect(text).not.toContain(password.slice(-4))
+  })
+
+  // addition: a failing request keeps where and how it failed in the log line, with the secrets hidden
+  it('logs the url and status of a failed request', async () => {
+    const logged: Array<[string, Record<string, unknown>]> = []
+    const record = (m: string, c?: Record<string, unknown>): number => logged.push([m, c ?? {}])
+    const logger: PosLogger = { debug() {}, info() {}, warn() {}, error: record }
+    const data = { G: { CLIENT_CODE: '10738', CLIENT_USERNAME: 'Test1', CLIENT_PASSWORD: 'Test2' }, GUID }
+    await call(createClient(fakeFetch([], fault('<faultstring>x Test2</faultstring>'), 500), logger), data).catch(
+      (e) => e,
+    )
+    const line = logged.find(([m]) => m === 'api request failed')
+    expect(line).toBeDefined()
+    const error = line?.[1].error as Record<string, unknown>
+    expect(error.url).toBe(API_URL)
+    expect(error.status).toBe(500)
+    expect(JSON.stringify(line)).not.toContain('Test2')
+  })
+
+  // addition: the hosted page registration does not carry the merchant key, a fault echoing it is still masked
+  it('masks the merchant key a fault echoes although the request did not carry it', async () => {
+    const logged: string[] = []
+    const record = (m: string, c: unknown): number => logged.push(JSON.stringify([m, c]))
+    const logger: PosLogger = { debug: record, info: record, warn: record, error: record }
+    const data = {
+      'soap:Header': {
+        ServiceSecuritySoapHeader: { CLIENT_CODE: '10738', CLIENT_USERNAME: 'Test1', CLIENT_PASSWORD: 'Test2' },
+      },
+      [PARAM_EXTRA_SECRETS]: [GUID],
+    }
+    const body = fault(`<faultstring>unknown key ${GUID} for Test1</faultstring>`)
+    const error = await call(createClient(fakeFetch([], body, 500), logger), data).catch((e) => e)
+    expect(error).toBeInstanceOf(PosHttpError)
+    expect(error.message).toBe('Bank SOAP fault: unknown key *** for ***')
+    expect(logged.join('\n')).not.toContain(GUID)
   })
 })

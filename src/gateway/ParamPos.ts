@@ -79,6 +79,7 @@ type Approval = {
 }
 
 const UNKNOWN_OUTCOME = 'Bank answer carries no result code; the payment outcome is unknown'
+const CONTRADICTORY_OUTCOME = 'Bank answer reports a failure but carries a receipt; the payment outcome is unknown'
 const UNKNOWN_CANCEL_OUTCOME = 'Bank answer carries no result; the outcome is unknown'
 const UNKNOWN_STATUS_OUTCOME = 'Bank status answer could not be read; the payment outcome is unknown'
 
@@ -127,18 +128,19 @@ function own(data: Record<string, unknown>, key: string): unknown {
  * - A card check with 3D result `1` is provisioned with one request (no provision on any other 3D result, so a payment
  *   approved although 3D Secure failed cannot occur on this path). An answer without a result code, with a success
  *   code but no receipt, or with a failure code and a receipt, is a `PosHttpError` naming the URL: the outcome is
- *   unknown, so it is never a decline a merchant could retry. A declined provision is returned as the bank's decline for this order. An approved one must
- *   name this order (otherwise `OrderMismatchError` with the result attached and flagged for manual review).
+ *   unknown, so it is never a decline a merchant could retry. A declined provision is returned as the bank's decline
+ *   for this order. An approved one must name this order (otherwise `OrderMismatchError` with the result attached
+ *   and flagged for manual review).
  * - Every approval (provisioned card check, 3D Pay, foreign currency) is confirmed with exactly one status request for
  *   the order id before it is returned. The bank's record must show a successful payment of this order with the
  *   reported receipt, of the transaction type (`SALE`, or `PRE_AUTH` for `pre`), the order amount in exact kuruş,
  *   nothing refunded and the order's installment count (one counting as none); it carries no currency. A record that
  *   does not confirm (a failure code, a list of records, or a record that differs) is an `OrderMismatchError`; a
  *   status answer that cannot be read (empty, no result, no integer result code, a success code without a record) is a
- *   `PosHttpError` naming the URL, since the payment may have completed. The result is attached and flagged for manual review only when the
- *   bank shows money moved (an approved provision, or a record of a successful payment of this order with a
- *   receipt): a payment result callback anyone could forge raises no alert by itself. Errors of the status request
- *   propagate (the payment may have completed: query `status` before retrying).
+ *   `PosHttpError` naming the URL, since the payment may have completed. The result is attached and flagged for
+ *   manual review only when the bank shows money moved (an approved provision, or a record of a successful payment
+ *   of this order with a receipt): a payment result callback anyone could forge raises no alert by itself. Errors of
+ *   the status request propagate (the payment may have completed: query `status` before retrying).
  * - A confirmed result takes its order id, amount and currency from the order and its authorization code, host
  *   reference, transaction id, card mask, installment count and time from the bank's record, never from the callback.
  *   The echoed GUID never appears in returned data or attached results.
@@ -501,7 +503,7 @@ export class ParamPos extends AbstractGateway<ParamPosAccount> {
 
     // A failure code with a receipt contradicts itself as well.
     if (code <= 0 && POS_INT.test(dekont)) {
-      this.unknownOutcome(client, txType, paymentModel, expected.orderId)
+      this.unknownOutcome(client, txType, paymentModel, expected.orderId, CONTRADICTORY_OUTCOME)
     }
 
     const mapped = this.responseDataMapper.map3DPaymentData(callback, answer, txType, order)
@@ -678,9 +680,10 @@ export class ParamPos extends AbstractGateway<ParamPosAccount> {
     txType: TxType,
     paymentModel: PaymentModel,
     orderId: string,
+    message: string = UNKNOWN_OUTCOME,
   ): never {
-    this.logger.error('bank answer carries no result code', { order_id: echo(orderId), tx_type: txType })
-    throw new PosHttpError(UNKNOWN_OUTCOME, { url: this.requestUrl(client, txType, paymentModel) })
+    this.logger.error('bank answer leaves the payment outcome unknown', { order_id: echo(orderId), tx_type: txType })
+    throw new PosHttpError(message, { url: this.requestUrl(client, txType, paymentModel) })
   }
 
   /** The URL a request was posted to. */

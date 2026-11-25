@@ -37,7 +37,8 @@ const STRICT_DECIMAL = /^-?\d{1,6}(?:\.\d{1,6})?$/
 const MIN_SUBSTRING_SECRET = 8
 
 /**
- * A copy of `value` in which credential fields and values equal to one of `secrets` are replaced with `***`. The
+ * A copy of `value` in which credential fields and values equal to one of `secrets` are replaced with `***`. A secret
+ * of at least 8 characters is also removed from inside longer text; a shorter one only when a value equals it. The
  * value itself is returned when nothing had to be replaced, so an untouched answer stays the same object.
  */
 export function redactEchoedCredentials(value: unknown, secrets: readonly string[] = [], depth = 0): unknown {
@@ -117,7 +118,9 @@ function dataSetRows(result: Raw | null, table: string): Raw[] {
  * Values that are not the expected kind (lists, records, malformed numbers) read as absent and are dropped, with a
  * log line that names the field and never its value; they never become "[object Object]". An answer that cannot be
  * read maps to a declined result, never to an error. History lists records only: whatever its result says, it is a
- * report, not a confirmation of any payment. A credential the bank echoes in an answer is returned as `***`.
+ * report, not a confirmation of any payment. The raw answer kept in `all` has its credential fields (`GUID`,
+ * `CLIENT_PASSWORD`, `CLIENT_USERNAME`) replaced with `***`; scrubbing values (text equal to the account's password
+ * or merchant key) is done by `ParamPosQuery.customQuery`, which knows the account.
  */
 export class ParamPosQueryResponseDataMapper extends AbstractQueryResponseDataMapper {
   static supports(gatewayClass: string): boolean {
@@ -254,8 +257,9 @@ export class ParamPosQueryResponseDataMapper extends AbstractQueryResponseDataMa
         transaction.capture = true
         transaction.capture_time = time
       } else if (transaction.transaction_type === 'cancel' && this.isNegative(ownDisplay(row, 'Tutar'))) {
-        // the cancelled sale's own amount is on its sale record; a cancel record names none
-        transaction.refund_amount = transaction.first_amount
+        // A cancel record names no amount of its own (the cancelled sale's amount is on its sale record), so the key
+        // is present and null; only the refunded total below can fill it.
+        transaction.refund_amount = null
       }
 
       const refunded = this.amount(ownDisplay(row, 'Toplam_Iade_Tutar'), 'Toplam_Iade_Tutar')

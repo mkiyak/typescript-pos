@@ -757,7 +757,7 @@ describe('ParamPosResponseDataMapper', () => {
         expect(actual.order_id).toBe('20250105E324')
         expect(actual.transaction_time).toBeNull()
         expect(actual.capture_time).toBeNull()
-        expect(warnings).toStrictEqual([['bank timestamp could not be parsed', { field: 'transaction_time' }]])
+        expect(warnings).toStrictEqual([['bank timestamp could not be parsed', { field: 'status date' }]])
       })
 
       it('a missing Tarih leaves the times null', () => {

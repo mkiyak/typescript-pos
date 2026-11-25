@@ -1491,7 +1491,10 @@ describe('ParamPos (end to end) 3D Secure', () => {
     })
     const err = await promise.catch((e: unknown) => e)
     expect(err).toBeInstanceOf(PosHttpError)
-    expect((err as PosHttpError).message).toBe(UNKNOWN_OUTCOME)
+    expect((err as PosHttpError).message).toBe(
+      // deviation: the contradiction is named instead of reporting a missing result code
+      'Bank answer reports a failure but carries a receipt; the payment outcome is unknown',
+    )
     expect(sent).toHaveLength(1)
   })
 

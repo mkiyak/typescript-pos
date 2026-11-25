@@ -254,6 +254,7 @@ describe('ParamPosQueryResponseDataMapper', () => {
         ['too many decimals', '1.1234567'],
         ['a number', 6.62],
         ['a boolean', true],
+        // deviation: an empty rate text is dropped like any unreadable value (it is not read as a zero rate)
         ['empty text', ''],
       ])('drops an installment whose rate is %s', (_name, value) => {
         const result = rates(ratesAnswer(rateRow({ MO_03: value })))
