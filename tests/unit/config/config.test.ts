@@ -9,6 +9,7 @@ import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { InterPos } from '../../../src/gateway/InterPos.js'
 import { KuveytPos } from '../../../src/gateway/KuveytPos.js'
+import { Param3DHostPos } from '../../../src/gateway/Param3DHostPos.js'
 import { ParamPos } from '../../../src/gateway/ParamPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
@@ -27,6 +28,7 @@ const accountFor = (gatewayClass: string, key: string) => {
     return AccountFactory.createBoaPosAccount(key, 'm', 'u', 'c', 'k')
   if (gatewayClass === 'ToslaPos') return AccountFactory.createToslaPosAccount(key, '1', 'u', 'p')
   if (gatewayClass === 'ParamPos') return AccountFactory.createParamPosAccount(key, '1', 'u', 'p', 'g')
+  if (gatewayClass === 'Param3DHostPos') return AccountFactory.createParamPosAccount(key, '1', 'u', 'p', 'g', 't')
   if (gatewayClass === 'PayForPos') return AccountFactory.createPayForPosAccount(key, 'm', 'u', 'p', 'k')
   if (gatewayClass === 'PosNetPos' || gatewayClass === 'PosNetV1Pos')
     return AccountFactory.createPosNetPosAccount(key, 'm', 't', 'p', 'k')
@@ -38,7 +40,7 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos and ParamPos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos and Param3DHostPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
       expect([
@@ -55,6 +57,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         'VakifKatilimPos',
         'ToslaPos',
         'ParamPos',
+        'Param3DHostPos',
       ]).toContain(bank.class)
     }
   })
@@ -76,6 +79,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
       VakifKatilimPos,
       ToslaPos,
       ParamPos,
+      Param3DHostPos,
     }[
       bank.class as
         | 'AssecoPos'
@@ -91,6 +95,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         | 'VakifKatilimPos'
         | 'ToslaPos'
         | 'ParamPos'
+        | 'Param3DHostPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -510,6 +515,49 @@ describe('ParamPos endpoints', () => {
       expect(param).not.toHaveProperty('lang')
       expect(param).not.toHaveProperty('test_mode')
       expect(param).not.toHaveProperty('require_3d_hash')
+    }
+  })
+})
+
+// addition: H6 shipped Param3DHostPos entries (the hosted page endpoints plus the TurkPos query endpoint)
+describe('Param3DHostPos endpoints', () => {
+  it('production and test entries', () => {
+    expect(posProductionConfig.banks['param-3d-host-pos']).toStrictEqual({
+      name: 'Param 3D Host',
+      class: 'Param3DHostPos',
+      gateway_endpoints: {
+        payment_api: 'https://pos.param.com.tr/Tahsilat/to.ws/Service_Odeme.asmx',
+        gateway_3d_host: 'https://pos.param.com.tr/Tahsilat/Default.aspx',
+        query_api: 'https://posws.param.com.tr/turkpos.ws/service_turkpos_prod.asmx',
+      },
+    })
+    expect(posTestConfig.banks['param-3d-host-pos']).toStrictEqual({
+      name: 'Param 3D Host',
+      class: 'Param3DHostPos',
+      gateway_endpoints: {
+        payment_api: 'https://test-pos.param.com.tr/to.ws/Service_Odeme.asmx',
+        gateway_3d_host: 'https://test-pos.param.com.tr/default.aspx',
+        query_api: 'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx',
+      },
+    })
+  })
+
+  it('the query endpoint is the TurkPos service of the ParamPos entry of the same environment', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      expect(cfg.banks['param-3d-host-pos'].gateway_endpoints.query_api).toBe(
+        cfg.banks['param-pos'].gateway_endpoints.payment_api,
+      )
+    }
+  })
+
+  it('both entries are deeply frozen and carry no lang, test_mode or hash-check switch', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      const host = cfg.banks['param-3d-host-pos']
+      expect(Object.isFrozen(host)).toBe(true)
+      expect(Object.isFrozen(host.gateway_endpoints)).toBe(true)
+      expect(host).not.toHaveProperty('lang')
+      expect(host).not.toHaveProperty('test_mode')
+      expect(host).not.toHaveProperty('require_3d_hash')
     }
   })
 })

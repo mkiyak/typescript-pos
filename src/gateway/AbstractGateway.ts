@@ -98,6 +98,14 @@ export type GatewayConfig = {
    * or receipt number is above zero, is always rejected. A present hash is always verified. The payment result
    * callback carries the merchant GUID it is signed with, so a valid signature proves nothing by itself: every
    * approval is confirmed with the bank's status record (after the provision, for the card check).
+   *
+   * Param3DHostPos: reject a hosted page callback that carries no `TURKPOS_RETVAL_Hash` (`HashMismatchError`),
+   * declines included. Default false: without it an unsigned callback is accepted only as a decline whose result
+   * carries the order's id and bounded decline reasons (nothing is confirmed or flagged for review); an unsigned
+   * callback whose result code or receipt number is above zero is always rejected. A present hash is always verified.
+   * The callback carries the merchant GUID it is signed with, so a valid signature proves nothing by itself: every
+   * approval is confirmed with the bank's status record (TurkPos `query_api`), which must hold the transaction id
+   * derived from this order, amount and currency.
    */
   require_3d_hash?: boolean
 }

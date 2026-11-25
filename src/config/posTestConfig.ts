@@ -11,6 +11,7 @@ export type PosTestBank =
   | 'vakif-katilim'
   | 'tosla'
   | 'param-pos'
+  | 'param-3d-host-pos'
   | 'vakifbank'
   | 'vakifbank-cp'
   | 'yapikredi'
@@ -19,7 +20,7 @@ export type PosTestBank =
   | 'ziraat-vpos'
 
 /**
- * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos and ParamPos banks (the VakifBank test API
+ * Test endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos and Param3DHostPos banks (the VakifBank test API
  * gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). `test_mode` only changes request data for gateways that support it (not AkbankPos: its entry sets neither `test_mode` nor `lang`, the language comes from `order.lang`); for the
  * Asseco and PayFlex gateways the environment is selected by the endpoint URLs. The `garanti` entry sets `test_mode: true`
  * because the Garanti test environment needs `Mode TEST` in every request.
@@ -97,6 +98,16 @@ export const posTestConfig: ShippedPosConfig<PosTestBank> = freezeConfig({
       class: 'ParamPos',
       gateway_endpoints: {
         payment_api: 'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx',
+      },
+    },
+    'param-3d-host-pos': {
+      name: 'Param 3D Host',
+      class: 'Param3DHostPos',
+      gateway_endpoints: {
+        payment_api: 'https://test-pos.param.com.tr/to.ws/Service_Odeme.asmx',
+        gateway_3d_host: 'https://test-pos.param.com.tr/default.aspx',
+        // the TurkPos service that confirms every hosted approval from the bank's status record
+        query_api: 'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx',
       },
     },
     'vakif-katilim': {

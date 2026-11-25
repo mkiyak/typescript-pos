@@ -67,6 +67,7 @@ describe('public index', () => {
         'VakifKatilimPos',
         'ToslaPos',
         'ParamPos',
+        'Param3DHostPos',
         'BoaPosAccount',
         'ToslaPosAccount',
         'ParamPosAccount',
@@ -172,6 +173,19 @@ describe('public index', () => {
   it('PosFactory creates the ParamPos gateway from the shipped test config', () => {
     const account = mod.AccountFactory.createParamPosAccount('param-pos', '10738', 'Test1', 'Test2', 'guid')
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.ParamPos)
+  })
+
+  // addition: the Param3DHostPos gateway is reachable from the public entry point
+  it('PosFactory creates the Param3DHostPos gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createParamPosAccount(
+      'param-3d-host-pos',
+      '10738',
+      'Test1',
+      'Test2',
+      'g',
+      '99001',
+    )
+    expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.Param3DHostPos)
   })
 
   // addition: the VakifKatilimPos gateway is reachable from the public entry point

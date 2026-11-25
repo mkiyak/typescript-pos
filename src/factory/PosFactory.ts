@@ -16,6 +16,7 @@ import { AssecoPosRequestDataMapper } from '../data-mapper/request/mapper/Asseco
 import { GarantiPosRequestDataMapper } from '../data-mapper/request/mapper/GarantiPosRequestDataMapper.js'
 import { InterPosRequestDataMapper } from '../data-mapper/request/mapper/InterPosRequestDataMapper.js'
 import { KuveytPosRequestDataMapper } from '../data-mapper/request/mapper/KuveytPosRequestDataMapper.js'
+import { Param3DHostPosRequestDataMapper } from '../data-mapper/request/mapper/Param3DHostPosRequestDataMapper.js'
 import { ParamPosRequestDataMapper } from '../data-mapper/request/mapper/ParamPosRequestDataMapper.js'
 import { PayFlexCPV4PosRequestDataMapper } from '../data-mapper/request/mapper/PayFlexCPV4PosRequestDataMapper.js'
 import { PayFlexV4PosRequestDataMapper } from '../data-mapper/request/mapper/PayFlexV4PosRequestDataMapper.js'
@@ -91,6 +92,7 @@ import { AssecoPos } from '../gateway/AssecoPos.js'
 import { GarantiPos } from '../gateway/GarantiPos.js'
 import { InterPos } from '../gateway/InterPos.js'
 import { KuveytPos } from '../gateway/KuveytPos.js'
+import { Param3DHostPos } from '../gateway/Param3DHostPos.js'
 import { ParamPos } from '../gateway/ParamPos.js'
 import { PayFlexCPV4Pos } from '../gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../gateway/PayFlexV4Pos.js'
@@ -132,7 +134,7 @@ export type PosFactoryOptions = {
 }
 
 /**
- * Builds AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos and ParamPos gateways: the gateway class is picked by `GatewayConfig.class` and wired with its crypt, mappers and HTTP clients.
+ * Builds AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos, ParamPos and Param3DHostPos gateways: the gateway class is picked by `GatewayConfig.class` and wired with its crypt, mappers and HTTP clients.
  */
 export const PosFactory = {
   /**
@@ -182,6 +184,8 @@ export const PosFactory = {
         return createToslaPos(account, gatewayConfig, transport, logger, hooks)
       case ParamPos.GATEWAY_CLASS:
         return createParamPos(account, gatewayConfig, transport, logger, hooks)
+      case Param3DHostPos.GATEWAY_CLASS:
+        return createParam3DHostPos(account, gatewayConfig, transport, logger, hooks)
       default:
         throw new GatewayClassNotConfiguredError(
           `Gateway class [${bankConfig.class}] of bank [${bankName}] is not supported.`,
@@ -719,6 +723,50 @@ function createParamPos(
     ),
     crypt,
     clientStrategy: PosHttpClientStrategyFactory.createForGateway(ParamPos.GATEWAY_CLASS, config, transport, logger),
+    logger,
+    hooks,
+  })
+}
+
+function createParam3DHostPos(
+  account: AbstractPosAccount,
+  config: GatewayConfig,
+  transport: HttpTransport,
+  logger: PosLogger,
+  hooks: PosHooks,
+): Param3DHostPos {
+  if (!(account instanceof ParamPosAccount)) {
+    throw new PosError(`Bank [${account.getBankName()}] is configured for Param3DHostPos and needs a ParamPosAccount.`)
+  }
+  // The hosted page registration names the terminal: an account without one fails here, not at the first payment.
+  account.getTerminalId()
+
+  const crypt = new ParamPosCrypt(logger)
+  const requestValueMapper = new ParamPosRequestValueMapper()
+  const requestValueFormatter = new ParamPosRequestValueFormatter()
+
+  return new Param3DHostPos(config, account, {
+    requestValueMapper,
+    requestValueFormatter,
+    requestDataMapper: new Param3DHostPosRequestDataMapper(
+      requestValueMapper,
+      requestValueFormatter,
+      hooks,
+      crypt,
+      config.lang ?? LANG.TR,
+    ),
+    responseDataMapper: new ParamPosResponseDataMapper(
+      new ParamPosResponseValueFormatter(),
+      new ParamPosResponseValueMapper(),
+      logger,
+    ),
+    crypt,
+    clientStrategy: PosHttpClientStrategyFactory.createForGateway(
+      Param3DHostPos.GATEWAY_CLASS,
+      config,
+      transport,
+      logger,
+    ),
     logger,
     hooks,
   })

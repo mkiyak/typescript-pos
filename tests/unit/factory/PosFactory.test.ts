@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { HttpTransport } from '../../../src/client/HttpTransport.js'
 import { posTestConfig } from '../../../src/config/posTestConfig.js'
-import { GatewayClassNotConfiguredError, PosError } from '../../../src/errors.js'
+import { GatewayClassNotConfiguredError, MissingAccountInfoError, PosError } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
 import { type PosConfig, PosFactory } from '../../../src/factory/PosFactory.js'
 import type { AbstractGateway, GatewayConfig } from '../../../src/gateway/AbstractGateway.js'
@@ -11,6 +11,7 @@ import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { InterPos } from '../../../src/gateway/InterPos.js'
 import { KuveytPos } from '../../../src/gateway/KuveytPos.js'
+import { Param3DHostPos } from '../../../src/gateway/Param3DHostPos.js'
 import { ParamPos } from '../../../src/gateway/ParamPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
@@ -336,6 +337,75 @@ describe('PosFactory.createPosGateway', () => {
     expect(urls).toStrictEqual(['https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx'])
   })
 
+  it('creates the param-3d-host-pos Param3DHostPos gateway from the shipped test config', () => {
+    const account = AccountFactory.createParamPosAccount(
+      'param-3d-host-pos',
+      '10738',
+      'Test1',
+      'Test2',
+      '0c13d406-873b-403b-9c09-a5766840d98c',
+      '99001',
+    )
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(Param3DHostPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(gateway.getCardTypeMapping()).toStrictEqual({})
+  })
+
+  // addition: H1 the hosted page needs the terminal id; it fails at construction
+  it('rejects a Param account without terminal id for a Param3DHostPos bank', () => {
+    const account = AccountFactory.createParamPosAccount('param-3d-host-pos', '10738', 'Test1', 'Test2', 'g')
+    expect(() => PosFactory.createPosGateway(account, posTestConfig)).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-Param account for a Param3DHostPos bank', () => {
+    const wrong = AccountFactory.createToslaPosAccount('param-3d-host-pos', '1', 'u', 'p')
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
+      'Bank [param-3d-host-pos] is configured for Param3DHostPos and needs a ParamPosAccount.',
+    )
+  })
+
+  // addition: H4/H6 the registration goes to the hosted page service, the confirmation to the TurkPos service
+  it('sends the Param3DHostPos registration and confirmation to the shipped endpoints', async () => {
+    const urls: string[] = []
+    const fetchImpl = (async (url: unknown) => {
+      urls.push(String(url))
+      return new Response(
+        String(url).includes('turkpos.ws')
+          ? '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><TP_Islem_Sorgulama4Response><TP_Islem_Sorgulama4Result><Sonuc>-1</Sonuc></TP_Islem_Sorgulama4Result></TP_Islem_Sorgulama4Response></soap:Body></soap:Envelope>'
+          : '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><TO_Pre_Encrypting_OOSResponse><TO_Pre_Encrypting_OOSResult>QUJD</TO_Pre_Encrypting_OOSResult></TO_Pre_Encrypting_OOSResponse></soap:Body></soap:Envelope>',
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+    const guid = '0c13d406-873b-403b-9c09-a5766840d98c'
+    const account = AccountFactory.createParamPosAccount('param-3d-host-pos', '10738', 'Test1', 'Test2', guid, '99001')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    const order: PosOrder = { id: 'order222', amount: 10.01, success_url: 'https://domain.com/success' }
+    const form = await gateway.get3DFormData(order, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH)
+    expect(form).toStrictEqual({
+      gateway: 'https://test-pos.param.com.tr/default.aspx',
+      method: 'GET',
+      inputs: { s: 'QUJD' },
+    })
+    const callback = {
+      TURKPOS_RETVAL_Sonuc: '1',
+      TURKPOS_RETVAL_Dekont_ID: '3007300695',
+      TURKPOS_RETVAL_Tahsilat_Tutari: '10,01',
+      TURKPOS_RETVAL_Siparis_ID: '20250119BACB',
+      TURKPOS_RETVAL_Islem_ID: '1944A39AD0AEA92E173D665B',
+      TURKPOS_RETVAL_Hash: 'LOpkL9J8vne8E2j0A0HKOhUWGhI=',
+    }
+    await expect(gateway.payment(MODEL.THREE_D_HOST, order, TX_TYPE.PAY_AUTH, null, callback)).rejects.toThrow(
+      'Callback order_status mismatch',
+    )
+    expect(urls).toStrictEqual([
+      'https://test-pos.param.com.tr/to.ws/Service_Odeme.asmx',
+      'https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx',
+    ])
+  })
+
   // addition: T18 status goes to the Tosla inquiry path, with a request hash and without the API password
   it('sends a ToslaPos status to inquiry', async () => {
     const calls: { url: string; body: string }[] = []
@@ -638,6 +708,7 @@ describe('PosFactory.createPosGateway', () => {
       VakifKatilimPos: (bank: string) => AccountFactory.createBoaPosAccount(bank, '1', 'u', '2', 'p'),
       ToslaPos: (bank: string) => AccountFactory.createToslaPosAccount(bank, '1', 'u', 'p'),
       ParamPos: (bank: string) => AccountFactory.createParamPosAccount(bank, '1', 'u', 'p', 'g'),
+      Param3DHostPos: (bank: string) => AccountFactory.createParamPosAccount(bank, '1', 'u', 'p', 'g', 't'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)
