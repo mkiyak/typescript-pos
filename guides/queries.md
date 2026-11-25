@@ -271,8 +271,9 @@ const bins = await query.getBinList({ bin: '554960' })
 
 A custom query goes to one iyzico endpoint, so `apiUrl` is required (on the API origin); the library signs the request
 for you and the answer is the decoded JSON, not normalized. iyzico offers no installment rates through this class
-(`getInstallmentRates` rejects with `UnsupportedTransactionTypeError`). A request iyzico refuses gives
-`status: 'declined'` with its message in `error_message`; the raw answer is always in `all`.
+(`getInstallmentRates` rejects with `UnsupportedTransactionTypeError`). A query iyzico refuses with
+HTTP 200 gives `status: 'declined'` with its message in `error_message`; the raw answer is always in `all`. A refusal
+with an HTTP 4xx throws `PosHttpError`.
 
 History rows are **report-only**: a row's status never confirms a payment. Payments are confirmed by the signed answers
 of the gateway (see the [iyzico guide](https://github.com/mkiyak/typescript-pos/blob/main/guides/iyzico-payment.md));

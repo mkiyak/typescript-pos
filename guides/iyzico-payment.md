@@ -103,8 +103,11 @@ basket id. Any other signed callback is a decline and nothing is sent. A callbac
 
 ## Results and errors
 
-Every approval comes from an iyzico-signed answer that is bound to your order: conversation id, basket id, payment id,
-currency, amount and phase (`AUTH`, `PRE_AUTH`, `POST_AUTH`). An unsigned or unverifiable approval is never returned.
+Every payment approval (sale, authorization, capture and the 3D Host checkout record) comes from an iyzico-signed answer
+that is bound to your order: conversation id, basket id, payment id, currency, amount and phase (`AUTH`, `PRE_AUTH`,
+`POST_AUTH`). An unsigned or unverifiable payment approval is never returned. A refund answer is signed too and is bound
+to the payment id and the refunded amount. Cancel answers are unsigned: only the conversation id and the payment id are
+checked, when the answer carries them.
 
 - `approved`: the money is taken (or held, for a pre-authorization).
 - `declined`: iyzico refused it. A decline carries your own order id and iyzico's bounded code and text.
@@ -116,7 +119,10 @@ currency, amount and phase (`AUTH`, `PRE_AUTH`, `POST_AUTH`). An unsigned or unv
   Without a `response` it means a callback of another order, or a checkout of another order, reached the handler.
 - `HashMismatchError`: a forged or broken signature.
 - `PosHttpError` after a money request (sale, authorization, capture, cancel, refund): the outcome is unknown. iyzico
-  answered nothing usable, or an approval that cannot be verified.
+  answered nothing usable, or an approval that cannot be verified. An HTTP 4xx after a money request is a
+  `PosHttpError` even when its body reads `failure`: confirm what happened with `status()`.
+- For requests that move no money (form initialize, checkout record, `status()`), iyzico's HTTP 400 failure answer is
+  handled as a normal failure. Any other 4xx, and any 5xx, throws `PosHttpError`.
 
 **An unclear answer after a money request is never a decline.** Keep the order pending, call `pos.status(order)` (or
 `orderHistory`), and do not retry blindly: a retried sale charges twice and a retried refund refunds twice.
@@ -134,7 +140,8 @@ async function callback(body: Record<string, string>, order: PosOrder) {
 }
 ```
 
-- Load the order from **your** database (the `token` or the payer's session tells you which) and pass it in. Amount and
+- Load the order from **your** database and pass it in. The library never returns the checkout `token`, so identify the
+  order from the payer's session (as the example does) or from an order id you put in `success_url`. Amount and
   currency always come from your order, never from the body.
 - **Handle callbacks idempotently** and complete an order once. The library keeps no state, and callbacks can be
   replayed.
