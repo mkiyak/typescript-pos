@@ -1,5 +1,11 @@
 # typescript-pos
 
+## 0.9.0
+
+### Minor Changes
+
+- 88a0b99: Add the KuveytPos (Kuveyt Türk) and VakifKatilimPos (Vakıf Katılım) gateways with BoaPosAccount: verified 3D callbacks, provisions built from and bound to the order, bank-confirmed Vakıf Katılım 3D Host payments, exact kuruş amounts and VakifKatilimPosQuery custom and history queries.
+
 ## 0.8.0
 
 ### Minor Changes
