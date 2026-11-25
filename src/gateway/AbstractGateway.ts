@@ -90,6 +90,14 @@ export type GatewayConfig = {
    * and bounded decline reasons (nothing is confirmed or flagged for review); an unsigned callback whose response
    * code, 3D result or request status reads as an approval is always rejected. A present `Hash` is always verified,
    * and every signed approval is still confirmed with the bank's status record, since the signature covers no amount.
+   *
+   * ParamPos: reject any 3D callback that carries no `islemHash` (3D Secure card check) or `TURKPOS_RETVAL_Hash` (3D
+   * Pay, foreign currency) (`HashMismatchError`), declines included. Default false: without it an unsigned callback is
+   * accepted only as a decline whose result carries the order's id and bounded decline reasons (nothing is
+   * provisioned, confirmed or flagged for review); an unsigned callback whose 3D result is `1`, or whose result code
+   * or receipt number is above zero, is always rejected. A present hash is always verified. The payment result
+   * callback carries the merchant GUID it is signed with, so a valid signature proves nothing by itself: every
+   * approval is confirmed with the bank's status record (after the provision, for the card check).
    */
   require_3d_hash?: boolean
 }

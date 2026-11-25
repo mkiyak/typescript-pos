@@ -11,6 +11,7 @@ import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { InterPos } from '../../../src/gateway/InterPos.js'
 import { KuveytPos } from '../../../src/gateway/KuveytPos.js'
+import { ParamPos } from '../../../src/gateway/ParamPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
@@ -293,6 +294,46 @@ describe('PosFactory.createPosGateway', () => {
     expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
       'Bank [tosla] is configured for ToslaPos and needs a ToslaPosAccount.',
     )
+  })
+
+  it('creates the param-pos ParamPos gateway from the shipped test config', () => {
+    const account = AccountFactory.createParamPosAccount(
+      'param-pos',
+      '10738',
+      'Test1',
+      'Test2',
+      '0c13d406-873b-403b-9c09-a5766840d98c',
+    )
+    const gateway = PosFactory.createPosGateway(account, posTestConfig)
+    expect(gateway).toBeInstanceOf(ParamPos)
+    expect(gateway.getAccount()).toBe(account)
+    expect(gateway.getCardTypeMapping()).toStrictEqual({})
+    expect(gateway.getCurrencies()).toHaveLength(4)
+  })
+
+  // addition: the account type must fit the gateway
+  it('rejects a non-Param account for a ParamPos bank', () => {
+    const wrong = AccountFactory.createToslaPosAccount('param-pos', '1', 'u', 'p')
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(PosError)
+    expect(() => PosFactory.createPosGateway(wrong, posTestConfig)).toThrow(
+      'Bank [param-pos] is configured for ParamPos and needs a ParamPosAccount.',
+    )
+  })
+
+  // addition: P13 the confirmation of a 3D Pay approval goes to the shipped TurkPos endpoint
+  it('sends the ParamPos confirmation to the shipped TurkPos endpoint', async () => {
+    const urls: string[] = []
+    const fetchImpl = (async (url: unknown) => {
+      urls.push(String(url))
+      return new Response(
+        '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><TP_Islem_Sorgulama4Response><TP_Islem_Sorgulama4Result><Sonuc>-1</Sonuc></TP_Islem_Sorgulama4Result></TP_Islem_Sorgulama4Response></soap:Body></soap:Envelope>',
+        { status: 200 },
+      )
+    }) as unknown as typeof fetch
+    const account = AccountFactory.createParamPosAccount('param-pos', '10738', 'Test1', 'Test2', 'g')
+    const gateway = PosFactory.createPosGateway(account, posTestConfig, { fetch: fetchImpl })
+    await gateway.status({ id: 'o1' })
+    expect(urls).toStrictEqual(['https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx'])
   })
 
   // addition: T18 status goes to the Tosla inquiry path, with a request hash and without the API password
@@ -596,6 +637,7 @@ describe('PosFactory.createPosGateway', () => {
       KuveytPos: (bank: string) => AccountFactory.createBoaPosAccount(bank, '1', 'u', '2', 'p'),
       VakifKatilimPos: (bank: string) => AccountFactory.createBoaPosAccount(bank, '1', 'u', '2', 'p'),
       ToslaPos: (bank: string) => AccountFactory.createToslaPosAccount(bank, '1', 'u', 'p'),
+      ParamPos: (bank: string) => AccountFactory.createParamPosAccount(bank, '1', 'u', 'p', 'g'),
     } as const
     const entries = Object.entries(posTestConfig.banks)
     expect(entries.length).toBeGreaterThan(0)

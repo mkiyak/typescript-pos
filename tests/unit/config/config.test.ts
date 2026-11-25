@@ -9,6 +9,7 @@ import { AssecoPos } from '../../../src/gateway/AssecoPos.js'
 import { GarantiPos } from '../../../src/gateway/GarantiPos.js'
 import { InterPos } from '../../../src/gateway/InterPos.js'
 import { KuveytPos } from '../../../src/gateway/KuveytPos.js'
+import { ParamPos } from '../../../src/gateway/ParamPos.js'
 import { PayFlexCPV4Pos } from '../../../src/gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../../../src/gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../../../src/gateway/PayForPos.js'
@@ -25,6 +26,7 @@ const accountFor = (gatewayClass: string, key: string) => {
   if (gatewayClass === 'KuveytPos' || gatewayClass === 'VakifKatilimPos')
     return AccountFactory.createBoaPosAccount(key, 'm', 'u', 'c', 'k')
   if (gatewayClass === 'ToslaPos') return AccountFactory.createToslaPosAccount(key, '1', 'u', 'p')
+  if (gatewayClass === 'ParamPos') return AccountFactory.createParamPosAccount(key, '1', 'u', 'p', 'g')
   if (gatewayClass === 'PayForPos') return AccountFactory.createPayForPosAccount(key, 'm', 'u', 'p', 'k')
   if (gatewayClass === 'PosNetPos' || gatewayClass === 'PosNetV1Pos')
     return AccountFactory.createPosNetPosAccount(key, 'm', 't', 'p', 'k')
@@ -36,7 +38,7 @@ const configs = { production: posProductionConfig, test: posTestConfig }
 describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
   const entries = Object.entries(cfg.banks)
 
-  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos and ToslaPos banks', () => {
+  it('contains only AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos and ParamPos banks', () => {
     expect(entries.length).toBeGreaterThan(0)
     for (const [, bank] of entries) {
       expect([
@@ -52,6 +54,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         'KuveytPos',
         'VakifKatilimPos',
         'ToslaPos',
+        'ParamPos',
       ]).toContain(bank.class)
     }
   })
@@ -72,6 +75,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
       KuveytPos,
       VakifKatilimPos,
       ToslaPos,
+      ParamPos,
     }[
       bank.class as
         | 'AssecoPos'
@@ -86,6 +90,7 @@ describe.each(Object.entries(configs))('%s config', (_label, cfg) => {
         | 'KuveytPos'
         | 'VakifKatilimPos'
         | 'ToslaPos'
+        | 'ParamPos'
     ]
     expect(gateway).toBeInstanceOf(expected)
   })
@@ -480,6 +485,31 @@ describe('ToslaPos endpoints', () => {
       expect(tosla).not.toHaveProperty('lang')
       expect(tosla).not.toHaveProperty('test_mode')
       expect(tosla).not.toHaveProperty('require_3d_hash')
+    }
+  })
+})
+
+// addition: shipped ParamPos entries (the reference endpoints; no lang, test_mode or hash-check switch)
+describe('ParamPos endpoints', () => {
+  const entry = (payment_api: string) => ({ name: 'Param', class: 'ParamPos', gateway_endpoints: { payment_api } })
+
+  it('production and test entries', () => {
+    expect(posProductionConfig.banks['param-pos']).toStrictEqual(
+      entry('https://posws.param.com.tr/turkpos.ws/service_turkpos_prod.asmx'),
+    )
+    expect(posTestConfig.banks['param-pos']).toStrictEqual(
+      entry('https://test-dmz.param.com.tr/turkpos.ws/service_turkpos_test.asmx'),
+    )
+  })
+
+  it('both entries are deeply frozen and carry no lang, test_mode or hash-check switch', () => {
+    for (const cfg of [posProductionConfig, posTestConfig]) {
+      const param = cfg.banks['param-pos']
+      expect(Object.isFrozen(param)).toBe(true)
+      expect(Object.isFrozen(param.gateway_endpoints)).toBe(true)
+      expect(param).not.toHaveProperty('lang')
+      expect(param).not.toHaveProperty('test_mode')
+      expect(param).not.toHaveProperty('require_3d_hash')
     }
   })
 })

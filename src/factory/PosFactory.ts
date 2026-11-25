@@ -4,6 +4,7 @@ import { AssecoPosCrypt } from '../crypt/AssecoPosCrypt.js'
 import { GarantiPosCrypt } from '../crypt/GarantiPosCrypt.js'
 import { InterPosCrypt } from '../crypt/InterPosCrypt.js'
 import { KuveytPosCrypt } from '../crypt/KuveytPosCrypt.js'
+import { ParamPosCrypt } from '../crypt/ParamPosCrypt.js'
 import { PayFlexCPV4PosCrypt } from '../crypt/PayFlexCPV4PosCrypt.js'
 import { PayFlexV4PosCrypt } from '../crypt/PayFlexV4PosCrypt.js'
 import { PayForPosCrypt } from '../crypt/PayForPosCrypt.js'
@@ -15,6 +16,7 @@ import { AssecoPosRequestDataMapper } from '../data-mapper/request/mapper/Asseco
 import { GarantiPosRequestDataMapper } from '../data-mapper/request/mapper/GarantiPosRequestDataMapper.js'
 import { InterPosRequestDataMapper } from '../data-mapper/request/mapper/InterPosRequestDataMapper.js'
 import { KuveytPosRequestDataMapper } from '../data-mapper/request/mapper/KuveytPosRequestDataMapper.js'
+import { ParamPosRequestDataMapper } from '../data-mapper/request/mapper/ParamPosRequestDataMapper.js'
 import { PayFlexCPV4PosRequestDataMapper } from '../data-mapper/request/mapper/PayFlexCPV4PosRequestDataMapper.js'
 import { PayFlexV4PosRequestDataMapper } from '../data-mapper/request/mapper/PayFlexV4PosRequestDataMapper.js'
 import { PayForPosRequestDataMapper } from '../data-mapper/request/mapper/PayForPosRequestDataMapper.js'
@@ -27,6 +29,7 @@ import { AssecoPosRequestValueFormatter } from '../data-mapper/request/value-for
 import { GarantiPosRequestValueFormatter } from '../data-mapper/request/value-formatter/GarantiPosRequestValueFormatter.js'
 import { InterPosRequestValueFormatter } from '../data-mapper/request/value-formatter/InterPosRequestValueFormatter.js'
 import { KuveytPosRequestValueFormatter } from '../data-mapper/request/value-formatter/KuveytPosRequestValueFormatter.js'
+import { ParamPosRequestValueFormatter } from '../data-mapper/request/value-formatter/ParamPosRequestValueFormatter.js'
 import { PayFlexCPV4PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayFlexCPV4PosRequestValueFormatter.js'
 import { PayFlexV4PosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayFlexV4PosRequestValueFormatter.js'
 import { PayForPosRequestValueFormatter } from '../data-mapper/request/value-formatter/PayForPosRequestValueFormatter.js'
@@ -39,6 +42,7 @@ import { AssecoPosRequestValueMapper } from '../data-mapper/request/value-mapper
 import { GarantiPosRequestValueMapper } from '../data-mapper/request/value-mapper/GarantiPosRequestValueMapper.js'
 import { InterPosRequestValueMapper } from '../data-mapper/request/value-mapper/InterPosRequestValueMapper.js'
 import { KuveytPosRequestValueMapper } from '../data-mapper/request/value-mapper/KuveytPosRequestValueMapper.js'
+import { ParamPosRequestValueMapper } from '../data-mapper/request/value-mapper/ParamPosRequestValueMapper.js'
 import { PayFlexCPV4PosRequestValueMapper } from '../data-mapper/request/value-mapper/PayFlexCPV4PosRequestValueMapper.js'
 import { PayFlexV4PosRequestValueMapper } from '../data-mapper/request/value-mapper/PayFlexV4PosRequestValueMapper.js'
 import { PayForPosRequestValueMapper } from '../data-mapper/request/value-mapper/PayForPosRequestValueMapper.js'
@@ -51,6 +55,7 @@ import { AssecoPosResponseDataMapper } from '../data-mapper/response/mapper/Asse
 import { GarantiPosResponseDataMapper } from '../data-mapper/response/mapper/GarantiPosResponseDataMapper.js'
 import { InterPosResponseDataMapper } from '../data-mapper/response/mapper/InterPosResponseDataMapper.js'
 import { KuveytPosResponseDataMapper } from '../data-mapper/response/mapper/KuveytPosResponseDataMapper.js'
+import { ParamPosResponseDataMapper } from '../data-mapper/response/mapper/ParamPosResponseDataMapper.js'
 import { PayFlexCPV4PosResponseDataMapper } from '../data-mapper/response/mapper/PayFlexCPV4PosResponseDataMapper.js'
 import { PayFlexV4PosResponseDataMapper } from '../data-mapper/response/mapper/PayFlexV4PosResponseDataMapper.js'
 import { PayForPosResponseDataMapper } from '../data-mapper/response/mapper/PayForPosResponseDataMapper.js'
@@ -63,6 +68,7 @@ import { BasicResponseValueFormatter } from '../data-mapper/response/value-forma
 import { BoaPosResponseValueFormatter } from '../data-mapper/response/value-formatter/BoaPosResponseValueFormatter.js'
 import { GarantiPosResponseValueFormatter } from '../data-mapper/response/value-formatter/GarantiPosResponseValueFormatter.js'
 import { InterPosResponseValueFormatter } from '../data-mapper/response/value-formatter/InterPosResponseValueFormatter.js'
+import { ParamPosResponseValueFormatter } from '../data-mapper/response/value-formatter/ParamPosResponseValueFormatter.js'
 import { PosNetPosResponseValueFormatter } from '../data-mapper/response/value-formatter/PosNetPosResponseValueFormatter.js'
 import { ToslaPosResponseValueFormatter } from '../data-mapper/response/value-formatter/ToslaPosResponseValueFormatter.js'
 import { AkbankPosResponseValueMapper } from '../data-mapper/response/value-mapper/AkbankPosResponseValueMapper.js'
@@ -70,6 +76,7 @@ import { AssecoPosResponseValueMapper } from '../data-mapper/response/value-mapp
 import { GarantiPosResponseValueMapper } from '../data-mapper/response/value-mapper/GarantiPosResponseValueMapper.js'
 import { InterPosResponseValueMapper } from '../data-mapper/response/value-mapper/InterPosResponseValueMapper.js'
 import { KuveytPosResponseValueMapper } from '../data-mapper/response/value-mapper/KuveytPosResponseValueMapper.js'
+import { ParamPosResponseValueMapper } from '../data-mapper/response/value-mapper/ParamPosResponseValueMapper.js'
 import { PayFlexCPV4PosResponseValueMapper } from '../data-mapper/response/value-mapper/PayFlexCPV4PosResponseValueMapper.js'
 import { PayFlexV4PosResponseValueMapper } from '../data-mapper/response/value-mapper/PayFlexV4PosResponseValueMapper.js'
 import { PayForPosResponseValueMapper } from '../data-mapper/response/value-mapper/PayForPosResponseValueMapper.js'
@@ -84,6 +91,7 @@ import { AssecoPos } from '../gateway/AssecoPos.js'
 import { GarantiPos } from '../gateway/GarantiPos.js'
 import { InterPos } from '../gateway/InterPos.js'
 import { KuveytPos } from '../gateway/KuveytPos.js'
+import { ParamPos } from '../gateway/ParamPos.js'
 import { PayFlexCPV4Pos } from '../gateway/PayFlexCPV4Pos.js'
 import { PayFlexV4Pos } from '../gateway/PayFlexV4Pos.js'
 import { PayForPos } from '../gateway/PayForPos.js'
@@ -98,6 +106,7 @@ import { AssecoPosAccount } from '../model/account/AssecoPosAccount.js'
 import { BoaPosAccount } from '../model/account/BoaPosAccount.js'
 import { GarantiPosAccount } from '../model/account/GarantiPosAccount.js'
 import { InterPosAccount } from '../model/account/InterPosAccount.js'
+import { ParamPosAccount } from '../model/account/ParamPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
@@ -123,7 +132,7 @@ export type PosFactoryOptions = {
 }
 
 /**
- * Builds AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos and ToslaPos gateways: the gateway class is picked by `GatewayConfig.class` and wired with its crypt, mappers and HTTP clients.
+ * Builds AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos and ParamPos gateways: the gateway class is picked by `GatewayConfig.class` and wired with its crypt, mappers and HTTP clients.
  */
 export const PosFactory = {
   /**
@@ -171,6 +180,8 @@ export const PosFactory = {
         return createVakifKatilimPos(account, gatewayConfig, transport, logger, hooks)
       case ToslaPos.GATEWAY_CLASS:
         return createToslaPos(account, gatewayConfig, transport, logger, hooks)
+      case ParamPos.GATEWAY_CLASS:
+        return createParamPos(account, gatewayConfig, transport, logger, hooks)
       default:
         throw new GatewayClassNotConfiguredError(
           `Gateway class [${bankConfig.class}] of bank [${bankName}] is not supported.`,
@@ -671,6 +682,43 @@ function createToslaPos(
     ),
     crypt,
     clientStrategy: PosHttpClientStrategyFactory.createForGateway(ToslaPos.GATEWAY_CLASS, config, transport, logger),
+    logger,
+    hooks,
+  })
+}
+
+function createParamPos(
+  account: AbstractPosAccount,
+  config: GatewayConfig,
+  transport: HttpTransport,
+  logger: PosLogger,
+  hooks: PosHooks,
+): ParamPos {
+  if (!(account instanceof ParamPosAccount)) {
+    throw new PosError(`Bank [${account.getBankName()}] is configured for ParamPos and needs a ParamPosAccount.`)
+  }
+
+  const crypt = new ParamPosCrypt(logger)
+  const requestValueMapper = new ParamPosRequestValueMapper()
+  const requestValueFormatter = new ParamPosRequestValueFormatter()
+
+  return new ParamPos(config, account, {
+    requestValueMapper,
+    requestValueFormatter,
+    requestDataMapper: new ParamPosRequestDataMapper(
+      requestValueMapper,
+      requestValueFormatter,
+      hooks,
+      crypt,
+      config.lang ?? LANG.TR,
+    ),
+    responseDataMapper: new ParamPosResponseDataMapper(
+      new ParamPosResponseValueFormatter(),
+      new ParamPosResponseValueMapper(),
+      logger,
+    ),
+    crypt,
+    clientStrategy: PosHttpClientStrategyFactory.createForGateway(ParamPos.GATEWAY_CLASS, config, transport, logger),
     logger,
     hooks,
   })

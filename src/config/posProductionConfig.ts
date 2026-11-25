@@ -11,6 +11,7 @@ export type PosProductionBank =
   | 'kuveytpos'
   | 'vakif-katilim'
   | 'tosla'
+  | 'param-pos'
   | 'halkbank'
   | 'teb'
   | 'isbank'
@@ -24,7 +25,7 @@ export type PosProductionBank =
   | 'ziraat-katilim-payfor'
 
 /**
- * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos and ToslaPos banks (the VakifBank
+ * Production endpoints for the AssecoPos, PayFlexV4Pos, PayFlexCPV4Pos, GarantiPos, AkbankPos, PosNetPos, PosNetV1Pos, PayForPos, InterPos, KuveytPos, VakifKatilimPos, ToslaPos and ParamPos banks (the VakifBank
  * API gateway on port 8443; `vakifbank-cp` is the Common Payment hosted page). Copy and adjust the entries you use; `require_3d_hash` is left at its default. The `akbank-pos` entry sets no `lang` or
  * `test_mode`: AkbankPos takes the language from `order.lang` and the environment from the endpoint URLs.
  *
@@ -100,6 +101,13 @@ export const posProductionConfig: ShippedPosConfig<PosProductionBank> = freezeCo
         payment_api: 'https://entegrasyon.tosla.com/api/Payment',
         gateway_3d: 'https://entegrasyon.tosla.com/api/Payment/ProcessCardForm',
         gateway_3d_host: 'https://entegrasyon.tosla.com/api/Payment/threeDSecure',
+      },
+    },
+    'param-pos': {
+      name: 'Param',
+      class: 'ParamPos',
+      gateway_endpoints: {
+        payment_api: 'https://posws.param.com.tr/turkpos.ws/service_turkpos_prod.asmx',
       },
     },
     'vakif-katilim': {

@@ -66,6 +66,7 @@ describe('public index', () => {
         'KuveytPos',
         'VakifKatilimPos',
         'ToslaPos',
+        'ParamPos',
         'BoaPosAccount',
         'ToslaPosAccount',
         'ParamPosAccount',
@@ -165,6 +166,12 @@ describe('public index', () => {
   it('PosFactory creates the ToslaPos gateway from the shipped test config', () => {
     const account = mod.AccountFactory.createToslaPosAccount('tosla', '1000000494', 'POS_ENT_Test_001', 'secret')
     expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.ToslaPos)
+  })
+
+  // addition: the ParamPos gateway is reachable from the public entry point
+  it('PosFactory creates the ParamPos gateway from the shipped test config', () => {
+    const account = mod.AccountFactory.createParamPosAccount('param-pos', '10738', 'Test1', 'Test2', 'guid')
+    expect(mod.PosFactory.createPosGateway(account, mod.posTestConfig)).toBeInstanceOf(mod.ParamPos)
   })
 
   // addition: the VakifKatilimPos gateway is reachable from the public entry point
