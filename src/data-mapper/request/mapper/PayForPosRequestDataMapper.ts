@@ -5,6 +5,7 @@ import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import { QUERY_TYPE } from '../../../pos-query/PosQueryInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
+import { orderIdOf } from '../../../util/orderId.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
@@ -17,9 +18,6 @@ const GATEWAY_CLASS = 'PayForPos'
 
 /** MOTO (mail order / telephone order): '0' for false. */
 const MOTO = '0'
-
-/** Order ids are signed and posted as plain ASCII: letters, digits, underscore and hyphen, at most 64 characters. */
-const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 
 /** Creates request data for the PayFor XML API and the 3D form (QNB Finansbank, Ziraat Katilim). */
 export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayForPosAccount> {
@@ -254,12 +252,9 @@ export class PayForPosRequestDataMapper extends AbstractRequestDataMapper<PayFor
     }
   }
 
+  /** Order ids are signed and posted as plain ASCII (see `orderIdOf`). */
   private orderId(order: PosOrder): string {
-    const id = String(required(order, 'id'))
-    if (!ORDER_ID_PATTERN.test(id)) {
-      throw new PosError('The order id may only hold letters, digits, underscores and hyphens (at most 64).')
-    }
-    return id
+    return orderIdOf(order)
   }
 
   /**

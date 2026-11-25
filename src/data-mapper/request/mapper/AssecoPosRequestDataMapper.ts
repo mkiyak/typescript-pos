@@ -3,6 +3,7 @@ import type { AssecoPosAccount } from '../../../model/account/AssecoPosAccount.j
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
+import { orderIdOf } from '../../../util/orderId.js'
 import { isSet, required } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
@@ -28,7 +29,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
       ...this.getRequestAccountData(account),
       Type: this.valueMapper.mapTxType(txType),
       IPAddress: String(o.ip ?? ''),
-      OrderId: String(required(o, 'id')),
+      OrderId: orderIdOf(o),
       Total: this.valueFormatter.formatAmount(required(o, 'amount')),
       Currency: this.valueMapper.mapCurrency(o.currency),
       Taksit: this.valueFormatter.formatInstallment(o.installment),
@@ -58,7 +59,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
       ...this.getRequestAccountData(account),
       Type: this.valueMapper.mapTxType(txType),
       IPAddress: String(o.ip ?? ''),
-      OrderId: String(required(o, 'id')),
+      OrderId: orderIdOf(o),
       Total: String(this.valueFormatter.formatAmount(required(o, 'amount'))),
       Currency: String(this.valueMapper.mapCurrency(o.currency)),
       Taksit: String(this.valueFormatter.formatInstallment(o.installment)),
@@ -82,7 +83,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
     const requestData: Record<string, unknown> = {
       ...this.getRequestAccountData(account),
       Type: this.valueMapper.mapTxType(TX_TYPE.PAY_POST_AUTH),
-      OrderId: String(required(order, 'id')),
+      OrderId: orderIdOf(order),
       Total: isSet(amount) ? String(this.valueFormatter.formatAmount(amount)) : null,
     }
 
@@ -99,7 +100,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
     const requestData: Record<string, unknown> = { ...this.getRequestAccountData(account), Extra: extra }
 
     if (isSet(order.id)) {
-      requestData.OrderId = order.id
+      requestData.OrderId = orderIdOf(order)
     } else if (isSet(order.recurringId)) {
       extra.RECURRINGID = order.recurringId
     }
@@ -108,7 +109,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
   }
 
   createCancelRequestData(account: AssecoPosAccount, order: PosOrder): Record<string, unknown> {
-    const id = required(order, 'id')
+    const id = orderIdOf(order)
     if (isSet(order.recurringOrderInstallmentNumber)) {
       // cancels only pending recurring order installments; fulfilled transactions are not cancelled.
       // Installment order ids look like '202210121ABC', '202210121ABC-2', '202210121ABC-3', ...
@@ -132,7 +133,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
   createRefundRequestData(account: AssecoPosAccount, order: PosOrder, refundTxType: TxType): Record<string, unknown> {
     const requestData: Record<string, unknown> = {
       ...this.getRequestAccountData(account),
-      OrderId: String(required(order, 'id')),
+      OrderId: orderIdOf(order),
       Currency: String(this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY)),
       Type: this.valueMapper.mapTxType(refundTxType),
     }
@@ -147,7 +148,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
   createOrderHistoryRequestData(account: AssecoPosAccount, order: PosOrder): Record<string, unknown> {
     return {
       ...this.getRequestAccountData(account),
-      OrderId: String(required(order, 'id')),
+      OrderId: orderIdOf(order),
       Extra: { [this.valueMapper.mapTxType(TX_TYPE.ORDER_HISTORY)]: 'QUERY' },
     }
   }
@@ -171,7 +172,7 @@ export class AssecoPosRequestDataMapper extends AbstractRequestDataMapper<Asseco
       clientid: account.getMerchantId(),
       storetype: this.valueMapper.mapSecureType(paymentModel),
       amount: String(this.valueFormatter.formatAmount(Number(required(o, 'amount')))),
-      oid: String(required(o, 'id')),
+      oid: orderIdOf(o),
       okUrl: String(required(o, 'success_url')),
       failUrl: String(required(o, 'fail_url')),
       rnd: this.crypt.generateRandomString(),

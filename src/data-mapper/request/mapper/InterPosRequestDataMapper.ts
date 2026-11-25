@@ -9,6 +9,7 @@ import type { InterPosAccount } from '../../../model/account/InterPosAccount.js'
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
+import { orderIdOf } from '../../../util/orderId.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
@@ -21,9 +22,6 @@ const GATEWAY_CLASS = 'InterPos'
 
 /** MOTO (mail order / telephone order): '0' for false. */
 const MOTO = '0'
-
-/** Order ids are signed and posted as plain ASCII: letters, digits, underscore and hyphen, at most 64 characters. */
-const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 
 /** Creates request data for the InterPos form API and the 3D form (Denizbank). */
 export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPosAccount> {
@@ -252,16 +250,9 @@ export class InterPosRequestDataMapper extends AbstractRequestDataMapper<InterPo
     }
   }
 
+  /** Order ids are signed and posted as plain ASCII (see `orderIdOf`). */
   private orderId(order: PosOrder): string {
-    const raw: unknown = required(order, 'id')
-    if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isFinite(raw))) {
-      throw new PosError('The order id must be text or a number.')
-    }
-    const id = String(raw)
-    if (!ORDER_ID_PATTERN.test(id)) {
-      throw new PosError('The order id may only hold letters, digits, underscores and hyphens (at most 64).')
-    }
-    return id
+    return orderIdOf(order)
   }
 
   /**

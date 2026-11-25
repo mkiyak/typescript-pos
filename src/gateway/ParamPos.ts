@@ -172,6 +172,7 @@ export class ParamPos extends AbstractGateway<ParamPosAccount> {
    * Registers the payment with the bank (one signed request with the card) and returns what the browser is sent to:
    * the bank's card-check page as an HTML string (3D Secure in Turkish lira) or a GET form to the bank's page (3D
    * Pay, foreign currency). Nothing later needs the card, so it must not be stored.
+   * `createWithoutCard` has no effect: the card goes from your server to the bank, never to the browser.
    *
    * @throws UnsupportedFormFormatError for `formFormat: 'html'`
    * @throws PosError when the bank refuses the registration (its text masked and shortened) or answers without a

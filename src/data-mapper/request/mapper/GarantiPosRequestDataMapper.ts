@@ -3,6 +3,7 @@ import type { GarantiPosAccount } from '../../../model/account/GarantiPosAccount
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
+import { orderIdOf } from '../../../util/orderId.js'
 import { isSet, required, requiredString } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
@@ -82,7 +83,7 @@ export class GarantiPosRequestDataMapper extends AbstractRequestDataMapper<Garan
       },
       Card: this.getCardData(creditCard),
       Order: {
-        OrderID: required(order, 'id'),
+        OrderID: orderIdOf(order),
       },
       Transaction: {
         Type: this.valueMapper.mapTxType(txType),
@@ -110,7 +111,7 @@ export class GarantiPosRequestDataMapper extends AbstractRequestDataMapper<Garan
         IPAddress: order.ip ?? '',
       },
       Order: {
-        OrderID: required(order, 'id'),
+        OrderID: orderIdOf(order),
       },
       Transaction: {
         Type: this.valueMapper.mapTxType(TX_TYPE.PAY_POST_AUTH),
@@ -165,7 +166,7 @@ export class GarantiPosRequestDataMapper extends AbstractRequestDataMapper<Garan
       txnamount: String(this.valueFormatter.formatAmount(required(order, 'amount'))),
       txncurrencycode: String(this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY)),
       txninstallmentcount: String(this.valueFormatter.formatInstallment(order.installment ?? 0)),
-      orderid: String(required(order, 'id')),
+      orderid: orderIdOf(order),
       successurl: String(required(order, 'success_url')),
       errorurl: String(required(order, 'fail_url')),
       customeripaddress: String(required(order, 'ip')),
@@ -205,7 +206,7 @@ export class GarantiPosRequestDataMapper extends AbstractRequestDataMapper<Garan
         IPAddress: order.ip ?? '',
       },
       Order: {
-        OrderID: required(order, 'id'),
+        OrderID: orderIdOf(order),
       },
       Transaction: {
         Type: this.valueMapper.mapTxType(txType),
@@ -233,7 +234,7 @@ export class GarantiPosRequestDataMapper extends AbstractRequestDataMapper<Garan
         IPAddress: order.ip ?? '',
       },
       Order: {
-        OrderID: required(order, 'id'),
+        OrderID: orderIdOf(order),
       },
       Transaction: {
         Type: this.valueMapper.mapTxType(txType),

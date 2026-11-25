@@ -3,6 +3,7 @@ import { NotImplementedError, PosError } from '../errors.js'
 import type { ParamPosAccount } from '../model/account/ParamPosAccount.js'
 import { encodeIso88599, isIso88599Representable } from '../serializer/iso88599.js'
 import type { GatewayResponseData } from '../types.js'
+import { ORDER_ID_PATTERN } from '../util/orderId.js'
 import { ownValue } from '../util/ownValue.js'
 import { timingSafeEqualStr } from '../util/timingSafeEqualStr.js'
 import { AbstractCrypt } from './AbstractCrypt.js'
@@ -11,7 +12,9 @@ const LOG_VALUE_LIMIT = 64
 
 /** A base64 SHA-1 digest: 20 bytes, 27 characters and one padding character. */
 const HASH_PATTERN = /^[A-Za-z0-9+/]{27}=$/
-export const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+
+export { ORDER_ID_PATTERN }
+
 const CURRENCY_CODE = /^\d{4}$/
 
 /**

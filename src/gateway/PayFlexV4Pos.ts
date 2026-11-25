@@ -163,7 +163,8 @@ export class PayFlexV4Pos extends AbstractGateway<PayFlexPosAccount> {
 
   /**
    * Sends the enrollment request (is the card enrolled in 3-D Secure?) and returns the ACS redirect form.
-   * The card is always required, `createWithoutCard` is ignored.
+   * The card is always required.
+   * `createWithoutCard` has no effect: the card goes from your server to the bank, never to the browser.
    *
    * @throws UnsupportedFormFormatError for `formFormat: 'html'`
    * @throws PosError when the enrollment status is not `Y`

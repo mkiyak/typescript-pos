@@ -1,5 +1,6 @@
 import { PosError } from '../../../errors.js'
 import type { PosOrder } from '../../../types.js'
+import { ORDER_ID_PATTERN } from '../../../util/orderId.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
 import { required } from '../../../util/required.js'
@@ -8,7 +9,7 @@ import { required } from '../../../util/required.js'
  * Order ids are signed and posted as plain ASCII: letters, digits, underscore and hyphen, at most 64 characters,
  * starting with a letter or a digit.
  */
-export const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+export { ORDER_ID_PATTERN }
 
 /** The 3D authentication packet is base64 text. */
 export const MD_PATTERN = /^[A-Za-z0-9+/=]{1,1024}$/
@@ -16,10 +17,10 @@ export const MD_PATTERN = /^[A-Za-z0-9+/=]{1,1024}$/
 /** Return URLs are signed as text: plain printable ASCII only, so the bank hashes the same bytes we do. */
 const URL_PATTERN = /^https?:\/\/[\x21-\x7E]+$/i
 
-/** The merchant order id: text or a finite number, restricted to a safe alphabet. */
+/** The merchant order id: text or a safe integer number, restricted to a safe alphabet. */
 export function orderIdOf(order: PosOrder): string {
   const raw: unknown = required(order, 'id')
-  const id = typeof raw === 'string' || (typeof raw === 'number' && Number.isFinite(raw)) ? String(raw) : ''
+  const id = typeof raw === 'string' || (typeof raw === 'number' && Number.isSafeInteger(raw)) ? String(raw) : ''
   if (!ORDER_ID_PATTERN.test(id)) {
     throw new PosError(
       'The order id may only hold letters, digits, underscores and hyphens (at most 64) and must start with a letter or a digit.',

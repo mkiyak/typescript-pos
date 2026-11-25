@@ -207,6 +207,7 @@ export class KuveytPos extends AbstractGateway<BoaPosAccount> {
    * The bank's 3D page as HTML: the server posts the card and the signed order to the bank, which answers with the
    * page the browser must show. The card is not needed afterwards and must not be stored; the page is the bank's
    * markup, untrusted.
+   * `createWithoutCard` has no effect: the card goes from your server to the bank, never to the browser.
    *
    * @throws UnsupportedFormFormatError for `formFormat: 'array'` (there is no form to post from the browser)
    * @throws PosError when the bank answers with an empty page

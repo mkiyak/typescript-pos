@@ -290,7 +290,7 @@ export class AkbankPos extends AbstractGateway<AkbankPosAccount> {
       paymentModel,
       txType,
       this.get3DGatewayURL(paymentModel),
-      card,
+      this.cardForForm(card, createWithoutCard),
     ) as Promise<ThreeDFormData>
   }
 

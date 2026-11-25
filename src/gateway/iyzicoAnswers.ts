@@ -8,6 +8,7 @@ import { HashMismatchError, OrderMismatchError, type OrderMismatchField, PosErro
 import type { IyzicoPosAccount } from '../model/account/IyzicoPosAccount.js'
 import type { PaymentModel, TxType } from '../PosInterface.js'
 import type { PosOrder, PosResponse } from '../types.js'
+import { ORDER_ID_PATTERN } from '../util/orderId.js'
 import { phpTrim } from '../util/phpTrim.js'
 
 /**
@@ -27,8 +28,7 @@ import { phpTrim } from '../util/phpTrim.js'
  * bound to the order: conversation id, basket id, payment id, amounts, currency and phase.
  */
 
-/** Order ids: a letter or digit first, then letters, digits, `_` and `-`, at most 64 (no colon can occur). */
-const ORDER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
+// Order ids follow the library-wide ORDER_ID_PATTERN: no colon can occur in them.
 
 /** iyzico payment ids: plain positive integers, at most 20 digits. */
 const PAYMENT_ID = /^[1-9]\d{0,19}$/
@@ -233,7 +233,7 @@ export function assertCallbackApprovalPins(body: Record<string, string>, orderId
   if (
     !signedCallbackApproves(body) ||
     conversationId !== orderId ||
-    !ORDER_ID.test(conversationId) ||
+    !ORDER_ID_PATTERN.test(conversationId) ||
     paymentId === undefined ||
     !PAYMENT_ID.test(paymentId)
   ) {

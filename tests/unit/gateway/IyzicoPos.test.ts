@@ -21,6 +21,7 @@ import {
   PosError,
   PosHttpError,
   UnsupportedFormFormatError,
+  UnsupportedPaymentModelError,
   UnsupportedTransactionTypeError,
 } from '../../../src/errors.js'
 import { AccountFactory } from '../../../src/factory/AccountFactory.js'
@@ -484,9 +485,13 @@ describe('IyzicoPos (mocked collaborators)', () => {
     await expect(pos.payment(MODEL.THREE_D_PAY, {}, TX_TYPE.PAY_AUTH, null, cb({ token: 'x' }))).rejects.toThrow(
       UnsupportedTransactionTypeError,
     )
-    await expect(pos.make3DPayPayment(cb({ token: 'x' }), order(), TX_TYPE.PAY_AUTH)).rejects.toThrow(
-      UnsupportedTransactionTypeError,
-    )
+    // deviation: L6 a direct call of a payment model the gateway lacks throws UnsupportedPaymentModelError, as on
+    // every other gateway (the table lookup in payment() keeps UnsupportedTransactionTypeError)
+    const direct = pos.make3DPayPayment(cb({ token: 'x' }), order(), TX_TYPE.PAY_AUTH)
+    await expect(direct).rejects.toThrow(UnsupportedPaymentModelError)
+    await expect(direct).rejects.toThrow('IyzicoPos does not support the 3D Pay model')
+    await expect(direct).rejects.not.toThrow(UnsupportedTransactionTypeError)
+    expectNoRequest()
   })
 
   it('get3DFormData with array format and 3D Secure throws', async () => {

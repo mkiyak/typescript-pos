@@ -3,15 +3,13 @@ import { TX_APPROVED, TX_DECLINED } from '../data-mapper/response/mapper/Respons
 import { HashMismatchError, PosError } from '../errors.js'
 import type { PaymentModel, TxType } from '../PosInterface.js'
 import type { PosResponse } from '../types.js'
+import { ORDER_ID_PATTERN } from '../util/orderId.js'
 import { phpTrim } from '../util/phpTrim.js'
 
 /**
  * Helpers of the PayTR gateway for the bodies its payment flows receive: the server-to-server notification (signed
  * with `hash`) and the browser's return to the merchant's fail page (unsigned, `fail_message` only).
  */
-
-/** Order ids are signed and posted as plain ASCII: a letter or digit first, then letters, digits, `_` and `-`. */
-const ORDER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 
 /** The signed total of an approval: a positive whole number of kuruş, without padding. */
 const KURUS = /^[1-9]\d{0,14}$/
@@ -83,7 +81,7 @@ export function flatNotification(body: unknown): Record<string, string> {
  */
 export function notificationOrderId(body: unknown): string {
   const orderId = isPlainRecord(body) ? ownText(body, 'merchant_oid') : undefined
-  if (orderId === undefined || !ORDER_ID.test(orderId)) {
+  if (orderId === undefined || !ORDER_ID_PATTERN.test(orderId)) {
     throw new PosError('Notification carries no valid merchant_oid')
   }
 

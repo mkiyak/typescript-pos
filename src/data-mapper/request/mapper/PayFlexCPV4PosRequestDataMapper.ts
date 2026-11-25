@@ -3,11 +3,15 @@ import type { PayFlexPosAccount } from '../../../model/account/PayFlexPosAccount
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, type PaymentModel, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
+import { orderIdOf } from '../../../util/orderId.js'
 import { isSet, required, requiredString } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
-/** VakifBank Common Payment guide v2.1 §7 (error 0097): order ids may only hold digits, letters and hyphens. */
-const ORDER_ID_PATTERN = /^[0-9a-zA-Z-]+$/
+/**
+ * VakifBank Common Payment guide v2.1 §7 (error 0097): order ids may only hold digits, letters and hyphens. The
+ * library-wide rule (a letter or digit first, at most 64) applies on top.
+ */
+const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/
 /** VakifBank Common Payment guide v2.1 §4/§5: alphanumeric, at most 40 characters, no special or Turkish characters. */
 const TRANSACTION_ID_PATTERN = /^[0-9A-Za-z-]{1,40}$/
 
@@ -54,10 +58,7 @@ export class PayFlexCPV4PosRequestDataMapper extends AbstractRequestDataMapper<P
     txType: TxType,
     creditCard: CreditCard | null = null,
   ): Record<string, string> {
-    const orderId = String(required(order, 'id'))
-    if (!ORDER_ID_PATTERN.test(orderId)) {
-      throw new PosError('Order field "id" may only contain digits, letters and hyphens')
-    }
+    const orderId = orderIdOf(order, 64, ORDER_ID_PATTERN)
 
     let transactionId: string
     if (isSet(order.transaction_id) && order.transaction_id !== '') {

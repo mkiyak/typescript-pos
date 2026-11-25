@@ -150,6 +150,35 @@ describe('PayFlexCPV4PosRequestDataMapper', () => {
       ).toThrow(PosError)
     })
 
+    // addition: L2 the library-wide order-id rule without "_" (the bank refuses it)
+    it.each(['a_b', '-ab', '_ab', 'a'.repeat(65), 1.5, true, ['a']])(
+      'rejects order id %j with the rule message',
+      (id) => {
+        expect(() =>
+          mapper.create3DFormInitializeRequestData(
+            account,
+            { ...order, id } as unknown as PosOrder,
+            MODEL.THREE_D_SECURE,
+            TX_TYPE.PAY_AUTH,
+          ),
+        ).toThrow('Order field "id" must be 1-64 letters, digits or "-", starting with a letter or digit')
+      },
+    )
+
+    it.each([
+      ['a-b', 'a-b'],
+      ['a'.repeat(64), 'a'.repeat(64)],
+      [7, '7'],
+    ] as const)('accepts order id %j as %j', (id, expected) => {
+      const data = mapper.create3DFormInitializeRequestData(
+        account,
+        { ...order, id } as unknown as PosOrder,
+        MODEL.THREE_D_SECURE,
+        TX_TYPE.PAY_AUTH,
+      )
+      expect(data.OrderId).toBe(expected)
+    })
+
     it('addition: a missing success_url is rejected, never sent as "undefined"', () => {
       const { success_url: _omit, ...noSuccess } = order
       expect(() =>

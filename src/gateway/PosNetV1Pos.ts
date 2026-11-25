@@ -142,7 +142,7 @@ export class PosNetV1Pos extends AbstractGateway<PosNetPosAccount> {
       paymentModel,
       txType,
       this.get3DGatewayURL(paymentModel),
-      card,
+      this.cardForForm(card, createWithoutCard),
     ) as Promise<ThreeDFormData>
   }
 

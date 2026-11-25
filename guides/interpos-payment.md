@@ -102,7 +102,8 @@ extra characters at either end, for example `12` and `1200`, because the signed 
 
 ## Order ids and amounts
 
-- An order id is 1 to 64 letters, digits, `_` or `-`; anything else throws `PosError` before a request is sent.
+- An order id is 1 to 64 letters, digits, `_` or `-`, starting with a letter or digit (a number is taken only as a
+  safe non-negative integer); anything else throws `PosError` before a request is sent.
 - Amounts are sent with up to two decimals, rounded like PHP `number_format`.
 
 ## Queries

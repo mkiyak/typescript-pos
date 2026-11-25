@@ -100,7 +100,7 @@ export function echo(value: unknown): string {
 /** The order id every binding compares with: letters, digits, `_` and `-`, at most 64 characters, first a letter or digit. */
 export function boaOrderId(order: PosOrder): string {
   const id: unknown = order.id
-  const text = typeof id === 'string' || (typeof id === 'number' && Number.isFinite(id)) ? String(id) : ''
+  const text = typeof id === 'string' || (typeof id === 'number' && Number.isSafeInteger(id)) ? String(id) : ''
   if (!ORDER_ID_PATTERN.test(text)) {
     throw new PosError('The order id may only hold letters, digits, underscores and hyphens (at most 64).')
   }

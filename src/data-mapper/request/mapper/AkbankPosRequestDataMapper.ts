@@ -3,6 +3,7 @@ import type { AkbankPosAccount } from '../../../model/account/AkbankPosAccount.j
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
+import { orderIdOf } from '../../../util/orderId.js'
 import { isSet, required, requiredString } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
@@ -37,7 +38,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       txnCode: this.valueMapper.mapTxType(txType, MODEL.NON_SECURE),
       requestDateTime: this.now(),
       randomNumber: this.crypt.generateRandomString(),
-      order: { orderId: String(required(order, 'id')) },
+      order: { orderId: orderIdOf(order) },
       transaction: {
         amount: this.valueFormatter.formatAmount(required(order, 'amount')),
         currencyCode: this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY),
@@ -85,10 +86,10 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
     }
 
     if (recurring === null) {
-      requestData.order = { orderId: String(required(order, 'id')) }
+      requestData.order = { orderId: orderIdOf(order) }
     } else {
       requestData.recurring = this.createRecurringData(recurring)
-      requestData.order = { orderTrackId: String(required(order, 'id')) }
+      requestData.order = { orderTrackId: orderIdOf(order) }
     }
 
     return requestData
@@ -101,7 +102,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       txnCode: this.valueMapper.mapTxType(TX_TYPE.PAY_POST_AUTH),
       requestDateTime: this.now(),
       randomNumber: this.crypt.generateRandomString(),
-      order: { orderId: String(required(order, 'id')) },
+      order: { orderId: orderIdOf(order) },
       transaction: {
         amount: this.valueFormatter.formatAmount(required(order, 'amount')),
         currencyCode: this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY),
@@ -137,7 +138,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       }
       requestData.order = { orderTrackId: String(required(order, 'recurring_id')) }
     } else {
-      requestData.order = { orderId: String(required(order, 'id')) }
+      requestData.order = { orderId: orderIdOf(order) }
     }
 
     return requestData
@@ -162,7 +163,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       requestData.recurring = { recurringOrder: order.recurringOrderInstallmentNumber }
       requestData.order = { orderTrackId: String(required(order, 'recurring_id')) }
     } else {
-      requestData.order = { orderId: String(required(order, 'id')) }
+      requestData.order = { orderId: orderIdOf(order) }
     }
 
     return requestData
@@ -178,7 +179,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       order:
         isSet(order.recurring_id) && order.recurring_id !== ''
           ? { orderTrackId: String(order.recurring_id) }
-          : { orderId: String(required(order, 'id')) },
+          : { orderId: orderIdOf(order) },
     }
   }
 
@@ -200,7 +201,7 @@ export class AkbankPosRequestDataMapper extends AbstractRequestDataMapper<Akbank
       txnCode: this.valueMapper.mapTxType(txType, paymentModel),
       merchantSafeId: account.getMerchantId(),
       terminalSafeId: account.getTerminalId(),
-      orderId: String(required(order, 'id')),
+      orderId: orderIdOf(order),
       lang: this.getLang(order),
       amount: String(this.valueFormatter.formatAmount(required(order, 'amount'))),
       currencyCode: String(this.valueMapper.mapCurrency(order.currency ?? CURRENCY.TRY)),

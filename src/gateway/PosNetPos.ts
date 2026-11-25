@@ -137,6 +137,9 @@ export class PosNetPos extends AbstractGateway<PosNetPosAccount> {
   }
 
   /**
+   * Sends the card and the order to the bank and returns the form with the bank's encrypted packets.
+   * `createWithoutCard` has no effect: the card goes from your server to the bank, never to the browser.
+   *
    * @throws UnsupportedFormFormatError for `formFormat: 'html'`
    * @throws PosError when the card or `success_url` is missing, the bank refuses the initialization, or its answer
    *   carries no well-formed packets

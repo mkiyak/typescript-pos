@@ -19,6 +19,7 @@ import {
   type TxType,
 } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
+import { ORDER_ID_PATTERN } from '../../../util/orderId.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
@@ -30,8 +31,6 @@ import { payTrBasketJson } from './payTrBasket.js'
 
 const GATEWAY_CLASS = 'PayTrPos'
 
-/** Order ids are signed and posted as plain ASCII: a letter or digit first, then letters, digits, `_` and `-`, at most 64. */
-const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 const IP_PATTERN = /^[0-9A-Fa-f.:]{2,39}$/
 const EMAIL_PATTERN = /^[\x21-\x7E]+$/
 const URL_PATTERN = /^https?:\/\/[\x21-\x7E]+$/i
@@ -78,7 +77,7 @@ export function payTrOrderId(order: PosOrder): string {
   if (raw === undefined || raw === null || raw === '') {
     throw new PosError('Order field "id" is required')
   }
-  if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isFinite(raw))) {
+  if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isSafeInteger(raw))) {
     throw new PosError('The order id must be text or a number.')
   }
   const id = String(raw)

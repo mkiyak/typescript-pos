@@ -238,7 +238,7 @@ export class PayTrPos extends AbstractGateway<PayTrPosAccount> {
       paymentModel,
       txType,
       this.get3DGatewayURL(paymentModel),
-      card ?? null,
+      this.cardForForm(card, createWithoutCard),
     ) as Promise<ThreeDFormData>
   }
 

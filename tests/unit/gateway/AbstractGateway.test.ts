@@ -198,6 +198,9 @@ class StubGateway extends AbstractGateway {
   authSuccess(data: Record<string, unknown>): boolean {
     return this.is3dAuthSuccess(data)
   }
+  formCard(c: CreditCard | null, createWithoutCard: boolean): CreditCard | null {
+    return this.cardForForm(c, createWithoutCard)
+  }
   prepare(data: Record<string, unknown>): Promise<Record<string, unknown>> {
     return this.dispatchRequestDataPrepared(data, TX_TYPE.STATUS, { id: 'X' }, MODEL.NON_SECURE)
   }
@@ -422,6 +425,31 @@ describe('AbstractGateway', () => {
         card,
       )) as ThreeDFormData
       expect(form.inputs).toEqual({ oid: 'O1', card: 'yes', extra: 'x', hash: 'hash(oid,card,extra)' })
+    })
+  })
+
+  // addition: L1 the card a browser form may carry
+  describe('cardForForm', () => {
+    it('drops a card passed with createWithoutCard and logs that without card data', () => {
+      const logger = spyLogger()
+      const { gateway } = build({ logger })
+      expect(gateway.formCard(card, true)).toBeNull()
+      expect(logger.debug).toHaveBeenCalledTimes(1)
+      expect(logger.debug.mock.calls[0]?.[0]).toBe('card ignored: createWithoutCard is set')
+      const logged = JSON.stringify([logger.debug.mock.calls, logger.info.mock.calls, logger.warn.mock.calls])
+      expect(logged).not.toContain('4111111111111111')
+      expect(logged).not.toContain('"123"')
+    })
+
+    it.each([
+      ['a card without the flag', card, false, card],
+      ['no card with the flag', null, true, null],
+      ['no card without the flag', null, false, null],
+    ] as const)('keeps %s as it is, without a log line', (_label, given, flag, expected) => {
+      const logger = spyLogger()
+      const { gateway } = build({ logger })
+      expect(gateway.formCard(given, flag)).toBe(expected)
+      expect(logger.debug).not.toHaveBeenCalled()
     })
   })
 

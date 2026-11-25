@@ -28,7 +28,7 @@ export function orderValue(order: PosOrder, key: string): unknown {
 
 export function readOrderId(order: PosOrder): string {
   const raw: unknown = orderValue(order, 'id')
-  if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isFinite(raw))) {
+  if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isSafeInteger(raw))) {
     throw new PosError('The order id must be text or a number.')
   }
   const id = String(raw)

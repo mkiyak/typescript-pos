@@ -1,6 +1,7 @@
 import { PosError } from '../../../errors.js'
 import type { Currency } from '../../../PosInterface.js'
 import type { PosOrder } from '../../../types.js'
+import { ORDER_ID_PATTERN } from '../../../util/orderId.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
@@ -8,8 +9,6 @@ import { isSet } from '../../../util/required.js'
 import { toKurus } from '../../../util/toKurus.js'
 import type { RequestValueMapperInterface } from '../value-mapper/RequestValueMapperInterface.js'
 
-/** Order ids are sent as conversation and basket ids: a letter or digit first, then letters, digits, `_` and `-`, at most 64. */
-const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 /** iyzico payment ids are plain positive integers. */
 const PAYMENT_ID_PATTERN = /^[1-9]\d{0,19}$/
 const IP_PATTERN = /^[0-9A-Fa-f.:]{2,39}$/
@@ -80,7 +79,7 @@ export function iyzicoOrderId(order: PosOrder): string {
   if (raw === undefined || raw === null || raw === '') {
     throw new PosError('Order field "id" is required')
   }
-  if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isFinite(raw))) {
+  if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isSafeInteger(raw))) {
     throw new PosError('The order id must be text or a number.')
   }
   const id = String(raw)

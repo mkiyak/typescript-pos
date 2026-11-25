@@ -1218,6 +1218,9 @@ describe('InterPos (end to end) 3D Secure', () => {
     ['PurchAmount 1,019', { PurchAmount: '1,019' }],
     ['Response with a digit', { Response: 'A1' }],
     ['OrderId with a space', { OrderId: '3355 4969' }],
+    // addition: L2 the callback order id follows the library-wide rule (a letter or digit first)
+    ['OrderId with a leading "-"', { OrderId: '-33554969' }],
+    ['OrderId with a leading "_"', { OrderId: '_33554969' }],
   ])('rejects a signed success callback with %s (malformed, nothing sent)', async (_name, change) => {
     const { sent, promise } = run(fv4(change))
     await expect(promise).rejects.toThrow(MALFORMED)

@@ -3,6 +3,7 @@ import type { PayFlexPosAccount } from '../../../model/account/PayFlexPosAccount
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosOrder, ThreeDFormData } from '../../../types.js'
+import { orderIdOf } from '../../../util/orderId.js'
 import { isSet, required, requiredString } from '../../../util/required.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 
@@ -32,13 +33,13 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
     const requestData: Record<string, unknown> = {
       ...this.getRequestAccountData(account),
       TransactionType: this.valueMapper.mapTxType(txType),
-      TransactionId: String(required(o, 'id')),
+      TransactionId: orderIdOf(o),
       CurrencyAmount: this.valueFormatter.formatAmount(required(o, 'amount')),
       CurrencyCode: this.valueMapper.mapCurrency(o.currency),
       ECI: requiredString(responseData, 'Eci', '3D response'),
       CAVV: requiredString(responseData, 'Cavv', '3D response'),
       MpiTransactionId: requiredString(responseData, 'VerifyEnrollmentRequestId', '3D response'),
-      OrderId: String(required(o, 'id')),
+      OrderId: orderIdOf(o),
       ClientIp: String(required(order, 'ip')),
       TransactionDeviceSource: '0', // ECommerce
       CardHoldersName: creditCard.getHolderName(),
@@ -66,6 +67,9 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
     }
 
     const o = this.applyPaymentDefaults(order)
+    // The enrollment request carries no order id, but the provision after the 3D step sends it: an id the provision
+    // would refuse is refused here, before the payer authenticates a payment that could never complete.
+    orderIdOf(o)
     const cardType = creditCard.getType()
 
     const requestData: Record<string, unknown> = {
@@ -109,7 +113,7 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
     return {
       ...this.getRequestAccountData(account),
       TransactionType: this.valueMapper.mapTxType(txType),
-      OrderId: String(required(o, 'id')),
+      OrderId: orderIdOf(o),
       CurrencyAmount: this.valueFormatter.formatAmount(required(o, 'amount')),
       CurrencyCode: this.valueMapper.mapCurrency(o.currency),
       ClientIp: String(required(order, 'ip')),
@@ -141,7 +145,7 @@ export class PayFlexV4PosRequestDataMapper extends AbstractRequestDataMapper<Pay
         // TransactionId or OrderId is required; when both are sent the bank uses TransactionId.
         // With OrderId only, the successful transaction of that order (else the last one) is reported.
         TransactionId: String(order.transaction_id ?? ''),
-        OrderId: String(required(order, 'id')),
+        OrderId: orderIdOf(order),
         AuthCode: '',
       },
     }

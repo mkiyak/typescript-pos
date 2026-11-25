@@ -602,6 +602,20 @@ export abstract class AbstractGateway<A extends AbstractPosAccount = AbstractPos
     }
   }
 
+  /**
+   * The card a browser form may carry. With `createWithoutCard` the payer types the card on the bank page, so a card
+   * the caller passed anyway is dropped here and never written into a form that reaches the browser.
+   */
+  protected cardForForm(card: CreditCard | null, createWithoutCard: boolean): CreditCard | null {
+    if (createWithoutCard && card !== null) {
+      this.logger.debug('card ignored: createWithoutCard is set')
+
+      return null
+    }
+
+    return card
+  }
+
   // ---- private ----
 
   private applyTestMode(testMode: boolean): void {

@@ -25,6 +25,7 @@ import {
   type TxType,
 } from '../PosInterface.js'
 import type { GatewayResponseData, PosOrder, PosResponse, ThreeDFormData } from '../types.js'
+import { ORDER_ID_PATTERN } from '../util/orderId.js'
 import { parseInstallment } from '../util/parseInstallment.js'
 import { parseOrderAmount } from '../util/parseOrderAmount.js'
 import { phpTrim } from '../util/phpTrim.js'
@@ -36,9 +37,6 @@ const SUCCESS_CODE = '00'
 
 /** The 3D result of a full authentication, and the request status of a completed payment, as the bank writes them. */
 const COMPLETED = '1'
-
-/** Order ids are signed and posted as plain ASCII: a letter or digit first, then letters, digits, `_` and `-`. */
-const ORDER_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 
 /** A 3D result: one digit. */
 const MD_STATUS = /^[0-9]$/
@@ -278,7 +276,7 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
       paymentModel,
       txType,
       this.get3DGatewayURL(paymentModel),
-      createWithoutCard ? null : card,
+      this.cardForForm(card, createWithoutCard),
     ) as Promise<ThreeDFormData>
   }
 
@@ -662,7 +660,7 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
     if (!MD_STATUS.test(ownText(callback, 'MdStatus') ?? '')) malformed.push('MdStatus')
     const message = ownText(callback, 'BankResponseMessage')
     if (message !== undefined && !NO_DIGITS.test(message)) malformed.push('BankResponseMessage')
-    if (!ORDER_ID.test(ownText(callback, 'OrderId') ?? '')) malformed.push('OrderId')
+    if (!ORDER_ID_PATTERN.test(ownText(callback, 'OrderId') ?? '')) malformed.push('OrderId')
 
     if (malformed.length > 0) {
       this.logger.error('3D callback fields are malformed', {
@@ -743,8 +741,8 @@ export class ToslaPos extends AbstractGateway<ToslaPosAccount> {
   /** The order id every request and binding uses: a letter or digit, then letters, digits, `_` and `-` (at most 64). */
   private orderIdOf(order: PosOrder): string {
     const id: unknown = Object.hasOwn(order, 'id') ? order.id : undefined
-    const text = typeof id === 'string' || (typeof id === 'number' && Number.isFinite(id)) ? String(id) : ''
-    if (!ORDER_ID.test(text)) {
+    const text = typeof id === 'string' || (typeof id === 'number' && Number.isSafeInteger(id)) ? String(id) : ''
+    if (!ORDER_ID_PATTERN.test(text)) {
       throw new PosError(
         'The order id may only hold letters, digits, underscores and hyphens, and must start with a letter or digit (at most 64).',
       )

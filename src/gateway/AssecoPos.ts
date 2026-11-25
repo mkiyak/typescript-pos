@@ -164,7 +164,7 @@ export class AssecoPos extends AbstractGateway<AssecoPosAccount> {
       paymentModel,
       txType,
       this.get3DGatewayURL(paymentModel),
-      card,
+      this.cardForForm(card, createWithoutCard),
     )) as ThreeDFormData
   }
 

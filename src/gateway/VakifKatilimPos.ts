@@ -253,6 +253,7 @@ export class VakifKatilimPos extends AbstractGateway<BoaPosAccount> {
    * amount in it is not signed, which is why every 3D Host approval is confirmed with the bank). 3D Secure: the
    * bank's 3D page as HTML, after the server posted the card and the signed order to the bank; the card is not needed
    * afterwards and must not be stored, and the page is the bank's markup, untrusted.
+   * `createWithoutCard` has no effect: the card goes from your server to the bank, never to the browser.
    *
    * @throws UnsupportedFormFormatError for `formFormat: 'html'` with 3D Host and `formFormat: 'array'` with 3D Secure
    * @throws PosError when the bank answers with an empty page

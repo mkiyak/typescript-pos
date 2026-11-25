@@ -9,6 +9,7 @@ import type { ToslaPosAccount } from '../../../model/account/ToslaPosAccount.js'
 import type { CreditCard } from '../../../model/card/CreditCard.js'
 import { CURRENCY, LANG, type Lang, MODEL, type PaymentModel, TX_TYPE, type TxType } from '../../../PosInterface.js'
 import type { PosHooks, PosOrder, ThreeDFormData } from '../../../types.js'
+import { ORDER_ID_PATTERN } from '../../../util/orderId.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
@@ -16,9 +17,6 @@ import { isSet, required } from '../../../util/required.js'
 import type { ToslaPosRequestValueFormatter } from '../value-formatter/ToslaPosRequestValueFormatter.js'
 import type { ToslaPosRequestValueMapper } from '../value-mapper/ToslaPosRequestValueMapper.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
-
-/** Order ids are signed and posted as plain ASCII: a letter or digit first, then letters, digits, `_` and `-`, at most 64. */
-const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 
 /** The one callback URL of the order: http(s) and printable ASCII only, so it cannot smuggle blanks or other schemes. */
 const CALLBACK_URL_PATTERN = /^https?:\/\/[\x21-\x7E]+$/i
@@ -242,7 +240,7 @@ export class ToslaPosRequestDataMapper extends AbstractRequestDataMapper<ToslaPo
 
   private orderId(order: PosOrder): string {
     const raw: unknown = this.ownField(order, 'id')
-    if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isFinite(raw))) {
+    if (typeof raw !== 'string' && !(typeof raw === 'number' && Number.isSafeInteger(raw))) {
       throw new PosError('The order id must be text or a number.')
     }
     const id = String(raw)

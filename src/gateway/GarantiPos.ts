@@ -268,7 +268,7 @@ export class GarantiPos extends AbstractGateway<GarantiPosAccount> {
       paymentModel,
       txType,
       this.get3DGatewayURL(paymentModel),
-      card,
+      this.cardForForm(card, createWithoutCard),
     ) as Promise<ThreeDFormData>
   }
 

@@ -97,6 +97,20 @@ describe('PosNetPosRequestValueFormatter', () => {
     expect(() => formatter.formatOrderId(orderId, txType, MODEL.THREE_D_SECURE)).toThrow(PosError)
   })
 
+  // addition: L2 the library-wide order-id rule with the bank's 20-character field
+  it.each([['_a'], ['-1'], ['ä1'], ['x'.repeat(21)], [['a']], [true], [{}], [1.5], [-1]])(
+    'formatOrderId(%j) is rejected with the rule message',
+    (orderId) => {
+      expect(() => formatter.formatOrderId(orderId as unknown as string)).toThrow(
+        'Order field "id" must be 1-20 letters, digits, "_" or "-", starting with a letter or digit',
+      )
+    },
+  )
+
+  it('formatOrderId takes a safe integer number as its digits', () => {
+    expect(formatter.formatOrderId(7 as unknown as string)).toBe('00000000000000000007')
+  })
+
   it('formatInstallment does not validate (the mapper does)', () => {
     expect(formatter.formatInstallment(-1)).toBe('00')
   })

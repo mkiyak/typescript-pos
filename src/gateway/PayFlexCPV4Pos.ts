@@ -168,6 +168,7 @@ export class PayFlexCPV4Pos extends AbstractGateway<PayFlexPosAccount> {
 
   /**
    * Registers the payment and returns the redirect (GET `CommonPaymentUrl?Ptkn=…`) to the bank card page.
+   * `createWithoutCard` has no effect: the card goes from your server to the bank, never to the browser.
    *
    * @throws UnsupportedFormFormatError for `formFormat: 'html'`
    * @throws PosError when the registration is not accepted

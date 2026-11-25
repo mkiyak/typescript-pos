@@ -18,6 +18,7 @@ import {
   OrderMismatchError,
   PosError,
   UnsupportedFormFormatError,
+  UnsupportedPaymentModelError,
   UnsupportedTransactionTypeError,
 } from '../errors.js'
 import type { IyzicoPosAccount } from '../model/account/IyzicoPosAccount.js'
@@ -209,6 +210,7 @@ export class IyzicoPos extends AbstractGateway<IyzicoPosAccount> {
 
   /**
    * The 3D Secure page (HTML) or the 3D Host checkout (HTML, or the payment page for `formFormat: 'array'`).
+   * `createWithoutCard` has no effect: the card goes from your server to the bank, never to the browser.
    *
    * @throws UnsupportedFormFormatError for 3D Secure with `formFormat: 'array'`
    * @throws PosError when the order is invalid, the card is missing for 3D Secure or passed for 3D Host, iyzico
@@ -330,13 +332,13 @@ export class IyzicoPos extends AbstractGateway<IyzicoPosAccount> {
     })
   }
 
-  /** @throws UnsupportedTransactionTypeError iyzico has no 3D Pay model */
+  /** @throws UnsupportedPaymentModelError iyzico has no 3D Pay model */
   async make3DPayPayment(
     _gatewayResponseData: GatewayResponseData,
     _order: PosOrder,
     _txType: TxType,
   ): Promise<PosResponse> {
-    throw new UnsupportedTransactionTypeError('IyzicoPos does not support the 3D Pay model')
+    throw new UnsupportedPaymentModelError('IyzicoPos does not support the 3D Pay model')
   }
 
   /**
