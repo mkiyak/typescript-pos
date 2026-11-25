@@ -7,6 +7,7 @@ import { AssecoPosAccount } from '../../../src/model/account/AssecoPosAccount.js
 import { BoaPosAccount } from '../../../src/model/account/BoaPosAccount.js'
 import { GarantiPosAccount } from '../../../src/model/account/GarantiPosAccount.js'
 import { InterPosAccount } from '../../../src/model/account/InterPosAccount.js'
+import { ParamPosAccount } from '../../../src/model/account/ParamPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../../../src/model/account/PayForPosAccount.js'
 import { PosNetPosAccount } from '../../../src/model/account/PosNetPosAccount.js'
@@ -403,6 +404,51 @@ describe('AccountFactory Tosla', () => {
   })
 })
 
+describe('AccountFactory Param', () => {
+  it('testCreateParamPosAccount', () => {
+    const a = AccountFactory.createParamPosAccount('param-pos', '12345', 'APIUSER', 'kdsnsksl', 'guid123')
+    expect(a).toBeInstanceOf(ParamPosAccount)
+    expect(a.getBankName()).toBe('param-pos')
+    expect(a.getMerchantId()).toBe('12345')
+    expect(a.getUsername()).toBe('APIUSER')
+    expect(a.getPassword()).toBe('kdsnsksl')
+    expect(a.getSecretKey()).toBe('guid123')
+    expect(a.getSubMerchantId()).toBeNull()
+  })
+
+  it('testCreateParamPosAccountWithTerminalId', () => {
+    const a = AccountFactory.createParamPosAccount('param-pos', '12345', 'APIUSER', 'kdsnsksl', 'guid123', '99001')
+    expect(a.getTerminalId()).toBe('99001')
+  })
+
+  // addition: P1 a blank or non-string value is never signed or sent
+  it.each([
+    ['clientCode', 0],
+    ['username', 1],
+    ['password', 2],
+    ['guid', 3],
+  ])('rejects a blank, whitespace or non-string %s', (_name, index) => {
+    const make = AccountFactory.createParamPosAccount as unknown as (...a: unknown[]) => unknown
+    for (const bad of ['', '   ', '\t', null, undefined, 5, {}, ['x']]) {
+      const args: unknown[] = ['12345', 'APIUSER', 'kdsnsksl', 'guid123']
+      args[index as number] = bad
+      expect(() => make('param-pos', ...args), `${String(bad)}`).toThrow(MissingAccountInfoError)
+    }
+  })
+
+  // addition: P1
+  it.each(['', '  ', 5, {}])('rejects a blank or non-string terminal id %j', (bad) => {
+    const make = AccountFactory.createParamPosAccount as unknown as (...a: unknown[]) => unknown
+    expect(() => make('param-pos', '12345', 'APIUSER', 'kdsnsksl', 'guid123', bad)).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: P1 no terminal id means getTerminalId() throws
+  it('has no terminal id unless one is given', () => {
+    const a = AccountFactory.createParamPosAccount('param-pos', '12345', 'APIUSER', 'kdsnsksl', 'guid123')
+    expect(() => a.getTerminalId()).toThrow(MissingAccountInfoError)
+  })
+})
+
 describe('account credential leakage', () => {
   const accounts = [
     ['Asseco', () => AccountFactory.createAssecoPosAccount('akbank', 'mid', 'USER1', 'PW1', 'SK1')],
@@ -434,6 +480,11 @@ describe('account credential leakage', () => {
     ['BOA', () => AccountFactory.createBoaPosAccount('vakif-katilim', 'mid', 'APIUSER', '11111', 'kdsnsksl', 'SUB1')],
     // addition: T1
     ['Tosla', () => AccountFactory.createToslaPosAccount('tosla', 'mid', 'api-user', 'api-pass')],
+    // addition: P1
+    [
+      'Param',
+      () => AccountFactory.createParamPosAccount('param-pos', 'mid', 'APIUSER', 'kdsnsksl', 'guid123', '99001'),
+    ],
   ] as const
 
   it.each(accounts)('%s account hides secrets from JSON, masking and inspect', (_n, make) => {
@@ -458,6 +509,8 @@ describe('account credential leakage', () => {
         'SUB1',
         'api-user',
         'api-pass',
+        'guid123',
+        '99001',
       ])
         expect(out).not.toContain(secret)
     }

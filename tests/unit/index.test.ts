@@ -68,6 +68,7 @@ describe('public index', () => {
         'ToslaPos',
         'BoaPosAccount',
         'ToslaPosAccount',
+        'ParamPosAccount',
         'CARD_FAMILY',
         'PosNetPosAccount',
         'AssecoPosAccount',

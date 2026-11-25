@@ -49,6 +49,15 @@ const SENSITIVE_KEYS = new Set([
   // A request hash signs no body field, so a logged hash plus its body lets a reader send any request.
   'hash',
   'apipass',
+  // Param: the API user and password, the merchant key and the card fields of a request body.
+  'guid',
+  'client_password',
+  'client_username',
+  'turkpos_retval_guid',
+  'kk_no',
+  'kk_cvc',
+  'kk_sk_ay',
+  'kk_sk_yil',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -89,6 +98,17 @@ const SENSITIVE_TAGS = [
   'PayerAuthenticationCode',
   'HashPassword',
   'HashData',
+  // Param request bodies carry the API password and the merchant key; the 3D Host answer's SOAP header echoes the
+  // password. `<Islem_GUID>` is a transaction id and stays readable: the tag pattern anchors on `<` and the query
+  // pattern on a non-name character before the key.
+  'GUID',
+  'CLIENT_PASSWORD',
+  'CLIENT_USERNAME',
+  'TURKPOS_RETVAL_GUID',
+  'KK_No',
+  'KK_CVC',
+  'KK_SK_Ay',
+  'KK_SK_Yil',
 ]
 // Request fields a JSON error page may echo back. Only the JSON form is masked: a `Hash=` form field of another
 // gateway stays readable on purpose.
