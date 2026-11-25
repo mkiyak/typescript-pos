@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ParamPosResponseDataMapper } from '../../../../../src/data-mapper/response/mapper/ParamPosResponseDataMapper.js'
 import { ParamPosResponseValueFormatter } from '../../../../../src/data-mapper/response/value-formatter/ParamPosResponseValueFormatter.js'
 import { ParamPosResponseValueMapper } from '../../../../../src/data-mapper/response/value-mapper/ParamPosResponseValueMapper.js'
-import { NotImplementedError, PosError } from '../../../../../src/errors.js'
+import { NotImplementedError } from '../../../../../src/errors.js'
 import type { PosLogger } from '../../../../../src/logger.js'
 import { CURRENCY, TX_TYPE } from '../../../../../src/PosInterface.js'
 import type { PosOrder } from '../../../../../src/types.js'
@@ -48,13 +48,22 @@ function inheritedOnly(members: Data): Data {
 describe('ParamPosResponseDataMapper', () => {
   let mapper: ParamPosResponseDataMapper
   let logged: unknown[][]
+  let warnings: unknown[][]
 
   beforeEach(() => {
     logged = []
+    warnings = []
     const recorder = (...args: unknown[]) => {
       logged.push(args)
     }
-    const logger: PosLogger = { debug: recorder, info: recorder, warn: recorder, error: recorder }
+    const logger: PosLogger = {
+      debug: recorder,
+      info: recorder,
+      warn: (...args: unknown[]) => {
+        warnings.push(args)
+      },
+      error: recorder,
+    }
     mapper = new ParamPosResponseDataMapper(
       new ParamPosResponseValueFormatter(),
       new ParamPosResponseValueMapper(),
@@ -239,6 +248,7 @@ describe('ParamPosResponseDataMapper', () => {
         expect(actual.status).toBe('declined')
         expect(actual.proc_return_code).toBe('1')
         expect(actual.order_id).toBeNull()
+        expect(actual.error_message).toBe('success code without receipt')
       })
 
       // addition: closing a pre-authorization answers without a transaction number
@@ -397,6 +407,34 @@ describe('ParamPosResponseDataMapper', () => {
       expect(actual.status).toBe('declined')
       expect(actual.transaction_id).toBeNull()
       expect(actual.auth_code).toBeNull()
+      if (_name !== 'padded code') expect(actual.error_message).toBe('success code without receipt')
+    })
+
+    // addition: the bank approved although the 3D result was not a success: declined, flagged for review
+    it.each(['0', '2', '4', '7', null, ' 1', ''])(
+      'approved provision after mdStatus %j needs manual review',
+      (mdStatus) => {
+        const callback: Data = { ...(threeDCases.success1?.threeDResponseData as Data), mdStatus }
+
+        const actual: Data = mapper.map3DPaymentData(callback, provisionSuccess, TX_TYPE.PAY_AUTH, ORDER)
+
+        expect(actual.status).toBe('declined')
+        expect(actual.requires_manual_review).toBe(true)
+        expect(actual.md_status).toBe(mdStatus === '' ? null : mdStatus)
+        expect(actual.transaction_id).toBe('24364TKkF16602')
+      },
+    )
+
+    it('an approved provision after mdStatus 1 is not flagged', () => {
+      const actual: Data = mapper.map3DPaymentData(
+        threeDCases.success1?.threeDResponseData as Data,
+        provisionSuccess,
+        TX_TYPE.PAY_AUTH,
+        ORDER,
+      )
+
+      expect(actual.status).toBe('approved')
+      expect(actual).not.toHaveProperty('requires_manual_review')
     })
 
     it('an unreadable callback maps without error', () => {
@@ -514,11 +552,44 @@ describe('ParamPosResponseDataMapper', () => {
         expect((actual.transaction_time as Date).getTime()).toBe(new Date('2025-01-05T14:52:20+03:00').getTime())
       })
 
-      it.each(['32.01.2025 10:00:00', 'not a date', '31.02.2025 10:00:00'])('time %j is a PosError', (time) => {
-        expect(() =>
-          mapper.map3DPayResponseData({ ...callback, TURKPOS_RETVAL_Islem_Tarih: time }, TX_TYPE.PAY_AUTH, ORDER),
-        ).toThrow(PosError)
+      // deviation: a bank time that cannot be read never throws; the field is null, a warning names only the field
+      it.each(['32.01.2025 10:00:00', 'not a date', '31.02.2025 10:00:00'])(
+        'time %j reads as null and is logged',
+        (time) => {
+          const actual = mapper.map3DPayResponseData(
+            { ...callback, TURKPOS_RETVAL_Islem_Tarih: time },
+            TX_TYPE.PAY_AUTH,
+            ORDER,
+          )
+
+          expect(actual.status).toBe('approved')
+          expect(actual.transaction_time).toBeNull()
+          expect(warnings).toStrictEqual([['bank timestamp could not be parsed', { field: 'transaction_time' }]])
+        },
+      )
+
+      it('an approved 3D Host callback with an unreadable time still maps', () => {
+        const host = threeDHostCases.success1?.paymentData as Data
+        const actual = mapper.map3DHostResponseData(
+          { ...host, TURKPOS_RETVAL_Islem_Tarih: '32.01.2025 10:00:00' },
+          TX_TYPE.PAY_AUTH,
+          ORDER,
+        )
+
+        expect(actual.status).toBe('approved')
+        expect(actual.transaction_time).toBeNull()
       })
+
+      // addition: success code without a receipt is distinguishable from a bank decline
+      it.each([{ TURKPOS_RETVAL_Dekont_ID: '0' }, { TURKPOS_RETVAL_Dekont_ID: ['3007300695'] }])(
+        'success code without receipt %j says so',
+        (override) => {
+          const actual = mapper.map3DPayResponseData({ ...callback, ...override }, TX_TYPE.PAY_AUTH, ORDER)
+
+          expect(actual.status).toBe('declined')
+          expect(actual.error_message).toBe('success code without receipt')
+        },
+      )
     })
   })
 
@@ -678,8 +749,15 @@ describe('ParamPosResponseDataMapper', () => {
         expect((actual.transaction_time as Date).getTime()).toBe(new Date('2025-01-05T14:52:20+03:00').getTime())
       })
 
-      it('an impossible Tarih is a PosError', () => {
-        expect(() => mapper.mapStatusResponse(answer({ ...record, Tarih: '32.01.2025 10:00:00' }))).toThrow(PosError)
+      // deviation: a bank time that cannot be read never throws; the times are null and a warning is logged
+      it('an impossible Tarih leaves the times null and still maps', () => {
+        const actual = mapper.mapStatusResponse(answer({ ...record, Tarih: '32.01.2025 10:00:00' }))
+
+        expect(actual.status).toBe('approved')
+        expect(actual.order_id).toBe('20250105E324')
+        expect(actual.transaction_time).toBeNull()
+        expect(actual.capture_time).toBeNull()
+        expect(warnings).toStrictEqual([['bank timestamp could not be parsed', { field: 'transaction_time' }]])
       })
 
       it('a missing Tarih leaves the times null', () => {

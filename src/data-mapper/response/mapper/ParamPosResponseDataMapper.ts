@@ -20,6 +20,9 @@ import { TX_APPROVED, TX_DECLINED } from './ResponseDataMapperInterface.js'
 /** What replaces the account GUID a callback echoes. */
 const REDACTED = '***'
 
+/** Error message of an answer whose result code says success but which carries no receipt. */
+const NO_RECEIPT_MESSAGE = 'success code without receipt'
+
 /** The installment count as the callbacks print it. */
 const INSTALLMENT = /^\d{1,3}$/
 
@@ -31,17 +34,19 @@ const INSTALLMENT = /^\d{1,3}$/
  * result is `approved` only when the result code is positive and, where the bank sends one, the receipt or
  * transaction number is a positive integer: a success code without it is the caller's unknown outcome, never an
  * approval here. Result codes are returned as canonical integer text. Values that are not text or numbers read as
- * null and never become "[object Object]". An answer that cannot be read maps to a declined response, never to an
+ * null and never become "[object Object]". A bank time that cannot be read becomes null and a warning naming only the field is
+ * logged. An answer that cannot be read maps to a declined response, never to an
  * error.
  *
  * Mapped amounts, currencies, installments and order ids of callbacks are display values: a 3D callback is the
  * browser's word until the bank confirms the order, and the amounts here are floats. A caller binds a payment to its
  * order with its own order data and the bank's text fields (exact kuruş), never with `amount`, `first_amount`,
- * `capture_amount`, `currency`, `installment_count`, or the `order_id` of a callback. A status record answers whether
+ * `capture_amount`, `currency`, `installment_count`, the `order_id` of a callback, or the times of a callback
+ * (`transaction_time` read from `TURKPOS_RETVAL_Islem_Tarih`). A status record answers whether
  * the query succeeded (`status`); the state of the payment is `order_status` and the bank's own fields.
  *
- * A payment is never mapped as approved while the 3D result is a failure: the provision answer is only mapped after
- * the 3D result was positive, so there is no approved-but-3D-failed result in this gateway.
+ * A provision the bank approved while the 3D result was not `1` maps to `declined` with `requires_manual_review: true`
+ * (`md_status` stays as sent): the bank took the payment although 3D Secure failed.
  *
  * The account GUID a callback echoes is replaced in `all` and `3d_all` and never returned.
  */
@@ -81,7 +86,11 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
       proc_return_code: procReturnCode,
       status: approved ? TX_APPROVED : TX_DECLINED,
       error_code: approved ? null : procReturnCode,
-      error_message: approved ? null : (ownDisplay(payResult, 'Sonuc_Str') ?? ownDisplay(payResult, 'Bank_HostMsg')),
+      error_message: this.declineMessage(
+        code,
+        approved,
+        ownDisplay(payResult, 'Sonuc_Str') ?? ownDisplay(payResult, 'Bank_HostMsg'),
+      ),
       all: raw,
     }
     if (approved) {
@@ -134,6 +143,12 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
 
     const result = this.mergeArraysPreferNonNullValues(threeDResponse, paymentResponseData) as PosResponse
     result.payment_model = MODEL.THREE_D_SECURE
+    // The bank approved although the 3D result was not a success: money may have moved, so the merchant must look.
+    if (result.status === TX_APPROVED && !this.is3dAuthSuccess(mdStatus)) {
+      result.status = TX_DECLINED
+      result.error_message = 'payment approved although 3D Secure failed'
+      ;(result as Raw).requires_manual_review = true
+    }
     this.logResult('mapped 3D payment data', { ...result, all: undefined, '3d_all': undefined })
 
     return result
@@ -154,7 +169,7 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
       proc_return_code: procReturnCode,
       status: approved ? TX_APPROVED : TX_DECLINED,
       error_code: approved ? null : procReturnCode,
-      error_message: approved ? null : ownDisplay(raw, 'TURKPOS_RETVAL_Sonuc_Str'),
+      error_message: this.declineMessage(code, approved, ownDisplay(raw, 'TURKPOS_RETVAL_Sonuc_Str')),
       all: this.withoutEchoedGuid(raw),
     }
     if (approved) {
@@ -171,8 +186,7 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
           ? this.valueFormatter.formatInstallment(installment, txType)
           : null
       mappedResponse.masked_number = ownDisplay(raw, 'TURKPOS_RETVAL_KK_No')
-      // A date that cannot be read is an error: the bank approved, so the answer must not pass silently.
-      mappedResponse.transaction_time = time === null ? null : this.valueFormatter.formatDateTime(time, txType)
+      mappedResponse.transaction_time = this.time(time, txType)
     }
     this.logResult('mapped 3D payment response', mappedResponse)
 
@@ -272,7 +286,7 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
     }
 
     const date = ownString(record, 'Tarih')
-    const transactionDate = date === null ? null : this.valueFormatter.formatDateTime(date, txType)
+    const transactionDate = this.time(date, txType)
     // The record carries the refunded total of the order, not a refund transaction: it has no refund time, and the
     // order status already says the order was refunded.
     if (result.order_status === PAYMENT_STATUS.CANCELED) {
@@ -328,7 +342,11 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
       proc_return_code: procReturnCode,
       status: approved ? TX_APPROVED : TX_DECLINED,
       error_code: approved ? null : procReturnCode,
-      error_message: approved ? null : (ownDisplay(payResult, 'Sonuc_Ack') ?? ownDisplay(payResult, 'Bank_HostMsg')),
+      error_message: this.declineMessage(
+        code,
+        approved,
+        ownDisplay(payResult, 'Sonuc_Ack') ?? ownDisplay(payResult, 'Bank_HostMsg'),
+      ),
       all: rawPaymentResponseData,
     }
     if (approved) {
@@ -342,6 +360,26 @@ export class ParamPosResponseDataMapper extends AbstractResponseDataMapper {
     this.logResult('mapped provision response', mappedResponse)
 
     return this.mergeArraysPreferNonNullValues(defaultResponse, mappedResponse) as PosResponse
+  }
+
+  /** A bank time that cannot be read never hides a bank answer: the field stays null and a warning is logged. */
+  private time(value: string | null, txType: TxType): Date | null {
+    if (value === null) return null
+    try {
+      return this.valueFormatter.formatDateTime(value, txType)
+    } catch {
+      this.logger.warn('bank timestamp could not be parsed', { field: 'transaction_time' })
+
+      return null
+    }
+  }
+
+  /** The message of a success code that carries no receipt or transaction number. */
+  private declineMessage(code: number | null, approved: boolean, fallback: string | null): string | null {
+    if (approved) return null
+    if (code !== null && code > 0) return NO_RECEIPT_MESSAGE
+
+    return fallback
   }
 
   /** A transaction type word the tables do not know is no transaction type, never an error. */
