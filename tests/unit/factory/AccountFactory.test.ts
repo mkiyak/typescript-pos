@@ -10,6 +10,7 @@ import { InterPosAccount } from '../../../src/model/account/InterPosAccount.js'
 import { ParamPosAccount } from '../../../src/model/account/ParamPosAccount.js'
 import { PayFlexPosAccount } from '../../../src/model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../../../src/model/account/PayForPosAccount.js'
+import { PayTrPosAccount } from '../../../src/model/account/PayTrPosAccount.js'
 import { PosNetPosAccount } from '../../../src/model/account/PosNetPosAccount.js'
 import { ToslaPosAccount } from '../../../src/model/account/ToslaPosAccount.js'
 import { CARD_CLASS } from '../../../src/PosInterface.js'
@@ -404,6 +405,39 @@ describe('AccountFactory Tosla', () => {
   })
 })
 
+describe('AccountFactory PayTR', () => {
+  it('testCreatePayTrPosAccount', () => {
+    const a = AccountFactory.createPayTrPosAccount('paytr', '123456', 'wWwU8buJp6jo1r25', 'YEUaNcdHXqyt7hjt')
+    expect(a).toBeInstanceOf(PayTrPosAccount)
+    expect(a.getBankName()).toBe('paytr')
+    expect(a.getMerchantId()).toBe('123456')
+    expect(a.getPassword()).toBe('wWwU8buJp6jo1r25')
+    expect(a.getSecretKey()).toBe('YEUaNcdHXqyt7hjt')
+    // addition: there is no API user
+    expect(a.getUsername()).toBe('')
+  })
+
+  // addition: blank values are missing
+  it.each([
+    ['merchantId', ['', 's', 'k']],
+    ['merchantId', ['  ', 's', 'k']],
+    ['merchantSalt', ['m', '', 'k']],
+    ['merchantSalt', ['m', ' \t', 'k']],
+    ['merchantKey', ['m', 's', '']],
+    ['merchantKey', ['m', 's', '   ']],
+  ] as const)('rejects a blank %s', (_n, [m, s, k]) => {
+    expect(() => AccountFactory.createPayTrPosAccount('paytr', m, s, k)).toThrow(MissingAccountInfoError)
+  })
+
+  // addition: non-string values are missing
+  it.each([null, undefined, 5, {}, ['x']])('rejects a non-string value %j', (value) => {
+    const make = AccountFactory.createPayTrPosAccount as unknown as (...a: unknown[]) => unknown
+    expect(() => make('paytr', value, 's', 'k')).toThrow(MissingAccountInfoError)
+    expect(() => make('paytr', 'm', value, 'k')).toThrow(MissingAccountInfoError)
+    expect(() => make('paytr', 'm', 's', value)).toThrow(MissingAccountInfoError)
+  })
+})
+
 describe('AccountFactory Param', () => {
   it('testCreateParamPosAccount', () => {
     const a = AccountFactory.createParamPosAccount('param-pos', '12345', 'APIUSER', 'kdsnsksl', 'guid123')
@@ -481,6 +515,8 @@ describe('account credential leakage', () => {
     ['BOA', () => AccountFactory.createBoaPosAccount('vakif-katilim', 'mid', 'APIUSER', '11111', 'kdsnsksl', 'SUB1')],
     // addition: T1
     ['Tosla', () => AccountFactory.createToslaPosAccount('tosla', 'mid', 'api-user', 'api-pass')],
+    // addition: P1
+    ['PayTR', () => AccountFactory.createPayTrPosAccount('paytr', 'mid', 'paytr-salt-x', 'paytr-key-x')],
     // addition: C2
     [
       'Param',
@@ -512,6 +548,8 @@ describe('account credential leakage', () => {
         'api-pass',
         'guid123',
         '99001',
+        'paytr-salt-x',
+        'paytr-key-x',
       ])
         expect(out).not.toContain(secret)
     }

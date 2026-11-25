@@ -58,6 +58,14 @@ const SENSITIVE_KEYS = new Set([
   'kk_cvc',
   'kk_sk_ay',
   'kk_sk_yil',
+  // PayTR: a logged body plus its request token can be replayed verbatim, so the token, the merchant secrets and the
+  // card fields are masked (`card_number`, `cvv` and `hash` are listed above).
+  'paytr_token',
+  'merchant_key',
+  'merchant_salt',
+  'expiry_month',
+  'expiry_year',
+  'cc_owner',
 ])
 
 const PAN_PATTERN = /(?<!\d)\d{13,19}(?!\d)/g
@@ -109,6 +117,13 @@ const SENSITIVE_TAGS = [
   'KK_CVC',
   'KK_SK_Ay',
   'KK_SK_Yil',
+  'paytr_token',
+  'card_number',
+  'expiry_month',
+  'expiry_year',
+  'cc_owner',
+  'merchant_key',
+  'merchant_salt',
 ]
 // Request fields a JSON error page may echo back. Only the JSON form is masked: a `Hash=` form field of another
 // gateway stays readable on purpose.

@@ -453,4 +453,77 @@ describe('Param credentials', () => {
     expect(out).not.toContain('pw')
     expect(out).toContain('keep')
   })
+  // addition: PayTR request bodies carry the token, the merchant secrets and the card fields
+  describe('PayTR fields', () => {
+    it('masks the secrets and card fields by key', () => {
+      const out = maskSensitiveData({
+        paytr_token: 't',
+        merchant_key: 'k',
+        merchant_salt: 's',
+        expiry_month: '12',
+        expiry_year: '30',
+        cc_owner: 'John Doe',
+        card_number: '4355084355084358',
+        cvv: '000',
+        hash: 'h',
+      })
+      expect(out).toEqual({
+        paytr_token: '***',
+        merchant_key: '***',
+        merchant_salt: '***',
+        expiry_month: '***',
+        expiry_year: '***',
+        cc_owner: '***',
+        card_number: '***',
+        cvv: '***',
+        hash: '***',
+      })
+    })
+
+    it('masks the same names in form text and keeps the others', () => {
+      expect(
+        maskSensitiveData(
+          'merchant_id=1&paytr_token=abc&card_number=4355084355084358&cvv=000&expiry_year=30&expiry_month=12&cc_owner=John&merchant_oid=o1',
+        ),
+      ).toBe(
+        'merchant_id=1&paytr_token=***&card_number=***&cvv=***&expiry_year=***&expiry_month=***&cc_owner=***&merchant_oid=o1',
+      )
+    })
+
+    it('masks the same names in JSON text', () => {
+      expect(maskSensitiveData('{"paytr_token":"abc"}')).toBe('{"paytr_token":"***"}')
+      expect(maskSensitiveData('{"merchant_key":"k","merchant_salt":"s","cc_owner":"J D","merchant_id":"1"}')).toBe(
+        '{"merchant_key":"***","merchant_salt":"***","cc_owner":"***","merchant_id":"1"}',
+      )
+    })
+
+    it('keeps the order id and a hash-free notification readable', () => {
+      expect(maskSensitiveData('merchant_oid=x&hash=y')).toBe('merchant_oid=x&hash=y')
+      expect(
+        maskSensitiveData({ merchant_oid: 'x', status: 'success', total_amount: '1001', merchant_id: '1' }),
+      ).toEqual({
+        merchant_oid: 'x',
+        status: 'success',
+        total_amount: '1001',
+        merchant_id: '1',
+      })
+    })
+
+    it('hides a card-shaped merchant key or salt completely, not as first six and last four', () => {
+      expect(maskSensitiveData('merchant_key=1234567890123456&merchant_salt=6543210987654321')).toBe(
+        'merchant_key=***&merchant_salt=***',
+      )
+      expect(maskSensitiveData({ merchant_key: '1234567890123456' })).toEqual({ merchant_key: '***' })
+    })
+
+    it('leaves look-alike names readable', () => {
+      const text = 'xpaytr_token=a&my_merchant_key=b&card_number_hint=c&expiry_yearly=d&cc_owner_note=e'
+      expect(maskSensitiveData(text)).toBe(text)
+      expect(maskSensitiveData({ paytr_tokens: 'a', merchant_keys: 'b', cc_owners: 'c' })).toEqual({
+        paytr_tokens: 'a',
+        merchant_keys: 'b',
+        cc_owners: 'c',
+      })
+    })
+  })
 })

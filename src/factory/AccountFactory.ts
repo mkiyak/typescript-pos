@@ -7,10 +7,11 @@ import { InterPosAccount } from '../model/account/InterPosAccount.js'
 import { ParamPosAccount } from '../model/account/ParamPosAccount.js'
 import { PayFlexPosAccount } from '../model/account/PayFlexPosAccount.js'
 import { PayForPosAccount } from '../model/account/PayForPosAccount.js'
+import { PayTrPosAccount } from '../model/account/PayTrPosAccount.js'
 import { PosNetPosAccount } from '../model/account/PosNetPosAccount.js'
 import { ToslaPosAccount } from '../model/account/ToslaPosAccount.js'
 
-/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor, InterPos, BOA (Kuveyt, Vakif Katilim), Tosla and Param gateways. */
+/** Account factories for the Asseco, PayFlex, Garanti, Akbank, POSNET, PayFor, InterPos, BOA (Kuveyt, Vakif Katilim), Tosla, Param and PayTR gateways. */
 export const AccountFactory = {
   createAssecoPosAccount(
     bank: string,
@@ -115,6 +116,10 @@ export const AccountFactory = {
 
   createToslaPosAccount(bank: string, clientId: string, apiUser: string, apiPass: string): ToslaPosAccount {
     return new ToslaPosAccount(bank, clientId, apiUser, apiPass)
+  },
+
+  createPayTrPosAccount(bank: string, merchantId: string, merchantSalt: string, merchantKey: string): PayTrPosAccount {
+    return new PayTrPosAccount(bank, merchantId, merchantSalt, merchantKey)
   },
 
   /** `terminalId` (`Terminal_ID`) is needed by the hosted payment page only. */

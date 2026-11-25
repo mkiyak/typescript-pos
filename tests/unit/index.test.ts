@@ -70,6 +70,7 @@ describe('public index', () => {
         'Param3DHostPos',
         'BoaPosAccount',
         'ToslaPosAccount',
+        'PayTrPosAccount',
         'ParamPosAccount',
         'CARD_FAMILY',
         'PosNetPosAccount',
