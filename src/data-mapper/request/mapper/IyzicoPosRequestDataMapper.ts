@@ -15,10 +15,12 @@ import type { IyzicoPosRequestValueFormatter } from '../value-formatter/IyzicoPo
 import type { IyzicoPosRequestValueMapper } from '../value-mapper/IyzicoPosRequestValueMapper.js'
 import { AbstractRequestDataMapper } from './AbstractRequestDataMapper.js'
 import {
+  asOrder,
   hasControlCharacters,
   iyzicoAddress,
   iyzicoBasketItems,
   iyzicoBuyer,
+  iyzicoOrderCurrency,
   iyzicoOrderId,
   iyzicoOrderInstallment,
   iyzicoOrderIp,
@@ -211,8 +213,8 @@ export class IyzicoPosRequestDataMapper extends AbstractRequestDataMapper<Iyzico
 
   /** Status and history take the payment id, the order id or both. */
   private lookupBody(order: PosOrder): Record<string, unknown> {
-    const hasId = isSet(ownValue(order as Record<string, unknown>, 'id'))
-    const hasTransaction = isSet(ownValue(order as Record<string, unknown>, 'transaction_id'))
+    const hasId = isSet(ownValue(asOrder(order), 'id'))
+    const hasTransaction = isSet(ownValue(asOrder(order), 'transaction_id'))
     if (!hasId && !hasTransaction) {
       throw new PosError('Order id or transaction id is required')
     }
@@ -229,16 +231,11 @@ export class IyzicoPosRequestDataMapper extends AbstractRequestDataMapper<Iyzico
   }
 
   private transactionId(order: PosOrder): string {
-    return iyzicoPaymentId(ownValue(order as Record<string, unknown>, 'transaction_id'), 'Order field "transaction_id"')
+    return iyzicoPaymentId(ownValue(asOrder(order), 'transaction_id'), 'Order field "transaction_id"')
   }
 
-  /** The order currency (default TRY) in iyzico's letters; an unknown currency is an error. */
   private currency(order: PosOrder): string {
-    const raw: unknown = ownValue(order as Record<string, unknown>, 'currency') ?? 'TRY'
-    if (typeof raw !== 'string') {
-      throw new PosError('The order currency is not supported by iyzico.')
-    }
-    return String(this.valueMapper.mapCurrency(raw as Parameters<typeof this.valueMapper.mapCurrency>[0]))
+    return iyzicoOrderCurrency(order, this.valueMapper)
   }
 
   /**
@@ -279,7 +276,8 @@ export class IyzicoPosRequestDataMapper extends AbstractRequestDataMapper<Iyzico
       basketItems: items,
     }
 
-    if (creditCard !== null && creditCard !== undefined) {
+    // Hosted checkout takes the card on iyzico's page: card data is never part of that request.
+    if (paymentModel !== MODEL.THREE_D_HOST && creditCard !== null && creditCard !== undefined) {
       body.paymentCard = this.paymentCard(creditCard)
     }
 
@@ -319,7 +317,7 @@ export class IyzicoPosRequestDataMapper extends AbstractRequestDataMapper<Iyzico
   }
 
   private callbackUrl(order: PosOrder): string {
-    const url: unknown = ownValue(order as Record<string, unknown>, 'success_url')
+    const url: unknown = ownValue(asOrder(order), 'success_url')
     if (typeof url !== 'string' || url.length > MAX_URL || !URL_PATTERN.test(url)) {
       throw new PosError('Order field "success_url" must be an http(s) URL without blanks or non-ASCII characters.')
     }
@@ -327,7 +325,7 @@ export class IyzicoPosRequestDataMapper extends AbstractRequestDataMapper<Iyzico
   }
 
   private paymentChannel(order: PosOrder): string {
-    const channel: unknown = ownValue(order as Record<string, unknown>, 'payment_channel') ?? 'WEB'
+    const channel: unknown = ownValue(asOrder(order), 'payment_channel') ?? 'WEB'
     if (typeof channel !== 'string' || !PAYMENT_CHANNELS.includes(channel)) {
       throw new PosError('Order field "payment_channel" is not a payment channel iyzico knows')
     }
@@ -335,7 +333,7 @@ export class IyzicoPosRequestDataMapper extends AbstractRequestDataMapper<Iyzico
   }
 
   private enabledInstallments(order: PosOrder): number[] {
-    const raw: unknown = ownValue(order as Record<string, unknown>, 'enabled_installments') ?? []
+    const raw: unknown = ownValue(asOrder(order), 'enabled_installments') ?? []
     if (
       !Array.isArray(raw) ||
       raw.some((n: unknown) => typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 12) ||

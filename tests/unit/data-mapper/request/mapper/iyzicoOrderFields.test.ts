@@ -4,12 +4,14 @@ import {
   iyzicoAddress,
   iyzicoBasketItems,
   iyzicoBuyer,
+  iyzicoOrderCurrency,
   iyzicoOrderId,
   iyzicoOrderInstallment,
   iyzicoOrderIp,
   iyzicoOrderKurus,
   iyzicoPaymentId,
 } from '../../../../../src/data-mapper/request/mapper/iyzicoOrderFields.js'
+import { IyzicoPosRequestValueMapper } from '../../../../../src/data-mapper/request/value-mapper/IyzicoPosRequestValueMapper.js'
 import { PosError } from '../../../../../src/errors.js'
 
 describe('iyzicoOrderFields', () => {
@@ -209,5 +211,29 @@ describe('iyzicoOrderFields', () => {
     expect(hasControlCharacters(`a${String.fromCharCode(0x2029)}b`)).toBe(true)
     expect(hasControlCharacters(`a${String.fromCharCode(0x202e)}b`)).toBe(true)
     expect(hasControlCharacters('a\tb')).toBe(true)
+  })
+
+  it.each([[null], [undefined], ['order'], [['x']], [5]])(
+    'addition: non-object order %j is a PosError everywhere',
+    (bad) => {
+      const o = bad as never
+      expect(() => iyzicoOrderId(o)).toThrow(PosError)
+      expect(() => iyzicoOrderKurus(o)).toThrow(PosError)
+      expect(() => iyzicoOrderInstallment(o)).toThrow(PosError)
+      expect(() => iyzicoOrderIp(o)).toThrow(PosError)
+      expect(() => iyzicoBuyer(o)).toThrow(PosError)
+      expect(() => iyzicoAddress(o, 'billing_address', true)).toThrow(PosError)
+      expect(() => iyzicoAddress(o, 'shipping_address', false)).toThrow(PosError)
+      expect(() => iyzicoBasketItems(o, 100)).toThrow(PosError)
+      expect(() => iyzicoOrderCurrency(o, new IyzicoPosRequestValueMapper())).toThrow(PosError)
+    },
+  )
+
+  it('iyzicoOrderCurrency maps the currency, defaults to TRY and refuses others', () => {
+    const vm = new IyzicoPosRequestValueMapper()
+    expect(iyzicoOrderCurrency({}, vm)).toBe('TRY')
+    expect(iyzicoOrderCurrency({ currency: 'USD' }, vm)).toBe('USD')
+    expect(() => iyzicoOrderCurrency({ currency: 'XXX' } as never, vm)).toThrow(PosError)
+    expect(() => iyzicoOrderCurrency({ currency: 949 } as never, vm)).toThrow(PosError)
   })
 })

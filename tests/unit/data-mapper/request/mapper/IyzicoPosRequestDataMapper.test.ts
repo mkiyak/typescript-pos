@@ -574,7 +574,11 @@ describe('IyzicoPosRequestDataMapper', () => {
     it('3d_host', () => {
       const { mapper } = setup()
       const order = { ...buildOrder(), enabled_installments: [1, 3, 6] }
+      // deviation: hosted checkout never carries card data; a passed card is ignored (the reference sends it)
       const actual = mapper.create3DFormInitializeRequestData(IA, order, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH, card)
+      expect('paymentCard' in actual).toBe(false)
+      expect(JSON.stringify(actual)).not.toContain('5555444433332222')
+      expect(JSON.stringify(actual)).not.toContain('"cvc"')
       expect(actual).toMatchObject({
         locale: 'tr',
         conversationId: 'order-001',
@@ -587,6 +591,27 @@ describe('IyzicoPosRequestDataMapper', () => {
       expect('paymentChannel' in actual).toBe(false)
       expect('installment' in actual).toBe(false)
       expect(Object.keys(actual).slice(-3)).toEqual(['callbackUrl', 'forceThreeDS', 'enabledInstallments'])
+    })
+
+    it('addition: non-object orders are a PosError for every builder', () => {
+      const { mapper } = setup()
+      for (const bad of [null, undefined, 'order', ['x'], 5]) {
+        const o = bad as never
+        expect(() => mapper.createStatusRequestData(IA, o)).toThrow(PosError)
+        expect(() => mapper.createOrderHistoryRequestData(IA, o)).toThrow(PosError)
+        expect(() => mapper.createCancelRequestData(IA, o)).toThrow(PosError)
+        expect(() => mapper.createRefundRequestData(IA, o, TX_TYPE.REFUND)).toThrow(PosError)
+        expect(() => mapper.createNonSecurePostAuthPaymentRequestData(IA, o)).toThrow(PosError)
+        expect(() => mapper.create3DPaymentRequestData(IA, o, TX_TYPE.PAY_AUTH, { paymentId: '1' })).toThrow(PosError)
+        expect(() => mapper.create3DHostPaymentStatusRequestData({ token: 't' }, o)).toThrow(PosError)
+        expect(() => mapper.createNonSecurePaymentRequestData(IA, o, TX_TYPE.PAY_AUTH, card)).toThrow(PosError)
+        expect(() =>
+          mapper.create3DFormInitializeRequestData(IA, o, MODEL.THREE_D_SECURE, TX_TYPE.PAY_AUTH, card),
+        ).toThrow(PosError)
+        expect(() => mapper.create3DFormInitializeRequestData(IA, o, MODEL.THREE_D_HOST, TX_TYPE.PAY_AUTH)).toThrow(
+          PosError,
+        )
+      }
     })
 
     it('addition: 3d_host without enabled installments sends an empty list', () => {

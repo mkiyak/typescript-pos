@@ -1,10 +1,12 @@
 import { PosError } from '../../../errors.js'
+import type { Currency } from '../../../PosInterface.js'
 import type { PosOrder } from '../../../types.js'
 import { ownValue } from '../../../util/ownValue.js'
 import { parseInstallment } from '../../../util/parseInstallment.js'
 import { parseOrderAmount } from '../../../util/parseOrderAmount.js'
 import { isSet } from '../../../util/required.js'
 import { toKurus } from '../../../util/toKurus.js'
+import type { RequestValueMapperInterface } from '../value-mapper/RequestValueMapperInterface.js'
 
 /** Order ids are sent as conversation and basket ids: a letter or digit first, then letters, digits, `_` and `-`, at most 64. */
 const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
@@ -25,6 +27,26 @@ const ITEM_TYPES: readonly string[] = ['PHYSICAL', 'VIRTUAL']
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** The order as a plain record; null, text, a list or a number is an error, never a TypeError later. */
+export function asOrder(order: unknown): Record<string, unknown> {
+  if (!isRecord(order)) {
+    throw new PosError('The order must be an object')
+  }
+  return order
+}
+
+/** The order currency (default TRY) in iyzico's letters; an unknown or non-text currency is an error. */
+export function iyzicoOrderCurrency(
+  order: PosOrder,
+  valueMapper: Pick<RequestValueMapperInterface, 'mapCurrency'>,
+): string {
+  const raw: unknown = ownValue(asOrder(order), 'currency') ?? 'TRY'
+  if (typeof raw !== 'string') {
+    throw new PosError('The order currency is not supported by iyzico.')
+  }
+  return String(valueMapper.mapCurrency(raw as Currency))
 }
 
 /** A required own text of 1 to `max` characters, not blank and without control characters. */
@@ -54,7 +76,7 @@ export function hasControlCharacters(value: string): boolean {
 
 /** The order id: text or a finite number that reads as letters, digits, `_` and `-`, starting with a letter or digit. */
 export function iyzicoOrderId(order: PosOrder): string {
-  const raw: unknown = isRecord(order) ? ownValue(order, 'id') : undefined
+  const raw: unknown = ownValue(asOrder(order), 'id')
   if (raw === undefined || raw === null || raw === '') {
     throw new PosError('Order field "id" is required')
   }
@@ -72,7 +94,7 @@ export function iyzicoOrderId(order: PosOrder): string {
 
 /** The order amount in whole kuruş; missing, unreadable, zero, negative, sub-kuruş and 1e13 or larger amounts are refused. */
 export function iyzicoOrderKurus(order: PosOrder): number {
-  const raw: unknown = isRecord(order) ? ownValue(order, 'amount') : undefined
+  const raw: unknown = ownValue(asOrder(order), 'amount')
   if (raw === undefined || raw === null || raw === '') {
     throw new PosError('Order field "amount" is required')
   }
@@ -85,7 +107,7 @@ export function iyzicoOrderKurus(order: PosOrder): number {
 
 /** The installment count, 1 for none, at most 12. */
 export function iyzicoOrderInstallment(order: PosOrder): number {
-  const installment = Math.max(parseInstallment(ownValue(order as Record<string, unknown>, 'installment') ?? 0), 1)
+  const installment = Math.max(parseInstallment(ownValue(asOrder(order), 'installment') ?? 0), 1)
   if (installment > MAX_INSTALLMENT) {
     throw new PosError(`The installment count must be from 1 to ${MAX_INSTALLMENT}.`)
   }
@@ -94,7 +116,7 @@ export function iyzicoOrderInstallment(order: PosOrder): number {
 
 /** The payer's address of the order, when given: letters, digits, dots and colons of an IP address. */
 export function iyzicoOrderIp(order: PosOrder): string | null {
-  const ip: unknown = ownValue(order as Record<string, unknown>, 'ip')
+  const ip: unknown = ownValue(asOrder(order), 'ip')
   if (!isSet(ip)) {
     return null
   }
@@ -125,7 +147,7 @@ function ownRecord(source: Record<string, unknown>, key: string, what: string): 
 
 /** The buyer of the order in iyzico's field names. Missing required values are errors; optional ones become `''`. */
 export function iyzicoBuyer(order: PosOrder): Record<string, string> {
-  const buyer = ownRecord(order as Record<string, unknown>, 'buyer', 'Order field "buyer"')
+  const buyer = ownRecord(asOrder(order), 'buyer', 'Order field "buyer"')
   const email = text(buyer, 'email', 'Order field "buyer.email"', MAX_EMAIL)
   if (!EMAIL_PATTERN.test(email) || email.split('@').length !== 2 || email.startsWith('@') || email.endsWith('@')) {
     throw new PosError(
@@ -170,11 +192,11 @@ export function iyzicoAddress(
   key: 'billing_address' | 'shipping_address',
   required: boolean,
 ): Record<string, string> | null {
-  const raw = ownValue(order as Record<string, unknown>, key)
+  const raw = ownValue(asOrder(order), key)
   if (!isSet(raw) && !required) {
     return null
   }
-  const address = ownRecord(order as Record<string, unknown>, key, `Order field "${key}"`)
+  const address = ownRecord(asOrder(order), key, `Order field "${key}"`)
   const what = (name: string): string => `Order field "${key}.${name}"`
 
   return {
@@ -201,7 +223,7 @@ export interface IyzicoBasketItem {
  * summed as floating point and no request is sent for a basket that does not match.
  */
 export function iyzicoBasketItems(order: PosOrder, orderKurus: number): IyzicoBasketItem[] {
-  const raw = ownValue(order as Record<string, unknown>, 'basket_items')
+  const raw = ownValue(asOrder(order), 'basket_items')
   if (!Array.isArray(raw) || raw.length === 0) {
     throw new PosError('Order field "basket_items" must be a non-empty list')
   }
