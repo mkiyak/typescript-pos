@@ -6,7 +6,7 @@ import { decodeXmlResponseText } from '../serializer/iso88599.js'
 import { ParamPosXmlDecoder } from '../serializer/ParamPosXmlDecoder.js'
 import { ParamPosXmlEncoder } from '../serializer/ParamPosXmlEncoder.js'
 import type { PosOrder } from '../types.js'
-import { AbstractHttpClient, type ClientTxType } from './AbstractHttpClient.js'
+import { AbstractHttpClient, type ClientTxType, hideSecrets } from './AbstractHttpClient.js'
 import type { HttpTransport, HttpTransportResponse } from './HttpTransport.js'
 import {
   FALLBACK_FAULT,
@@ -104,6 +104,14 @@ export class ParamPosHttpClient extends AbstractHttpClient {
             status: e.status,
           })
         }
+      }
+      if (e instanceof PosHttpError && e.status !== undefined && e.bodySnippet !== undefined) {
+        // A non-2xx answer that is no SOAP fault: its snippet may echo credentials, so it is rebuilt masked.
+        throw new PosHttpError(e.message, {
+          url: e.url,
+          status: e.status,
+          body: hideSecrets(e.bodySnippet, requestSecrets(requestData)),
+        })
       }
       if (e instanceof PosHttpError && e.message.startsWith(FAULT_PREFIX)) {
         // The decoded fault text is complete; it is masked against this request's credentials and shortened here.

@@ -302,3 +302,40 @@ describe('ParamPosHttpClient', () => {
     expect(logged.join('\n')).not.toContain(GUID)
   })
 })
+
+// addition: a card-shaped secret may reach a text already in its masked form (first six and last four digits)
+describe('ParamPosHttpClient card-shaped secrets', () => {
+  const nasty = [GUID]
+  for (const password of ['12345678901234567', 'abc1234567890123def']) {
+    const faultBody = fault(`<faultstring>bad password ${password} for ${GUID}</faultstring>`)
+    const cases: Array<[string, string, number]> = [
+      ['200 fault', faultBody, 200],
+      ['500 fault', faultBody, 500],
+      ['502 plain body', `plain ${password} and ${GUID}`, 502],
+      ['503 HTML', `<html><body>${GUID} ${password}</body></html>`, 503],
+    ]
+    for (const [label, body, status] of cases) {
+      it(`hides ${password} and its masked form: ${label}`, async () => {
+        const logged: string[] = []
+        const record = (m: string, c: unknown): number => logged.push(JSON.stringify([m, c]))
+        const logger: PosLogger = { debug: record, info: record, warn: record, error: record }
+        const data = { G: { CLIENT_CODE: '10738', CLIENT_USERNAME: 'Test1', CLIENT_PASSWORD: password }, GUID }
+        const error = (await call(createClient(fakeFetch([], body, status), logger), data).catch(
+          (e) => e,
+        )) as PosHttpError
+        const cause = error.cause as PosHttpError | undefined
+        const text = [
+          logged.join('\n'),
+          error.message,
+          error.bodySnippet ?? '',
+          cause?.message ?? '',
+          cause?.bodySnippet ?? '',
+        ].join('\n')
+        expect(error).toBeInstanceOf(PosHttpError)
+        for (const piece of [password, password.slice(0, 6), password.slice(-4), ...nasty]) {
+          expect(text).not.toContain(piece)
+        }
+      })
+    }
+  }
+})

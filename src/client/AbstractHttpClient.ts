@@ -21,11 +21,16 @@ const MIN_SECRET_PIECE = 3
  * The text with every occurrence of the secrets masked, and a trailing piece of one (a text shortened elsewhere may
  * end inside a secret) masked too. Without secrets the text is returned as it is.
  */
-function hideSecrets(text: string, secrets: readonly string[]): string {
+export function hideSecrets(text: string, secrets: readonly string[]): string {
   let out = text
   for (const secret of secrets) {
     if (secret === '') continue
     out = out.split(secret).join('***')
+    // A card-shaped secret may already stand in its masked form (first six and last four digits) in a bank text.
+    const maskedForm = maskSensitiveData(secret)
+    if (typeof maskedForm === 'string' && maskedForm !== secret && maskedForm !== '') {
+      out = out.split(maskedForm).join('***')
+    }
     for (let length = secret.length - 1; length >= MIN_SECRET_PIECE; length--) {
       if (out.endsWith(secret.slice(0, length))) {
         out = `${out.slice(0, out.length - length)}***`

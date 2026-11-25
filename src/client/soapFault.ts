@@ -39,7 +39,15 @@ export function faultMessage(text: string, secrets: readonly string[] = [], limi
   // Past the cap the cut drops the trailing partial word too, so a secret crossing the cut never leaves a piece behind.
   const capped = text.length > FAULT_INPUT_MAX ? dropPartialWord(text.slice(0, FAULT_INPUT_MAX)) : text
   let masked = decodeEntities(capped)
-  for (const secret of secrets) masked = masked.split(secret).join('***')
+  for (const secret of secrets) {
+    if (secret === '') continue
+    masked = masked.split(secret).join('***')
+    // A card-shaped secret may also appear in its masked form (first six and last four digits).
+    const maskedForm = maskSensitiveData(secret)
+    if (typeof maskedForm === 'string' && maskedForm !== secret && maskedForm !== '') {
+      masked = masked.split(maskedForm).join('***')
+    }
+  }
   const clean = maskSensitiveData(masked.replace(BASE64_TOKEN, '***').replace(CONTROL_CHARACTERS, ' ').trim())
 
   return clean === '' ? FALLBACK_FAULT : clean.slice(0, limit)
